@@ -54,6 +54,9 @@ jobs:
       matrix:
         example:
           - DetectDevices
+          #- Dump
+          #- ValueBlock
+          #- ReadWrite
 
         unit:
           - ''

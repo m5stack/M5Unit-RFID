@@ -68,15 +68,12 @@ jobs:
           - m5stack-cores3
           - m5stack-fire
 
-
         include:
           # General sketches
           - sketch: DetectDevices
             board: m5stack-atom
           - sketch: DetectDevices
             board: m5stack-atoms3
-#          - sketch: DetectDevices
-#            board: m5stack-core-esp32
           - sketch: DetectDevices
             board: m5stack-core2
           - sketch: DetectDevices
