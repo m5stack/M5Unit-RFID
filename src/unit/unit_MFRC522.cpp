@@ -157,7 +157,7 @@ void dump_block(const uint8_t* buf, const int16_t block = -1, const int16_t sect
         int32_t value{};
         uint8_t addr{};
         if (decode_value_block(value, addr, buf)) {
-            snprintf(tmp + left, 26, " Addr:%03u Val:%" PRId32 "", addr, value); // PRId32 for compile on NanoC6
+            snprintf(tmp + left, 26, " Addr:%03u Val:%" PRId32 "", addr, value);  // PRId32 for compile on NanoC6
         } else {
             strcat(tmp + left, "[Illgal value blcok]");
         }
