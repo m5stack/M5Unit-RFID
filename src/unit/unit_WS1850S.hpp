@@ -24,11 +24,12 @@ namespace unit {
 class UnitWS1850S : public UnitMFRC522 {
     M5_UNIT_COMPONENT_HPP_BUILDER(UnitWS1850S, 0x28);
 
-   public:
-    explicit UnitWS1850S(const uint8_t addr = DEFAULT_ADDRESS)
-        : UnitMFRC522(addr) {
+public:
+    explicit UnitWS1850S(const uint8_t addr = DEFAULT_ADDRESS) : UnitMFRC522(addr)
+    {
     }
-    virtual ~UnitWS1850S() {
+    virtual ~UnitWS1850S()
+    {
     }
 
     virtual bool begin() override;
@@ -40,7 +41,8 @@ class UnitWS1850S : public UnitMFRC522 {
       @warning It is recommended not to use this feature in the WS1850S as,
       unlike in the MFRC522, self-testing is not successful.
      */
-    inline virtual bool selfTest() override {
+    inline virtual bool selfTest() override
+    {
         return UnitMFRC522::selfTest();
     }
 };

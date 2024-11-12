@@ -32,17 +32,18 @@ const char UnitWS1850S::name[] = "UnitWS1850S";
 const types::uid_t UnitWS1850S::uid{"UnitWS1850S"_mmh3};
 const types::uid_t UnitWS1850S::attr{0};
 
-bool UnitWS1850S::begin() {
+bool UnitWS1850S::begin()
+{
     uint8_t ver{};
-    if (!readRegister8(VERSION_REG, ver, 0) ||
-        ver != ws1850s_firmware_version) {
+    if (!readRegister8(VERSION_REG, ver, 0) || ver != ws1850s_firmware_version) {
         M5_LIB_LOGE("Cannot detect WS1850S %x", ver);
         return false;
     }
     return UnitMFRC522::begin();
 }
 
-void UnitWS1850S::update(const bool force) {
+void UnitWS1850S::update(const bool force)
+{
     return UnitMFRC522::update(force);
 }
 

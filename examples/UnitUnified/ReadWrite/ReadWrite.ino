@@ -8,5 +8,3 @@
   Read/Write block example
 */
 #include "main/ReadWrite.cpp"
-
-

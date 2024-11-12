@@ -24,11 +24,13 @@ const char* UIDTypeString(const UID& uid)
     return (v < m5::stl::size(picc_type_table)) ? picc_type_table[v] : "ERROR";
 }
 
-const std::string UIDString(const m5::rfid::mifare::UID& uid) {
+const std::string UIDString(const m5::rfid::mifare::UID& uid)
+{
     char buf[2 * 10 + 1]{};
     if (uid.size == 0 || uid.size > 10) {
         M5_LOGE("Invalid size:%u", uid.size);
-        return std::string();;
+        return std::string();
+        ;
     }
     uint8_t left{};
     for (uint8_t i = 0; i < uid.size; ++i) {
@@ -36,8 +38,6 @@ const std::string UIDString(const m5::rfid::mifare::UID& uid) {
     }
     return std::string(buf);
 }
-
-
 
 void printUID(const UID& uid)
 {
