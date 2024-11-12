@@ -11,7 +11,9 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
+#if __has_include("../../common/examples_common.hpp")
 #include "../../common/examples_common.hpp"
+#endif
 #include <vector>
 
 namespace {
