@@ -7,5 +7,4 @@
   Example using M5UnitUnified for UnitRFID2
   Detect RFID devices
 */
-#include "../common/examples_common.hpp"
 #include "main/DetectDevices.cpp"

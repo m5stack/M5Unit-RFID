@@ -11,9 +11,6 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
-#if __has_include("../../common/examples_common.hpp")
-#include "../../common/examples_common.hpp"
-#endif
 #include <vector>
 
 namespace {
@@ -83,9 +80,9 @@ void loop()
         lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
         uint32_t idx{1};
         for (auto&& uid : devices) {
-            printUID(uid);
+            M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
             lcd.setCursor(8, lcd.fontHeight() * idx);
-            lcd.printf("%s", UIDString(uid).c_str());
+            lcd.printf("%s", uid.uidString().c_str());
             ++idx;
         }
         M5_LOGI("<<--------------");

@@ -11,7 +11,6 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
-#include "../../common/examples_common.hpp"
 #include <vector>
 
 namespace {
@@ -73,7 +72,7 @@ void loop()
         if (unit.activateDevice(uid)) {
             if (uid != prev) {
                 M5.Speaker.tone(1000, 20);
-                printUID(uid);
+                M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
                 unit.mifareDump(uid);  // Using defaukt keyA {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF }
                 unit.deactivateDevice();
                 prev = uid;

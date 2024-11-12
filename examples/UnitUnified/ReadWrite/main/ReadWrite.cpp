@@ -11,7 +11,6 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
-#include "../../common/examples_common.hpp"
 #include <vector>
 
 namespace {
@@ -94,7 +93,7 @@ void read_write(const UID& uid, const uint8_t block)
 
     // Verify
     M5_LOGI("Read msg:[%s] %d,%d", (const char*)rbuf, rlen, std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)));
-
+    
     // Clear
     uint8_t c[1]{};
     result = unit.mifareWrite(block, c, 1);
@@ -157,8 +156,7 @@ void loop()
             if (unit.activateDevice(uid)) {
                 if (uid != prev) {
                     M5.Speaker.tone(1000, 20);
-                    printUID(uid);
-
+                    M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
                     switch (uid.type) {
                         case Type::MIFARE_Classic_1K:
                             read_write(uid, 12);

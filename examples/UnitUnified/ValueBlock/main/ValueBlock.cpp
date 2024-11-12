@@ -11,7 +11,6 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
-#include "../../common/examples_common.hpp"
 #include <vector>
 
 namespace {
@@ -152,7 +151,7 @@ void value_block(const m5::rfid::mifare::UID& uid, const uint8_t block)
     result = unit.mifareDisableValueBlock(block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY);
     if (!result) {
         M5_LOGE("Failed to disable value block %02X", result.error());
-        return false;
+        return;
     }
     M5_LOGI("To normal block ----");
     unit.mifareDumpBlock(uid, block);
@@ -172,7 +171,7 @@ void loop()
                 if (uid != prev) {
                     if (uid.isClassic()) {
                         M5.Speaker.tone(1000, 20);
-                        printUID(uid);
+                        M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
                         // TODO 4K > 32 sector
                         value_block(uid, 44);
                         unit.deactivateDevice();

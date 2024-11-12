@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <array>
 #include <cstring>
+#include <string>
 
 namespace m5 {
 namespace rfid {
@@ -65,6 +66,8 @@ struct UID {
         type       = Type::Unknown;
         std::memset(uid, 0x00, 10);
     }
+    std::string uidString() const;
+    std::string typeString() const;
 };
 
 inline bool operator==(const UID& a, const UID& b)
