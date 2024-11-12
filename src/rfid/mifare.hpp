@@ -1,0 +1,214 @@
+/*
+ * SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+/*!
+  @file mifare.hpp
+  @brief Definition and utilities for MIFARE
+*/
+#ifndef M5_UNIT_RFID_MIFARE_MIFARE_HPP
+#define M5_UNIT_RFID_MIFARE_MIFARE_HPP
+
+#include <cstdint>
+#include <array>
+#include <cstring>
+
+namespace m5 {
+namespace rfid {
+/*!
+  @namespace mifare
+  @brief For MIFARE
+ */
+namespace mifare {
+
+/*!
+  @enum Type
+  @brief Type of the PICC
+ */
+enum class Type : uint8_t {
+    Unknown,              //!< Unknown type
+    ISO_14443_4,          //!< PICC compliant with ISO/IEC 14443-4
+    ISO_18092,            //!< PICC compliant with ISO/IEC 18092 (NFC)
+    MIFARE_Classic,       //!< Also known as MIFARE Standard mini
+    MIFARE_Classic_1K,    //!< Also known as MIFARE Standard 1K
+    MIFARE_Classic_4K,    //!< Also known as MIFARE Standard 4K
+    MIFARE_Classic_2K,    //!< Also known as MIFARE Standard 2K
+    MIFARE_UltraLight,    //!< MIFARE Ultralight or Ultralight C
+    MIFARE_Plus,          //!< MIFARE Plus
+    MIFARE_DESFire,       //!< MIFARE DESFire (Also known as TNP3XXX)
+    NotCompleted = 0xFF,  //!< SAK indicates UID is not complete
+};
+
+/*!
+  @struct UID
+  @brief The UID of the PICC
+ */
+struct UID {
+    //! @brief  Number of bytes in the UID. 4, 7 or 10.
+    uint8_t size{};
+    //! @brief uid data (Valid up to the value of size)
+    uint8_t uid[10]{};
+    //! @brief  The SAK (Select acknowledge) returned from the PICC after successful selection.
+    uint8_t sak{};
+    //! @brief PICC type
+    Type type{};
+
+    bool isClassic() const
+    {
+        return (size != 0) && (type == Type::MIFARE_Classic || type == Type::MIFARE_Classic_1K ||
+                               type == Type::MIFARE_Classic_4K || type == Type::MIFARE_Classic_2K);
+    }
+    void clear()
+    {
+        size = sak = 0;
+        type       = Type::Unknown;
+        std::memset(uid, 0x00, 10);
+    }
+};
+
+inline bool operator==(const UID& a, const UID& b)
+{
+    return a.size == b.size && a.sak == b.sak && a.type == b.type && std::memcmp(a.uid, b.uid, 10) == 0;
+}
+inline bool operator!=(const UID& a, const UID& b)
+{
+    return !(a == b);
+}
+
+/*!
+  @typedef Key
+  @brief MIFARE Key
+*/
+using Key = std::array<uint8_t, 6>;
+
+/*!
+  @brief Get type from SAK
+  @param sak SAK
+  @return Type
+ */
+Type sak_to_type(const uint8_t sak);
+
+/*!
+  @namespace classic
+  @brief For MIFARE classic
+ */
+namespace classic {
+/*!
+  @brief Is this permission treated as a value block?
+  @return True if Value block
+ */
+inline bool is_value_block_permission(const uint8_t permission)
+{
+    return permission == 0x01 ||  // value block (Only read and decrement)
+           permission == 0x06;    // value block
+}
+
+/*!
+  @brief Is this block a sector trailer?
+  @return True if sector trailer
+ */
+inline bool is_sector_trailer_block(const uint8_t block)
+{
+    return (block < 128) ? (block & 0x03) == 0x03 : ((block - 128) & 0x0F) == 0x0F;
+}
+
+/*!
+  @brief Obtains the block address of the sector to which it belongs from the block address
+  @return The sector trailer block address of the block belongs
+ */
+inline uint8_t get_sector_trailer_block(const uint8_t block)
+{
+    return (block < 128) ? (block | 0x03) : (block | 0x0F);
+}
+
+/*!
+  @brief Obtains the sector to which the block belongs from the block address
+  @return Sector no
+ */
+inline uint8_t get_sector(const uint8_t block)
+{
+    return (block < 128) ? (block >> 2) : 32 + ((block - 128) >> 4);
+}
+
+/*!
+  @brief Get the offset in the permissions of this block
+  @return Offset (0-3)
+ */
+inline uint8_t get_permission_offset(const uint8_t block)
+{
+    return ((block < 128) ? (block & 0x03) : ((block - 128) & 0x0F) / 5) & 0x03;
+}
+
+/*!
+  @brief Decode the value of value block
+  @param[out] value Value
+  @param[out] addr Block address
+  @param buf Data of block(16 bytes)
+  @return True if successful
+ */
+bool decode_value_block(int32_t& value, uint8_t& addr, const uint8_t buf[16]);
+/*!
+  @brief Encode the value of value block
+  @param[out] buf Output buffer at least 16 bytes
+  @param value Value
+  @param addr Block address
+  @return Encoded buffer
+ */
+const uint8_t* encode_value_block(uint8_t buf[16], const int32_t value, const uint8_t addr);
+
+/*!
+  @brief Encode accesss bits from permissions
+  @param abits[3] Output buffer at leaset 3 bytes
+  @param p0 permissions for block 0
+  @param p1 permissions for block 1
+  @param p2 permissions for block 2
+  @param p3 permissions for sector tarailer
+  @return True if successful
+  @warning Return values should always be checked
+  @warning Writing incorrect access bits may make the sector inaccessible!
+*/
+bool encode_access_bits(uint8_t abits[3], const uint8_t p0, const uint8_t p1, const uint8_t p2, const uint8_t p3);
+/*!
+  @brief Encode accesss bits from permissions
+  @param abits[3] Output buffer at leaset 3 bytes
+  @param permissions[4] Array of the permissions. [0];block0 ... [3]:sector trailer
+  @return True if successful
+  @warning Return values should always be checked
+  @warning Writing incorrect access bits may make the sector inaccessible!
+*/
+inline bool encode_access_bits(uint8_t abits[3], const uint8_t permissions[4])
+{
+    return encode_access_bits(abits, permissions[0], permissions[1], permissions[2], permissions[3]);
+}
+/*!
+  @brief Decode access bits to permissons
+  @param permissions[4] Output buffer at leaset 4 bytes
+  @param ab0 1st byte of the access bits
+  @param ab1 2nd byte of the access bits
+  @param ab2 3rd byte of the access bits
+  @return True if successful
+  @note permissions[0] block 0
+  @note permissions[1] block 1
+  @note permissions[2] block 2
+  @note permissions[3] sector trailer
+  @warning Return values should always be checked
+*/
+bool decode_access_bits(uint8_t permissions[4], const uint8_t ab0, const uint8_t ab1, const uint8_t ab2);
+/*!
+  @brief Decode access bits to permissons
+  @param permissions[4] Output buffer at leaset 4 bytes
+  @param abits[3] Array of the accees bits
+  @return True if successful
+  @warning Return values should always be checked
+*/
+inline bool decode_access_bits(uint8_t permissions[4], const uint8_t abits[3])
+{
+    return decode_access_bits(permissions, abits[0], abits[1], abits[2]);
+}
+
+}  // namespace classic
+}  // namespace mifare
+}  // namespace rfid
+}  // namespace m5
+#endif
