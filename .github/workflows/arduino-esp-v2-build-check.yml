@@ -53,6 +53,9 @@ jobs:
       fail-fast: false
       #max-parallel: 1
       matrix:
+        platform-url:
+          - https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
         sketch:
           - DetectDevices
 
@@ -68,29 +71,26 @@ jobs:
         include:
           # Specific sketches for m5stack-core-esp32 only
           - sketch: Dump
-#            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
- #           platform: esp32
- #           archi: esp32
- #           platform-version: 2.0.17
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
             board: m5stack-core-esp32
           - sketch: ValueBlock
-#            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-#            platform: esp32
-#            archi: esp32
-#            platform-version: 2.0.17
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
             board: m5stack-core-esp32
           - sketch: ReadWrite
-#            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-#            platform: esp32
-#            archi: esp32
-#            platform-version: 2.0.17
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
             board: m5stack-core-esp32
 
         unit:
           - ''
-
-        platform-url:
-          - https://espressif.github.io/arduino-esp32/package_esp32_index.json
 
         platform-version:
           - 2.0.17
