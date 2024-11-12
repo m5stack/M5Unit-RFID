@@ -1,0 +1,186 @@
+/*
+ * SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+/*
+  Example using M5UnitUnified for UnitRFID2
+  Read/Write block example
+*/
+#include <M5Unified.h>
+#include <M5UnitUnified.h>
+#include <M5UnitUnifiedRFID.h>
+#include <M5Utility.h>
+#include "../../common/examples_common.hpp"
+#include <vector>
+
+namespace {
+auto& lcd = M5.Display;
+m5::unit::UnitUnified Units;
+m5::unit::UnitRFID2 unit;
+
+}  // namespace
+
+using namespace m5::unit::mfrc522;
+using m5::rfid::mifare::Key;
+using m5::rfid::mifare::Type;
+using m5::rfid::mifare::UID;
+using m5::unit::UnitRFID2;
+
+void setup()
+{
+    M5.begin();
+
+    auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
+    auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
+    M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
+    Wire.begin(pin_num_sda, pin_num_scl, 400 * 1000U);
+
+    if (!Units.add(unit, Wire) || !Units.begin()) {
+        M5_LOGE("Failed to begin");
+        lcd.clear(TFT_RED);
+        while (true) {
+            m5::utility::delay(10000);
+        }
+    }
+
+    M5_LOGI("M5UnitUnified has been begun");
+    M5_LOGI("%s", Units.debugInfo().c_str());
+
+    if (lcd.width() < lcd.height()) {
+        lcd.setRotation(1);
+    }
+    if (lcd.height() < 240) {
+        lcd.setFont(&fonts::Font0);
+    } else {
+        lcd.setFont(&fonts::Font2);
+    }
+    lcd.clear(0);
+    lcd.setCursor(8, 0);
+    lcd.printf("Please put the devices\n and click A or touch screen...");
+    M5_LOGI("Please put the devices\n and click A or touch screen...");
+}
+
+void read_write(const UID& uid, const uint8_t block)
+{
+    constexpr char msg[] = "M5Stack";
+
+    // Auth
+    if (!unit.authenticateA(uid, block)) {  // using default key
+        M5_LOGE("Auth error A");
+        return;
+    }
+
+    M5_LOGI("Before[%u] ----", block);
+    unit.mifareDumpBlock(uid, block);
+
+    // Write (If less than 16 bytes, 0x00 is padded)
+    auto result = unit.mifareWrite(block, (const uint8_t*)msg, m5::stl::size(msg));
+    if (!result) {
+        M5_LOGE("Failed to write %02X", result.error());
+        return;
+    }
+    M5_LOGI("After[%u] ----", block);
+    unit.mifareDumpBlock(uid, block);
+
+    // Read
+    uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
+    uint8_t rlen{18};    // Number of bytes to be read
+    result = unit.mifareRead(rbuf, rlen, block);
+    if (!result) {
+        M5_LOGE("Failed to read %02X", result.error());
+        return;
+    }
+
+    // Verify
+    M5_LOGI("Read msg:[%s] %d,%d", (const char*)rbuf, rlen, std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)));
+
+    // Clear
+    uint8_t c[1]{};
+    result = unit.mifareWrite(block, c, 1);
+    if (!result) {
+        M5_LOGE("Failed to write %02X", result.error());
+        return;
+    }
+    M5_LOGI("Clear[%u] ----", block);
+    unit.mifareDumpBlock(uid, block);
+}
+
+void read_write_light(const UID& uid, const uint8_t page)
+{
+    constexpr char msg[] = "M5S";
+
+    M5_LOGI("Before[%u] ----", page);
+    unit.mifareDumpBlock(uid, page);
+
+    // Write (If less than 16 bytes, 0x00 is padded)
+    auto result = unit.mifareWriteUL(page, (const uint8_t*)msg, m5::stl::size(msg));
+    if (!result) {
+        M5_LOGE("Failed to write %02X", result.error());
+        return;
+    }
+    M5_LOGI("After[%u] ----", page);
+    unit.mifareDumpBlock(uid, page);
+
+    // Read
+    uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
+    uint8_t rlen{18};    // Number of bytes to be read
+    result = unit.mifareRead(rbuf, rlen, page);
+    if (!result) {
+        M5_LOGE("Failed to read %02X", result.error());
+        return;
+    }
+
+    // Verify
+    M5_LOGI("Read msg:[%s] %d,%d", (const char*)rbuf, rlen, std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)));
+
+    // Clear
+    uint8_t c[1]{};
+    result = unit.mifareWriteUL(page, c, 1);
+    if (!result) {
+        M5_LOGE("Failed to write %02X", result.error());
+        return;
+    }
+    M5_LOGI("Clear[%u] ----", page);
+    unit.mifareDumpBlock(uid, page);
+}
+
+void loop()
+{
+    static UID prev{};
+
+    M5.update();
+    if (M5.BtnA.wasClicked() || M5.Touch.getCount()) {
+        // Detect new devices?
+        while (unit.detectIdleDevice()) {
+            UID uid{};
+            if (unit.activateDevice(uid)) {
+                if (uid != prev) {
+                    M5.Speaker.tone(1000, 20);
+                    printUID(uid);
+
+                    switch (uid.type) {
+                        case Type::MIFARE_Classic_1K:
+                            read_write(uid, 12);
+                            break;
+                        case Type::MIFARE_Classic_4K:
+                            read_write(uid, 12);
+                            read_write(uid, 145);
+                            break;
+                        case Type::MIFARE_UltraLight:
+                            read_write_light(uid, 12);
+                            break;
+                        default:
+                            break;
+                    }
+                    unit.deactivateDevice();
+                    prev = uid;
+                }
+            }
+        }
+    }
+    // No devices?
+    if (!unit.detectDevice()) {
+        prev.clear();
+    }
+}
