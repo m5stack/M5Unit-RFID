@@ -91,7 +91,6 @@ void loop()
 
     // No devices?
     if (!unit.detectDevice()) {
-        m5::utility::delay(200);
         lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
     }
 }

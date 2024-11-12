@@ -84,6 +84,5 @@ void loop()
     // No devices?
     if (!unit.detectDevice()) {
         prev.clear();
-        m5::utility::delay(200);
     }
 }
