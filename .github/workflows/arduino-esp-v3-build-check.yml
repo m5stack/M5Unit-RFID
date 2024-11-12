@@ -90,40 +90,24 @@ jobs:
 
 
         include:
-          # General sketches
-          - sketch: DetectDevices
-            board: m5stack_atom
-          - sketch: DetectDevices
-            board: m5stack_atoms3
-          - sketch: DetectDevices
-            board: m5stack_capsule
-          - sketch: DetectDevices
-            board: m5stack_core2
-          - sketch: DetectDevices
-            board: m5stack_coreink
-          - sketch: DetectDevices
-            board: m5stack_cores3
-          - sketch: DetectDevices
-            board: m5stack_dial
-          - sketch: DetectDevices
-            board: m5stack_fire
-          - sketch: DetectDevices
-            board: m5stack_nanoc6
-          - sketch: DetectDevices
-            board: m5stack_paper
-          - sketch: DetectDevices
-            board: m5stack_stamp_s3
-          - sketch: DetectDevices
-            board: m5stack_stickc_plus
-          - sketch: DetectDevices
-            board: m5stack_stickc_plus2
-
           # Specific sketches for m5stack-core-esp32 only
           - sketch: Dump
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform-version: 3.0.4
+            platform: esp32
+            archi: esp32
             board: m5stack_core
           - sketch: ValueBlock
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform-version: 3.0.4
+            platform: esp32
+            archi: esp32
             board: m5stack_core
           - sketch: ReadWrite
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform-version: 3.0.4
+            platform: esp32
+            archi: esp32
             board: m5stack_core
 
         platform-version:
