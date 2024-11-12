@@ -93,7 +93,7 @@ void read_write(const UID& uid, const uint8_t block)
 
     // Verify
     M5_LOGI("Read msg:[%s] %d,%d", (const char*)rbuf, rlen, std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)));
-    
+
     // Clear
     uint8_t c[1]{};
     result = unit.mifareWrite(block, c, 1);
