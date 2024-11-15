@@ -25,6 +25,9 @@ using namespace m5::unit::googletest;
 using namespace m5::unit;
 using namespace m5::unit::mfrc522;
 using namespace m5::unit::mfrc522::command;
+using namespace m5::rfid;
+using namespace m5::rfid::mifare;
+using namespace m5::rfid::mifare::classic;
 
 const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixture<400000U>());
 
@@ -57,11 +60,6 @@ TEST_P(TestWS1850S, selfTest)
     SCOPED_TRACE(ustr);
 
     EXPECT_FALSE(unit->selfTest());  // WS1850S failed always
-
-    //    Error err{};
-    //    EXPECT_TRUE(unit->getLatestErrorStatus(err));
-    //    EXPECT_EQ(err.value, 0U);
-    // M5_LOGW("ERR:%x", err.value);
 }
 
 TEST_P(TestWS1850S, coporcessorCRC)
@@ -243,8 +241,8 @@ TEST_P(TestWS1850S, AccessBit)
                     auto s = m5::utility::formatString("P:%02X:%02X:%02X:%02X", i0, i1, i2, i3);
                     SCOPED_TRACE(s);
 
-                    EXPECT_TRUE(encodeAccessBits(abits, permissions));
-                    EXPECT_TRUE(decodeAccessBits(p2, abits));
+                    EXPECT_TRUE(encode_access_bits(abits, permissions));
+                    EXPECT_TRUE(decode_access_bits(p2, abits));
                     EXPECT_TRUE(std::memcmp(permissions, p2, 4) == 0);
                 }
             }

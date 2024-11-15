@@ -65,7 +65,7 @@ void read_write(const UID& uid, const uint8_t block)
     constexpr char msg[] = "M5Stack";
 
     // Auth
-    if (!unit.authenticateA(uid, block)) {  // using default key
+    if (!unit.mifareAuthenticateA(uid, block)) {  // using default key
         M5_LOGE("Auth error A");
         return;
     }
@@ -146,39 +146,30 @@ void read_write_light(const UID& uid, const uint8_t page)
 
 void loop()
 {
-    static UID prev{};
-
     M5.update();
     if (M5.BtnA.wasClicked() || M5.Touch.getCount()) {
         // Detect new devices?
-        while (unit.detectIdleDevice()) {
+        if (unit.detectIdleDevice()) {
             UID uid{};
             if (unit.activateDevice(uid)) {
-                if (uid != prev) {
-                    M5.Speaker.tone(1000, 20);
-                    M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
-                    switch (uid.type) {
-                        case Type::MIFARE_Classic_1K:
-                            read_write(uid, 12);
-                            break;
-                        case Type::MIFARE_Classic_4K:
-                            read_write(uid, 12);
-                            read_write(uid, 145);
-                            break;
-                        case Type::MIFARE_UltraLight:
-                            read_write_light(uid, 12);
-                            break;
-                        default:
-                            break;
-                    }
-                    unit.deactivateDevice();
-                    prev = uid;
+                M5.Speaker.tone(1000, 20);
+                M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
+                switch (uid.type) {
+                    case Type::MIFARE_Classic_1K:
+                        read_write(uid, 12);
+                        break;
+                    case Type::MIFARE_Classic_4K:
+                        read_write(uid, 12);
+                        read_write(uid, 145);
+                        break;
+                    case Type::MIFARE_UltraLight:
+                        read_write_light(uid, 12);
+                        break;
+                    default:
+                        break;
                 }
+                unit.deactivateDevice();
             }
         }
-    }
-    // No devices?
-    if (!unit.detectDevice()) {
-        prev.clear();
     }
 }

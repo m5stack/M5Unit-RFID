@@ -61,27 +61,19 @@ void setup()
 
 void loop()
 {
-    static UID prev{};
-
     M5.update();
+    auto touch = M5.Touch.getDetail();
 
-    std::vector<UID> devices;
-    // Detect new devices?
-    while (unit.detectIdleDevice()) {
-        UID uid{};
-        if (unit.activateDevice(uid)) {
-            if (uid != prev) {
+    if (M5.BtnA.wasClicked() || touch.wasClicked()) {
+        // Detect devices?
+        if (unit.detectDevice()) {
+            UID uid{};
+            if (unit.activateDevice(uid)) {
                 M5.Speaker.tone(1000, 20);
                 M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
-                unit.mifareDump(uid);  // Using defaukt keyA {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF }
+                unit.mifareDump(uid);  // Using defaukt keyA
                 unit.deactivateDevice();
-                prev = uid;
             }
         }
-    }
-
-    // No devices?
-    if (!unit.detectDevice()) {
-        prev.clear();
     }
 }

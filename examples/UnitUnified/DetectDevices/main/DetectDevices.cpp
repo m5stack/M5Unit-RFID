@@ -61,11 +61,14 @@ void setup()
 
 void loop()
 {
+    static bool dd{};
+
     M5.update();
 
     std::vector<UID> devices;
     // Detect new devices?
     while (unit.detectIdleDevice()) {
+        dd = true;
         // Store UID
         UID uid{};
         if (unit.activateDevice(uid)) {
@@ -77,7 +80,7 @@ void loop()
     if (!devices.empty()) {
         M5_LOGI(">>--------------");
         M5.Speaker.tone(1000, 20);
-        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
+        //lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
         uint32_t idx{1};
         for (auto&& uid : devices) {
             M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
@@ -89,7 +92,8 @@ void loop()
     }
 
     // No devices?
-    if (!unit.detectDevice()) {
-        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
+    if (!unit.detectDevice() && dd) {
+        dd = false;
+        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight(), 0);
     }
 }
