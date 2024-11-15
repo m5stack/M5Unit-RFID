@@ -29,15 +29,16 @@ namespace mifare {
  */
 enum class Type : uint8_t {
     Unknown,              //!< Unknown type
-    ISO_14443_4,          //!< PICC compliant with ISO/IEC 14443-4
-    ISO_18092,            //!< PICC compliant with ISO/IEC 18092 (NFC)
     MIFARE_Classic,       //!< Also known as MIFARE Standard mini
     MIFARE_Classic_1K,    //!< Also known as MIFARE Standard 1K
     MIFARE_Classic_4K,    //!< Also known as MIFARE Standard 4K
     MIFARE_Classic_2K,    //!< Also known as MIFARE Standard 2K
-    MIFARE_UltraLight,    //!< MIFARE Ultralight or Ultralight C
+    MIFARE_UltraLight,    //!< MIFARE Ultralight
+    MIFARE_UltraLightC,   //!< MIFARE UltralightC
     MIFARE_Plus,          //!< MIFARE Plus
     MIFARE_DESFire,       //!< MIFARE DESFire (Also known as TNP3XXX)
+    ISO_14443_4,          //!< PICC compliant with ISO/IEC 14443-4
+    ISO_18092,            //!< PICC compliant with ISO/IEC 18092 (NFC)
     NotCompleted = 0xFF,  //!< SAK indicates UID is not complete
 };
 
@@ -101,7 +102,7 @@ namespace classic {
   @brief Is this permission treated as a value block?
   @return True if Value block
  */
-inline bool is_value_block_permission(const uint8_t permission)
+inline constexpr bool is_value_block_permission(const uint8_t permission)
 {
     return permission == 0x01 ||  // value block (Only read and decrement)
            permission == 0x06;    // value block
@@ -111,7 +112,7 @@ inline bool is_value_block_permission(const uint8_t permission)
   @brief Is this block a sector trailer?
   @return True if sector trailer
  */
-inline bool is_sector_trailer_block(const uint8_t block)
+inline constexpr bool is_sector_trailer_block(const uint8_t block)
 {
     return (block < 128) ? (block & 0x03) == 0x03 : ((block - 128) & 0x0F) == 0x0F;
 }
@@ -120,7 +121,7 @@ inline bool is_sector_trailer_block(const uint8_t block)
   @brief Obtains the block address of the sector to which it belongs from the block address
   @return The sector trailer block address of the block belongs
  */
-inline uint8_t get_sector_trailer_block(const uint8_t block)
+inline constexpr uint8_t get_sector_trailer_block(const uint8_t block)
 {
     return (block < 128) ? (block | 0x03) : (block | 0x0F);
 }
@@ -129,7 +130,7 @@ inline uint8_t get_sector_trailer_block(const uint8_t block)
   @brief Obtains the sector to which the block belongs from the block address
   @return Sector no
  */
-inline uint8_t get_sector(const uint8_t block)
+inline constexpr uint8_t get_sector(const uint8_t block)
 {
     return (block < 128) ? (block >> 2) : 32 + ((block - 128) >> 4);
 }
@@ -141,6 +142,17 @@ inline uint8_t get_sector(const uint8_t block)
 inline uint8_t get_permission_offset(const uint8_t block)
 {
     return ((block < 128) ? (block & 0x03) : ((block - 128) & 0x0F) / 5) & 0x03;
+}
+
+/*!
+  @brief Obtains the block address of the sector trailer from sector
+  @param sector Sector no
+  @return The sector trailer block address of the sector
+ */
+inline constexpr uint8_t get_sector_trailer_block_from_sector(const uint8_t sector)
+{
+    return ((sector < 32) ? sector * ((sector < 32) ? 4U : 16U) : 128U + (sector - 32) * ((sector < 32) ? 4U : 16U)) +
+           ((sector < 32) ? 4U : 16U) - 1;
 }
 
 /*!

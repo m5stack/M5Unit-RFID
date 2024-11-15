@@ -36,12 +36,13 @@ enum class Command : uint8_t {
     SELCT_CL3_OPT = 0x96,  // Select cascade level 2 and swich bit rate to fc/64 after receive SAK
 
     // MIFARE
-    AUTH_WITH_KEY_A = 0x60,  //!< Authentication with Key A
-    AUTH_WITH_KEY_B = 0x61,  //!< Authentication with Key B
-    AUTHENTICATE    = 0x1A,
+    AUTH_WITH_KEY_A = 0x60,  //!< Authentication with Key A for Classic
+    AUTH_WITH_KEY_B = 0x61,  //!< Authentication with Key B for Classic
+    AUTHENTICATE_1  = 0x1A,  //!< Authentication 1st for UltraLightC
+    AUTHENTICATE_2  = 0xAF,  //!< Authentication 2nd for UltraLightC
     READ            = 0x30,  //!< MIFARE read
     WRITE           = 0xA0,  //!< MIFARE write
-    WRITE_UL        = 0xA2,  //!< MIFARE write for UltraLight
+    WRITE_UL        = 0xA2,  //!< MIFARE write for UltraLight/C
     DECREMENT       = 0xC0,  //!< MIFARE decrement value block
     INCREMENT       = 0xC1,  //!< MIFARE increment value block
     RESTORE         = 0xC2,  //!< MIFARE reads the contents of a value block into the internal Transfer Buffer

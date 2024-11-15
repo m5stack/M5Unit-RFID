@@ -26,16 +26,17 @@ namespace mfrc522 {
   @brief PCD command
 */
 enum class Command : uint8_t {
-    Idle,
-    Mem,
-    GenerateRandomID,
-    CalcCRC,
-    Transmit,
-    NoCmdChange = 0x07,
-    Receive,
-    Transceive = 0x0C,
-    MFAuthent  = 0x0E,
-    SoftReset,
+    Idle,                //!< no action, cancels current command execution
+    Mem,                 //!< stores 25 bytes into the internal buffer
+    GenerateRandomID,    //!< generates a 10-byte random ID number
+    CalcCRC,             //!< activates the CRC coprocessor or performs a self test
+    Transmit,            //!< transmits data from the FIFO buffer
+    NoCmdChange = 0x07,  //!< no command change
+    Receive,             //!< activates the receiver circuits
+    Transceive = 0x0C,   //!< transmits data from FIFO buffer to antenna and automatically activates the receiver after
+                         //!< transmission
+    MFAuthent = 0x0E,    //!< performs the MIFARE standard authentication as a reader
+    SoftReset,           //!< performs the MIFARE standard authentication as a reader
 };
 
 /*!
@@ -110,18 +111,16 @@ public:
         // float timer{};
         //! Enable antenna on begin if true
         bool enable_antenna{true};
-        //! the receiver’s signal voltage gain facto
+        //! the receiver’s signal voltage gain factor
         mfrc522::ReceiverGain receiver_gain{mfrc522::ReceiverGain::dB48};
-        // mfrc522::ReceiverGain receiver_gain{mfrc522::ReceiverGain::dB33};
         //! Using sotware CRC
-        bool software_crc{true};
-        // bool software_crc{false};
+        bool software_crc{false};
     };
 
     explicit UnitMFRC522(const uint8_t addr = DEFAULT_ADDRESS) : Component(addr)
     {
         auto ccfg  = component_config();
-        ccfg.clock = 400 * 1000U;
+        ccfg.clock = 100 * 1000U;
         component_config(ccfg);
     }
     virtual ~UnitMFRC522()
@@ -155,7 +154,16 @@ public:
     */
     bool softReset(const bool blocking = true);
 
-    virtual bool selfTest();
+    /*!
+      @brief Self test
+      @return True if successful
+      @warning  Blocks until the test finishes and starts up again
+     */
+    inline bool selfTest()
+    {
+        bool ret = self_test();
+        return ret && begin();
+    }
 
     ///@name Antenna
     ///@{
@@ -249,6 +257,11 @@ public:
       @note Device status changes from ACTIVE to HALT
     */
     result_t deactivateDevice();
+    ///@}
+
+    ///@warning Executable only on activated devices
+    ///@name MIFARE
+    ///@{
     /*!
       @brief Authentication by KeyA
       @param uid PICC UID
@@ -257,63 +270,18 @@ public:
       @return True if successful
       @note The scope of certification is the entire sector to which the block belongs
      */
-    inline result_t authenticateA(const UID& uid, const uint8_t block, const MifareKey& key = DEFAULT_CLASSIC_KEY)
+    inline result_t mifareAuthenticateA(const UID& uid, const uint8_t block, const MifareKey& key = DEFAULT_CLASSIC_KEY)
     {
-        return picc_authenticate(m5::rfid::Command::AUTH_WITH_KEY_A, uid, block, key);
+        return mifare_authenticate(m5::rfid::Command::AUTH_WITH_KEY_A, uid, block, key);
     }
     /*!
       @brief Authentication by KeyB
       @copydetails authenticateA
     */
-    inline result_t authenticateB(const UID& uid, const uint8_t block, const MifareKey& key = DEFAULT_CLASSIC_KEY)
+    inline result_t mifareAuthenticateB(const UID& uid, const uint8_t block, const MifareKey& key = DEFAULT_CLASSIC_KEY)
     {
-        return picc_authenticate(m5::rfid::Command::AUTH_WITH_KEY_B, uid, block, key);
+        return mifare_authenticate(m5::rfid::Command::AUTH_WITH_KEY_B, uid, block, key);
     }
-    /*!
-      @brief Authentication by KeyA and KeyB
-      @param uid PICC UID
-      @param block Block address
-      @param keyA Authentication key A
-      @param keyB Authentication key B
-      @return True if successful
-      @note The scope of certification is the entire sector to which the block belongs
-     */
-    inline result_t authenticateAB(const UID& uid, const uint8_t block, const MifareKey& keyA = DEFAULT_CLASSIC_KEY,
-                                   const MifareKey& keyB = DEFAULT_CLASSIC_KEY)
-    {
-        result_t result = authenticateA(uid, block, keyA);
-        return result ? authenticateB(uid, block, keyB) : result;
-    }
-    ///@}
-
-    ///@warning Executable only on activated devices
-    ///@name MIFARE
-    ///@{
-    /*!
-      @brief Dump all sectors to serial
-      @param uid Device UID
-      @param keyA Key used for authentication A
-      @return True if successful
-      @warning All blocks must be readable with the specified key
-     */
-    result_t mifareDump(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
-    /*!
-      @brief Dump specific block/page to serial
-      @param uid Device UID
-      @param block block address(Classic) page address(UltraLight/C)
-      @return True if successful
-      @pre Requires block authentication
-     */
-    result_t mifareDumpBlock(const UID& uid, const uint8_t block);
-    /*!
-      @brief Read data from the block
-      @param block block address(Classic) or page address(UltraLight/C)
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @return True if successful
-      @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
-      @pre Requires block authentication
-     */
     result_t mifareRead(uint8_t* rbuf, uint8_t& rlen, const uint8_t block);
     /*!
       @brief Write data to the block
@@ -349,8 +317,9 @@ public:
       @param keyB Authentication key B
       @param readOnly read only value block if true
       @return True if successful
-      @pre Requires block authentication
+      @pre Requires the sector to which the block belongs authentication
       @note Writes to sector trailer, so keyAB of the target sector is required
+      @warning Sector trailer access bits are changed to 001 (need auth B for R/W)
       @warning 0 or sector trailer as block address is prohibited
     */
     result_t mifareEnableValueBlock(const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
@@ -421,6 +390,31 @@ public:
       @pre Requires block authentication
      */
     result_t mifareWriteValue(const uint8_t block, const int32_t value);
+    /*!
+      @brief Dump all sectors to serial
+      @param uid Device UID
+      @param keyA Key used for authentication A
+      @return True if successful
+      @warning All blocks must be readable with the specified key
+     */
+    result_t mifareDump(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
+    /*!
+      @brief Dump specific block/page to serial
+      @param uid Device UID
+      @param block block address(Classic) page address(UltraLight/C)
+      @return True if successful
+      @pre Requires block authentication
+     */
+    result_t mifareDumpBlock(const UID& uid, const uint8_t block);
+    /*!
+      @brief Read data from the block
+      @param block block address(Classic) or page address(UltraLight/C)
+      @param[out] rbuf The buffer to store
+      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
+      @return True if successful
+      @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
+      @pre Requires block authentication
+     */
     ///@}
 
 protected:
@@ -448,16 +442,17 @@ protected:
     result_t picc_select(UID& uid, const uint8_t cascadeLevel);
     result_t picc_anti_collision(const uint8_t cascadeLevel, uint8_t* buf);
     result_t picc_haltA();
-    result_t picc_authenticate(const m5::rfid::Command cmd, const UID& uid, const uint8_t block, const MifareKey& key);
 
     // MIFARE
+    result_t mifare_authenticate(const m5::rfid::Command cmd, const UID& uid, const uint8_t block,
+                                 const MifareKey& key);
     result_t mifare_transceive(const m5::rfid::Command cmd, const uint8_t block);
     result_t mifare_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
 
     // dump
     result_t mifare_dump_classic(const UID& uid, const MifareKey& key);
     result_t mifare_dump_classic_sector(const UID& uid, const uint8_t sector);
-    result_t mifare_dump_ultra_light();
+    result_t mifare_dump_ultra_light(const uint8_t maxPage);  // Light:16 LightC:48
     result_t mifare_dump_ultra_light_page(const uint8_t page);
 
     // crc
@@ -466,6 +461,8 @@ protected:
         return (this->*(_cfg.software_crc ? &UnitMFRC522::calculateSoftwareCRC : &UnitMFRC522::calculateCRC))(result,
                                                                                                               buf, len);
     }
+
+    virtual bool self_test();
 
 protected:
     config_t _cfg{};

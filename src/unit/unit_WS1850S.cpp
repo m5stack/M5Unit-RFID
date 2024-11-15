@@ -1,18 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
 /*!
   @file unit_WS1850S.cpp
   @brief WS1850S Unit for M5UnitUnified
-
-  Functionally compatible with MFRC522
-
-  SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
-
-  SPDX-License-Identifier: MIT
 */
 #include "unit_WS1850S.hpp"
-
 #include <M5Utility.hpp>
-#include <cassert>
-#include <array>
 
 namespace {
 constexpr uint8_t ws1850s_firmware_version{0x15};
@@ -42,10 +38,16 @@ bool UnitWS1850S::begin()
     return UnitMFRC522::begin();
 }
 
-void UnitWS1850S::update(const bool force)
+/*!
+  @brief self test
+  @return Always false
+  @warning It seems to be compatible in function, but may not be compatible in behavior
+ */
+bool UnitWS1850S::self_test()
 {
-    return UnitMFRC522::update(force);
+    return UnitMFRC522::self_test();
 }
+
 
 }  // namespace unit
 }  // namespace m5

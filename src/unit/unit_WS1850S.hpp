@@ -1,12 +1,11 @@
+/*
+ * SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
 /*!
   @file unit_WS1850S.hpp
   @brief WS1850S Unit for M5UnitUnified
-
-  Functionally compatible with MFRC522
-
-  SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
-
-  SPDX-License-Identifier: MIT
 */
 #ifndef M5_UNIT_RFID2_UNIT_WS1850S_HPP
 #define M5_UNIT_RFID2_UNIT_WS1850S_HPP
@@ -33,18 +32,11 @@ public:
     }
 
     virtual bool begin() override;
-    virtual void update(const bool force = false) override;
+    //virtual void update(const bool force = false) override;
 
-    /*!
-      @brief self test
-      @return always false
-      @warning It is recommended not to use this feature in the WS1850S as,
-      unlike in the MFRC522, self-testing is not successful.
-     */
-    inline virtual bool selfTest() override
-    {
-        return UnitMFRC522::selfTest();
-    }
+  protected:
+    virtual bool self_test() override;
+    
 };
 
 }  // namespace unit
