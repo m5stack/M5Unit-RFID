@@ -24,7 +24,7 @@ RFID2 is a radio frequency identification unit. Built-in WS1850S chip, working f
 
 ## License
 
-- [M5Unit-HEART- MIT](LICENSE)
+- [M5Unit-RFID2- MIT](LICENSE)
 
 
 ## Examples
