@@ -74,13 +74,16 @@ void loop()
         if (unit.activateDevice(uid)) {
             devices.push_back(uid);
             unit.deactivateDevice();
+        } else {
+            M5_LOGE("Failed to activate");
         }
     }
     // display / logging
     if (!devices.empty()) {
         M5_LOGI(">>--------------");
         M5.Speaker.tone(1000, 20);
-        //lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
+        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight(), 0);
+
         uint32_t idx{1};
         for (auto&& uid : devices) {
             M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
@@ -90,10 +93,5 @@ void loop()
         }
         M5_LOGI("<<--------------");
     }
-
-    // No devices?
-    if (!unit.detectDevice() && dd) {
-        dd = false;
-        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight(), 0);
-    }
+    m5::utility::delay(1);
 }
