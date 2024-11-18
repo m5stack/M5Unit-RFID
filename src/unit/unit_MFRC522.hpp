@@ -144,9 +144,6 @@ public:
     }
     ///@}
 
-    //    bool enablePowerDownMode();
-    //    bool disablePowerDownMode();
-
     /*!
       @brief Software reset
       @param blocking Blocks until the reset finishes and starts up again if True
@@ -474,48 +471,45 @@ namespace command {
 // Command and status
 constexpr uint8_t COMMAND_REG{0x01};
 constexpr uint8_t COM_IEN_REG{0x02};
-
 constexpr uint8_t COM_IRQ_REG{0x04};
 constexpr uint8_t DIV_IRQ_REG{0x05};
 constexpr uint8_t ERROR_REG{0x06};
-
 constexpr uint8_t STATUS2_REG{0x08};
 constexpr uint8_t FIFO_DATA_REG{0x09};
 constexpr uint8_t FIFO_LEVEL_REG{0x0A};
-
+constexpr uint8_t WATER_LEVEL_REG{0x0B};
 constexpr uint8_t CONTROL_REG{0x0C};
 constexpr uint8_t BIT_FRAMING_REG{0x0D};
 constexpr uint8_t COLL_REG{0x0E};
 
-// Command
+// Communication
 constexpr uint8_t MODE_REG{0x11};
 constexpr uint8_t TX_MODE_REG{0x12};
 constexpr uint8_t RX_MODE_REG{0x13};
-
 constexpr uint8_t TX_CONTROL_REG{0x14};
 constexpr uint8_t TX_ASK_REG{0x15};
-
+constexpr uint8_t RX_SEL_REG{0x16};
+constexpr uint8_t RX_THRESHOULD_REG{0x18};
+constexpr uint8_t DEMOD_REG{0x19};
+constexpr uint8_t MF_TX_REG{0x1C};
 constexpr uint8_t MF_RX_REG{0x1D};
 
 // Configuration
 constexpr uint8_t CRC_RESULT_REGH{0x21};
 constexpr uint8_t CRC_RESULT_REGL{0x22};
-
 constexpr uint8_t MOD_WIDTH_REG{0x24};
-
 constexpr uint8_t RFC_FG_REG{0x26};
-
+constexpr uint8_t GSN_REG{0x27};
+constexpr uint8_t CW_GSP_REG{0x28};
+constexpr uint8_t MOD_GSP_REG{0x29};
 constexpr uint8_t TMODE_REG{0x2A};
 constexpr uint8_t TPRESCALER_REG_L{0x2B};
 constexpr uint8_t TRELOAD_REG_H{0x2C};
 constexpr uint8_t TRELOAD_REG_L{0x2D};
 
-// Test register
+// Test
 constexpr uint8_t AUTO_TEST_REG{0x36};
 constexpr uint8_t VERSION_REG{0x37};
-
-//
-constexpr uint8_t DEMOD_REG{0x4D};
 
 }  // namespace command
 }  // namespace mfrc522

@@ -94,7 +94,7 @@ constexpr uint8_t MIFARE_ACK{0x0A};
 0x01 transfer valid and parity or CRC error
 0x00 transfer invalid and invalid operation
 0x05 transfer invalid and parity or CRC error
- */
+:beg */
 
 inline bool isTPrescaleEven(const uint8_t v)
 {
@@ -241,54 +241,15 @@ bool UnitMFRC522::begin()
         return false;
     }
 
-    // parity off NG!
-    //    writeRegister8(MF_RX_REG, 1U << 4);
-
     // Mode and anttena
-    auto ret = writeRegister8(MODE_REG, _cfg.mode_reg) && writeReceiverGain(_cfg.receiver_gain) &&
-               (_cfg.enable_antenna ? turnOnAntenna() : true);
-    return ret;
+    return writeRegister8(MODE_REG, _cfg.mode_reg) && writeReceiverGain(_cfg.receiver_gain) &&
+           (_cfg.enable_antenna ? turnOnAntenna() : true);
 }
 
 void UnitMFRC522::update(const bool /* force */)
 {
     /* nop */
 }
-
-#if 0
-bool UnitMFRC522::enablePowerDownMode()
-{
-    uint8_t v{};
-    return readRegister8(COMMAND_REG, v, 0) && writeRegister8(((v | 0x10) & -0x0F) | 0x07);
-}
-
-bool UnitMFRC522::disablePowerDownMode()
-{
-    CommandReg cr{};
-    return (bool)read_register8(COMMAND_REG, cr.value)
-        .and_then([this, &cr]() {
-            cr.powerOff(false);
-            cr.command(Command::NoCmdChange);
-            return write_register8(COMMAND_REG, cr.value);
-        })
-        .and_then([this]() {
-            // Wait until power-down bit has been cleared (1024 clock
-            // It takes 1024 clocks until the Soft power-downmode is exited
-            // indicated by the PowerDown bit
-            auto timeout_at = m5::utility::millis() + 1000;
-            bool done{};
-            do {
-                uint8_t v{};
-                if (this->read_register8(COMMAND_REG, v) && ((v & 0x10) == 0)) {
-                    done = true;
-                    break;
-                }
-                std::this_thread::yield();
-            } while (!done && m5::utility::millis() <= timeout_at);
-            return done ? result_t() : m5::stl::make_unexpected(function_error_t::TIMEOUT);
-        });
-}
-#endif
 
 bool UnitMFRC522::softReset(const bool blocking)
 {
@@ -446,11 +407,14 @@ UnitMFRC522::result_t UnitMFRC522::activateDevice(UID& uid)
     do {
         result = picc_select(uid, lv++);
     } while (!result && result.error() == Error::UID_NOT_COLMPLETED && lv < 4);
+    M5_LIB_LOGV("Sel:%02X", result ? 0 : m5::stl::to_underlying(result.error()));
 
     // Identification of UltraLight or UltraLightC
+    // (Is there a better way?)
     if (uid.type == Type::MIFARE_UltraLight) {
         UID copy = uid;
 
+        M5_LIB_LOGV("Detect Light/C");
         // If UltraLightC, this command will be processed successfully.
         uint8_t cmd[4]{m5::stl::to_underlying(m5::rfid::Command::AUTHENTICATE_1), 0x00};
         uint8_t txLast{0};
@@ -465,9 +429,8 @@ UnitMFRC522::result_t UnitMFRC522::activateDevice(UID& uid)
         if (r) {
             uid.type = Type::MIFARE_UltraLightC;
         } else {
-            ATQA tmp{};
             // After an error, it must be woken up again (It's may be UltraLight)
-            M5_LIB_LOGW(">>>>> Light/C %x", r.error());
+            ATQA tmp{};
             result = picc_haltA();
             result = result ? picc_wakeupA(tmp.value) : result;
             if (result) {
@@ -475,6 +438,8 @@ UnitMFRC522::result_t UnitMFRC522::activateDevice(UID& uid)
                 do {
                     result = picc_select(uid, lv++);
                 } while (!result && result.error() == Error::UID_NOT_COLMPLETED && lv < 4);
+                M5_LIB_LOGV("Reactivate Sel:%02X", result ? 0 : m5::stl::to_underlying(result.error()));
+
                 // Is a different device selected?
                 if (std::memcmp(uid.uid, copy.uid, m5::stl::size(uid.uid))) {
                     M5_LIB_LOGE("UID is different");
@@ -628,7 +593,6 @@ bool UnitMFRC522::wait_comm_irq(const uint8_t irq, const uint32_t duration)
             }
         }
         std::this_thread::yield();
-        //        m5::utility::delay(1);
     } while (m5::utility::millis() <= timeout_at);
     return false;
 }
@@ -649,7 +613,6 @@ bool UnitMFRC522::wait_div_irq(const uint8_t irq, const uint32_t duration)
 
 UnitMFRC522::result_t UnitMFRC522::picc_anti_collision(const uint8_t cascadeLevel, uint8_t* buf)
 {
-    uint32_t count{32};  // Collision avoidance attempts up to 32
     uint8_t slen{2}, rlen{5};
     uint8_t* rbuf = buf + 2;
     uint8_t txLast{0}, fixedBits{}, cpos{};
@@ -662,9 +625,14 @@ UnitMFRC522::result_t UnitMFRC522::picc_anti_collision(const uint8_t cascadeLeve
     buf[1] = 0x20;                                                                            // first NVB
 
     auto result = picc_transceive(rbuf, rlen, buf, slen, txLast);
+    if (!result) {
+        M5_LIB_LOGV("1st:%02x", result.error());
+    }
 
     // Loop for anti coollision
-    while (!result && result.error() == Error::OCCUR_COLLISION && count--) {
+    // Collision avoidance attempts up to 32
+    uint32_t count{};
+    while (!result && result.error() == Error::OCCUR_COLLISION && count++ < 32) {
         uint8_t col{};
         if (!readRegister8(COLL_REG, col, 0)) {
             return m5::stl::make_unexpected(Error::COMMUNICATION);
@@ -696,6 +664,9 @@ UnitMFRC522::result_t UnitMFRC522::picc_anti_collision(const uint8_t cascadeLeve
             return m5::stl::make_unexpected(Error::COMMUNICATION);
         }
         result = picc_transceive(rbuf, rlen, buf, slen, txLast, txLast);
+        if (!result) {
+            M5_LIB_LOGV("  (%u):%02x", count, result.error());
+        }
     }
     return result;
 }
@@ -711,7 +682,6 @@ UnitMFRC522::result_t UnitMFRC522::picc_select(UID& uid, const uint8_t cascadeLe
     if (cascadeLevel < 1 || cascadeLevel > 3) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
-
     if (!clear_register_bit(COLL_REG, 0x80)) {
         return m5::stl::make_unexpected(Error::COMMUNICATION);
     }
@@ -719,6 +689,7 @@ UnitMFRC522::result_t UnitMFRC522::picc_select(UID& uid, const uint8_t cascadeLe
     // Anti collision
     auto result = picc_anti_collision(cascadeLevel, buf);
     if (!result) {
+        M5_LIB_LOGV("AC:%02X", result.error());
         return result;
     }
 
@@ -736,6 +707,7 @@ UnitMFRC522::result_t UnitMFRC522::picc_select(UID& uid, const uint8_t cascadeLe
 
     result = picc_transceive(rbuf, rlen, buf, slen, last_bits, align);
     if (!result) {
+        M5_LIB_LOGV("SEL:%02X", result.error());
         return result;
     }
 
@@ -871,7 +843,7 @@ UnitMFRC522::result_t UnitMFRC522::picc_haltA()
 
     auto result = picc_send(mfrc522::Command::Transceive, buf, 4, txLast);  // No recv data
     if (result) {
-        if (!wait_comm_irq(0x50 /* TxIRq | IdleIRq */, 36)) {
+        if (!wait_comm_irq(0x01 /* TimerIRq */, 36)) {
             M5_LIB_LOGV("Timeout");
             return m5::stl::make_unexpected(Error::TIMEOUT);
         }
@@ -1308,12 +1280,11 @@ bool UnitMFRC522::self_test()
         M5_LIB_LOGE("Timeout");
         return false;
     }
-#if 0
+
     if (!write_pcd_command(mfrc522::Command::Idle)) {
         M5_LIB_LOGE("Failed to idle");
         return false;
     }
-#endif
 
     std::array<uint8_t, 64> buf{};
     if (!readRegister(FIFO_DATA_REG, buf.data(), buf.size(), 1)) {
@@ -1355,3 +1326,66 @@ bool UnitMFRC522::self_test()
 
 }  // namespace unit
 }  // namespace m5
+
+#if 0
+[  3908][E][unit_MFRC522.cpp:232] begin(): [00]:00 Reserved
+[  3909][E][unit_MFRC522.cpp:232] begin(): [01]:20 Command RcvOff
+[  3910][E][unit_MFRC522.cpp:232] begin(): [02]:80 ComIEn IRqinv
+[  3912][E][unit_MFRC522.cpp:232] begin(): [03]:00 DivEn 
+[  3916][E][unit_MFRC522.cpp:232] begin(): [04]:14 ComIrq IdeIRq, HiAlertIRq
+[  3921][E][unit_MFRC522.cpp:232] begin(): [05]:00 DivIrq 
+[  3925][E][unit_MFRC522.cpp:232] begin(): [06]:00 Error
+[  3930][E][unit_MFRC522.cpp:232] begin(): [07]:21 Status1 CRCready LoAlert
+[  3934][E][unit_MFRC522.cpp:232] begin(): [08]:00 Status2 
+[  3939][E][unit_MFRC522.cpp:232] begin(): [09]:00 FIFO Data
+[  3943][E][unit_MFRC522.cpp:232] begin(): [0A]:00 FIFO Level
+[  3948][E][unit_MFRC522.cpp:232] begin(): [0B]:08 WaterLv
+[  3952][E][unit_MFRC522.cpp:232] begin(): [0C]:10 Control TStopNow TSartNow
+[  3957][E][unit_MFRC522.cpp:232] begin(): [0D]:00 BitFraming
+[  3961][E][unit_MFRC522.cpp:232] begin(): [0E]:A0 CollReg ValuesAfterColl CollPosNotValid
+[  3966][E][unit_MFRC522.cpp:232] begin(): [0F]:00 Reserved
+[  3970][E][unit_MFRC522.cpp:232] begin(): [10]:00 Reserved
+[  3975][E][unit_MFRC522.cpp:232] begin(): [11]:3D Mode TxWaitRF PolMFin reserved 6363h
+[  3979][E][unit_MFRC522.cpp:232] begin(): [12]:00 TxNode 
+[  3984][E][unit_MFRC522.cpp:232] begin(): [13]:00 RxMode
+[  3988][E][unit_MFRC522.cpp:232] begin(): [14]:80 TxControl InvTX2RFOn
+[  3993][E][unit_MFRC522.cpp:232] begin(): [15]:40 TxAsk Force100ASK
+[  3997][E][unit_MFRC522.cpp:232] begin(): [16]:10 TxSel DriverSel Miller pulse encoded
+[  4002][E][unit_MFRC522.cpp:232] begin(): [17]:88 RxSel UARTSel RxWait
+[  4006][E][unit_MFRC522.cpp:232] begin(): [18]:84 RxThreshould MinLv8 CollLv4
+[  4011][E][unit_MFRC522.cpp:232] begin(): [19]:4D Demod AddIQ TPrescalEven TauRcv10b TauSync
+[  4015][E][unit_MFRC522.cpp:232] begin(): [1A]:00 Reserved
+[  4020][E][unit_MFRC522.cpp:232] begin(): [1B]:00 Reserved
+[  4024][E][unit_MFRC522.cpp:232] begin(): [1C]:62 MfTx TxWit2
+[  4029][E][unit_MFRC522.cpp:232] begin(): [1D]:00 MfRx 
+[  4033][E][unit_MFRC522.cpp:232] begin(): [1E]:00 Reserved
+[  4038][E][unit_MFRC522.cpp:232] begin(): [1F]:EB SerialSpeed 
+[  4042][E][unit_MFRC522.cpp:232] begin(): [20]:00 Reserved
+[  4047][E][unit_MFRC522.cpp:232] begin(): [21]:FF CRCResult
+[  4051][E][unit_MFRC522.cpp:232] begin(): [22]:FF CRCResult
+[  4056][E][unit_MFRC522.cpp:232] begin(): [23]:88 Reserved
+[  4060][E][unit_MFRC522.cpp:232] begin(): [24]:26 ModWidth
+[  4065][E][unit_MFRC522.cpp:232] begin(): [25]:87 Reserved
+[  4070][E][unit_MFRC522.cpp:232] begin(): [26]:48 RFCfg 33dB reserved
+[  4074][E][unit_MFRC522.cpp:232] begin(): [27]:88 GsN CWGsN ModGsN 
+[  4079][E][unit_MFRC522.cpp:232] begin(): [28]:20 CWGsP 
+[  4083][E][unit_MFRC522.cpp:232] begin(): [29]:20 ModGsP 
+[  4088][E][unit_MFRC522.cpp:232] begin(): [2A]:88 TMode TAuto TAutoResttart
+[  4092][E][unit_MFRC522.cpp:232] begin(): [2B]:00 TPrescale
+[  4097][E][unit_MFRC522.cpp:232] begin(): [2C]:00 TReload 
+[  4101][E][unit_MFRC522.cpp:232] begin(): [2D]:10 TReload
+[  4106][E][unit_MFRC522.cpp:232] begin(): [2E]:00 TCountVal
+[  4110][E][unit_MFRC522.cpp:232] begin(): [2F]:00 TCountVal
+[  4115][E][unit_MFRC522.cpp:232] begin(): [30]:00 Reserved
+[  4119][E][unit_MFRC522.cpp:232] begin(): [31]:00 TestSel1
+[  4124][E][unit_MFRC522.cpp:232] begin(): [32]:00 TestSel2
+[  4128][E][unit_MFRC522.cpp:232] begin(): [33]:80 TestPin RS232LineEn
+[  4133][E][unit_MFRC522.cpp:232] begin(): [34]:00 TestPinVal
+[  4137][E][unit_MFRC522.cpp:232] begin(): [35]:00 TestBus
+[  4142][E][unit_MFRC522.cpp:232] begin(): [36]:40 AutoTest AmpRcv
+[  4146][E][unit_MFRC522.cpp:232] begin(): [37]:15 Verson
+[  4151][E][unit_MFRC522.cpp:232] begin(): [38]:00 AnalogTest
+[  4155][E][unit_MFRC522.cpp:232] begin(): [39]:00 TestDAC1
+[  4160][E][unit_MFRC522.cpp:232] begin(): [3A]:00 TestDAC2
+[  4164][E][unit_MFRC522.cpp:232] begin(): [3B]:00 TestADC
+#endif
