@@ -29,7 +29,7 @@ using namespace m5::rfid;
 using namespace m5::rfid::mifare;
 using namespace m5::rfid::mifare::classic;
 
-const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixture<400000U>());
+const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixture<100 * 1000U>());
 
 class TestWS1850S : public ComponentTestBase<UnitWS1850S, bool> {
 protected:
@@ -43,10 +43,8 @@ protected:
     };
 };
 
-// INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S,
-//                          ::testing::Values(false, true));
-//   INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S,
-//   ::testing::Values(true));
+// INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S, ::testing::Values(false, true));
+//   INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S, ::testing::Values(true));
 INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S, ::testing::Values(false));
 
 using namespace m5::unit::mfrc522;
@@ -58,7 +56,6 @@ auto rng = std::default_random_engine{};
 TEST_P(TestWS1850S, selfTest)
 {
     SCOPED_TRACE(ustr);
-
     EXPECT_FALSE(unit->selfTest());  // WS1850S failed always
 }
 
@@ -194,39 +191,6 @@ TEST_P(TestWS1850S, Tprescale)
     }
 }
 
-TEST_P(TestWS1850S, Power)
-{
-    // TODO
-#if 0
-    SCOPED_TRACE(ustr);
-
-    uint8_t now{}, prev{};
-
-    EXPECT_TRUE(
-        unit->readRegister8(COMMAND_REG, prev, 0));
-    M5_LOGW("prev:%x", prev);
-
-    // power down
-    EXPECT_TRUE(unit->enablePowerDownMode());
-
-    EXPECT_TRUE(
-        unit->readRegister8(COMMAND_REG, now, 0));
-    EXPECT_EQ((now & 0x10), 0x10);
-    EXPECT_NE(now, prev);
-    prev = now;
-
-    // powerup
-    EXPECT_TRUE(unit->disablePowerDownMode());
-
-    EXPECT_TRUE(
-        unit->readRegister8(COMMAND_REG, now, 0));
-    EXPECT_EQ((now & 0x10), 0x00);
-    EXPECT_NE(now, prev);
-
-    M5_LOGW("now:%x", now);
-#endif
-}
-
 TEST_P(TestWS1850S, AccessBit)
 {
     SCOPED_TRACE(ustr);
@@ -248,4 +212,36 @@ TEST_P(TestWS1850S, AccessBit)
             }
         }
     }
+}
+
+// Condition : Classic1K and RFID2 must be in contact
+TEST_P(TestWS1850S, Detect)
+{
+    SCOPED_TRACE(ustr);
+
+    UID uid{};
+    uint8_t data[16] = {                          // Hexspeak :)
+                        0xAB, 0xAD, 0xBA, 0xBE,   // a bad babe
+                        0xCA, 0xFE, 0xBA, 0xBE,   // cafe babe
+                        0xDE, 0xAD, 0xBE, 0xEF,   // dead beef
+                        0xFA, 0xCE, 0xFE, 0xED};  // face feed
+    uint8_t rbuf[18];
+    uint8_t rlen{18};
+
+    // activate
+    EXPECT_TRUE(unit->detectIdleDevice());
+    EXPECT_TRUE(unit->activateDevice(uid));
+    EXPECT_EQ(uid.type, Type::MIFARE_Classic_1K);
+    EXPECT_TRUE(uid.isClassic());
+
+    // auth
+    EXPECT_TRUE(unit->mifareAuthenticateA(uid, 52));
+
+    // write,read,compare
+    EXPECT_TRUE(unit->mifareWrite(52, data, 16));
+    EXPECT_TRUE(unit->mifareRead(rbuf, rlen, 52));
+    EXPECT_TRUE(std::memcmp(data, rbuf, 16) == 0);
+
+    // deactivate
+    EXPECT_TRUE(unit->deactivateDevice());
 }
