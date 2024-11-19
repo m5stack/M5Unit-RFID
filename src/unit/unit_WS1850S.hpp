@@ -32,11 +32,9 @@ public:
     }
 
     virtual bool begin() override;
-    //virtual void update(const bool force = false) override;
 
-  protected:
+protected:
     virtual bool self_test() override;
-    
 };
 
 }  // namespace unit

@@ -12,6 +12,7 @@
 #include <cassert>
 #include <thread>
 #include <cstdio>
+#include <cinttypes>
 
 using namespace m5::unit::mfrc522;
 using namespace m5::unit::mfrc522::command;
