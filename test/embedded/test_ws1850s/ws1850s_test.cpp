@@ -13,10 +13,11 @@
 #include <googletest/test_template.hpp>
 #include <unit/unit_WS1850S.hpp>
 #include <M5Utility.hpp>
-#include <chrono>
-#include <cmath>
+//#include <chrono>
+//#include <cmath>
 #include <random>
-#include <array>
+//#include <array>
+#include <cstring>
 
 namespace {
 }  // namespace
@@ -238,8 +239,8 @@ TEST_P(TestWS1850S, Detect)
     EXPECT_TRUE(unit->mifareAuthenticateA(uid, 52));
 
     // write,read,compare
-    EXPECT_TRUE(unit->mifareWrite(52, data, 16));
-    EXPECT_TRUE(unit->mifareRead(rbuf, rlen, 52));
+    EXPECT_TRUE(unit->writeDevice(uid, 52, data, 16));
+    EXPECT_TRUE(unit->readDevice(uid, rbuf, rlen, 52));
     EXPECT_TRUE(std::memcmp(data, rbuf, 16) == 0);
 
     // deactivate
