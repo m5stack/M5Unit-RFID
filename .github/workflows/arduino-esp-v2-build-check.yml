@@ -5,10 +5,43 @@ env:
   REQUIRED_LIBRARIES: M5Unified,M5UnitUnified
 
 on:
-  workflow_run:
-    workflows: ["clang-format Check"]
-    types:
-      - completed
+  push:
+    tags-ignore:
+      - '*.*.*'
+      - 'v*.*.*'
+    branches:
+      - '*'
+    paths:
+      - 'src/unit/**.cpp'
+      - 'src/unit/**.hpp'
+      - 'src/unit/**.h'
+      - 'src/unit/**.c'
+      - 'test/**.cpp'
+      - 'test/**.hpp'
+      - 'test/**.h'
+      - 'test/**.c'
+      - 'examples/UnitUnified/**.ino'
+      - 'examples/UnitUnified/**.cpp'
+      - 'examples/UnitUnified/**.hpp'
+      - 'examples/UnitUnified/**.h'
+      - 'examples/UnitUnified/**.c'
+      - '**arduino-esp-v2-build-check.yml'
+  pull_request:
+    paths:
+      - 'src/unit/**.cpp'
+      - 'src/unit/**.hpp'
+      - 'src/unit/**.h'
+      - 'src/unit/**.c'
+      - 'test/**.cpp'
+      - 'test/**.hpp'
+      - 'test/**.h'
+      - 'test/**.c'
+      - 'examples/UnitUnified/**.ino'
+      - 'examples/UnitUnified/**.cpp'
+      - 'examples/UnitUnified/**.hpp'
+      - 'examples/UnitUnified/**.h'
+      - 'examples/UnitUnified/**.c'
+      - '**arduino-esp-v2-build-check.yml'
   workflow_dispatch:
 
 jobs:
