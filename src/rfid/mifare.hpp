@@ -7,13 +7,11 @@
   @file mifare.hpp
   @brief Definition and utilities for MIFARE
 */
-#ifndef M5_UNIT_RFID_MIFARE_MIFARE_HPP
-#define M5_UNIT_RFID_MIFARE_MIFARE_HPP
+#ifndef M5_UNIT_RFID_RFID_MIFARE_HPP
+#define M5_UNIT_RFID_RFID_MIFARE_HPP
 
-#include <cstdint>
+#include "rfid.hpp"
 #include <array>
-#include <cstring>
-#include <string>
 
 namespace m5 {
 namespace rfid {
@@ -24,74 +22,10 @@ namespace rfid {
 namespace mifare {
 
 /*!
-  @enum Type
-  @brief Type of the PICC
- */
-enum class Type : uint8_t {
-    Unknown,              //!< Unknown type
-    MIFARE_Classic,       //!< Also known as MIFARE Standard mini
-    MIFARE_Classic_1K,    //!< Also known as MIFARE Standard 1K
-    MIFARE_Classic_4K,    //!< Also known as MIFARE Standard 4K
-    MIFARE_Classic_2K,    //!< Also known as MIFARE Standard 2K
-    MIFARE_UltraLight,    //!< MIFARE Ultralight
-    MIFARE_UltraLightC,   //!< MIFARE UltralightC
-    MIFARE_Plus,          //!< MIFARE Plus
-    MIFARE_DESFire,       //!< MIFARE DESFire (Also known as TNP3XXX)
-    ISO_14443_4,          //!< PICC compliant with ISO/IEC 14443-4
-    ISO_18092,            //!< PICC compliant with ISO/IEC 18092 (NFC)
-    NotCompleted = 0xFF,  //!< SAK indicates UID is not complete
-};
-
-/*!
-  @struct UID
-  @brief The UID of the PICC
- */
-struct UID {
-    //! @brief  Number of bytes in the UID. 4, 7 or 10.
-    uint8_t size{};
-    //! @brief uid data (Valid up to the value of size)
-    uint8_t uid[10]{};
-    //! @brief  The SAK (Select acknowledge) returned from the PICC after successful selection.
-    uint8_t sak{};
-    //! @brief PICC type
-    Type type{};
-
-    bool isClassic() const
-    {
-        return (size != 0) && (type == Type::MIFARE_Classic || type == Type::MIFARE_Classic_1K ||
-                               type == Type::MIFARE_Classic_4K || type == Type::MIFARE_Classic_2K);
-    }
-    void clear()
-    {
-        size = sak = 0;
-        type       = Type::Unknown;
-        std::memset(uid, 0x00, 10);
-    }
-    std::string uidString() const;
-    std::string typeString() const;
-};
-
-inline bool operator==(const UID& a, const UID& b)
-{
-    return a.size == b.size && a.sak == b.sak && a.type == b.type && std::memcmp(a.uid, b.uid, 10) == 0;
-}
-inline bool operator!=(const UID& a, const UID& b)
-{
-    return !(a == b);
-}
-
-/*!
   @typedef Key
   @brief MIFARE Key
 */
 using Key = std::array<uint8_t, 6>;
-
-/*!
-  @brief Get type from SAK
-  @param sak SAK
-  @return Type
- */
-Type sak_to_type(const uint8_t sak);
 
 /*!
   @namespace classic

@@ -8,6 +8,7 @@
   @brief MFRC522 Unit for M5UnitUnified
 */
 #include "unit_MFRC522.hpp"
+#include "rfid/nfc/nfc.hpp"
 #include <M5Utility.hpp>
 #include <cassert>
 #include <thread>
@@ -22,6 +23,9 @@ using namespace m5::rfid::mifare::classic;
 
 namespace {
 constexpr float F_CLOCK = 13.56f * 1000000;  // 13.56 Mhz
+
+constexpr uint8_t NFC_MAGIC_NO{0xE1};
+constexpr uint8_t NFC_VERSION{0x10};
 
 // ErrorReg
 constexpr uint8_t ERROR_BIT_WRITE{0x80};
@@ -403,50 +407,104 @@ UnitMFRC522::result_t UnitMFRC522::detectDevice()
 
 UnitMFRC522::result_t UnitMFRC522::activateDevice(UID& uid)
 {
+    result_t result = activate(uid);
+    // UltraLight according to SAK judgment or activate error occurred
+    if (!result || uid.type != Type::MIFARE_UltraLight) {
+        return result;
+    }
+
+    // Identification of UltraLight or others
+    M5_LIB_LOGV("Detect Light or others %s", uid.uidAsString().c_str());
+
+    UID copy = uid;
+
+    // If UltraLightC, this command will be processed successfully
+    uint8_t cmd[4]{m5::stl::to_underlying(m5::rfid::Command::AUTHENTICATE_1), 0x00};
+    uint8_t txLast{0};
+    uint16_t crc{};
+    if (calculate_crc(crc, cmd, 2)) {
+        cmd[2] = crc & 0xFF;
+        cmd[3] = (crc >> 8) & 0xFF;
+    }
+    uint8_t rbuf[8]{};
+    uint8_t rlen{8};
+    result = picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), txLast, 0, true);
+    if (result && rbuf[0] == 0xAF) {
+        uid.type   = Type::MIFARE_UltraLightC;
+        uid.blocks = get_number_of_blocks(Type::MIFARE_UltraLightC);
+        M5_LIB_LOGV("Type:%u %u", uid.type, uid.blocks);
+        return result;
+    }
+
+    // Reactivate same UID
+    uint32_t retry{8};
+    do {
+        result = reactivate(uid, copy);
+    } while (!result && retry--);
+    if (!result) {
+        return result;
+    }
+
+    // Check NTAG
+    // If NTAG21x, this command will be processed successfully
+    uint8_t vbuf[10]{};
+    uint8_t vlen{10};
+    bool version = (bool)ntag_get_version(vbuf, vlen);
+    if (!version) {
+        // Reactivate same UID
+        retry = 8;
+        do {
+            result = reactivate(uid, copy);
+        } while (!result && retry--);
+        if (!result) {
+            return result;
+        }
+    }
+
+    uint8_t buf[18]{};
+    uint8_t blen{18};
+    result = mifareRead(uid, buf, blen, 0);
+    if (!result) {
+        return result;
+    }
+    // M5_DUMPI(buf + 12, 4);
+    if (buf[12] == NFC_MAGIC_NO && buf[13] == NFC_VERSION) {  // NTAG?
+        uid.type = (buf[14] == 0x12)   ? Type::NTAG_213
+                   : (buf[14] == 0x3E) ? Type::NTAG_215
+                   : (buf[14] == 0x6D) ? Type::NTAG_216
+                   : (buf[14] == 0x10) ? Type::NTAG_212
+                   : (buf[14] == 0x06)
+                       ? (version ? ((vbuf[4] == 0x02) ? Type::NTAG_210u : Type::NTAG_210) : Type::MIFARE_UltraLight)
+                       : Type::MIFARE_UltraLight;
+    }
+
+    uid.blocks = get_number_of_blocks(uid.type);
+    M5_LIB_LOGV("Type:%u %u [%02X]", uid.type, uid.blocks, buf[14]);
+    return result;
+}
+
+UnitMFRC522::result_t UnitMFRC522::activate(UID& uid)
+{
     uint8_t lv{1};
     result_t result;
     do {
         result = picc_select(uid, lv++);
     } while (!result && result.error() == Error::UID_NOT_COLMPLETED && lv < 4);
     M5_LIB_LOGV("Sel:%02X", result ? 0 : m5::stl::to_underlying(result.error()));
+    return result;
+}
 
-    // Identification of UltraLight or UltraLightC
-    // (Is there a better way?)
-    if (uid.type == Type::MIFARE_UltraLight) {
-        UID copy = uid;
-
-        M5_LIB_LOGV("Detect Light/C");
-        // If UltraLightC, this command will be processed successfully.
-        uint8_t cmd[4]{m5::stl::to_underlying(m5::rfid::Command::AUTHENTICATE_1), 0x00};
-        uint8_t txLast{0};
-        uint16_t crc{};
-        if (calculate_crc(crc, cmd, 2)) {
-            cmd[2] = crc & 0xFF;
-            cmd[3] = (crc >> 8) & 0xFF;
-        }
-        uint8_t rbuf[8]{};
-        uint8_t rlen{8};
-        auto r = picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), txLast, 0, true);
-        if (r) {
-            uid.type = Type::MIFARE_UltraLightC;
-        } else {
-            // After an error, it must be woken up again (It's may be UltraLight)
-            ATQA tmp{};
-            result = picc_haltA();
-            result = result ? picc_wakeupA(tmp.value) : result;
-            if (result) {
-                lv = 1;
-                do {
-                    result = picc_select(uid, lv++);
-                } while (!result && result.error() == Error::UID_NOT_COLMPLETED && lv < 4);
-                M5_LIB_LOGV("Reactivate Sel:%02X", result ? 0 : m5::stl::to_underlying(result.error()));
-
-                // Is a different device selected?
-                if (std::memcmp(uid.uid, copy.uid, m5::stl::size(uid.uid))) {
-                    M5_LIB_LOGE("UID is different");
-                    result = m5::stl::make_unexpected(Error::INTERNAL);
-                }
-            }
+UnitMFRC522::result_t UnitMFRC522::reactivate(UID& uid, const UID& prev)
+{
+    ATQA tmp{};
+    auto result = picc_wakeupA(tmp.value);
+    if (result) {
+        result = activate(uid);
+        // Is a different device selected?
+        if (std::memcmp(uid.uid, prev.uid, m5::stl::size(uid.uid))) {
+            M5_LIB_LOGE("UID is different");
+            picc_haltA();
+            result = m5::stl::make_unexpected(Error::INTERNAL);
         }
     }
     return result;
@@ -458,43 +516,24 @@ UnitMFRC522::result_t UnitMFRC522::deactivateDevice()
     return mifareStopCrypto1() ? result : m5::stl::make_unexpected(Error::COMMUNICATION);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareDump(const UID& uid, const MifareKey& key)
+UnitMFRC522::result_t UnitMFRC522::dumpDevice(const UID& uid, const MifareKey& key)
 {
-    result_t result{};
-    switch (uid.type) {
-        case Type::MIFARE_Classic:
-        case Type::MIFARE_Classic_1K:
-        case Type::MIFARE_Classic_4K:
-            result = mifare_dump_classic(uid, key);
-            break;
-        case Type::MIFARE_UltraLight:
-            result = mifare_dump_ultra_light(16);
-            break;
-        case Type::MIFARE_UltraLightC:
-            result = mifare_dump_ultra_light(48);
-            break;
-        default:
-            result = m5::stl::make_unexpected(Error::ARGUMENT);
-            break;
+    result_t result = m5::stl::make_unexpected(Error::ARGUMENT);
+    if (uid.isClassic()) {
+        result = dump_sector_structure(uid, key);
+    } else if (uid.canNFC()) {
+        result = dump_page_structure(uid.blocks);
     }
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareDumpBlock(const UID& uid, const uint8_t block)
+UnitMFRC522::result_t UnitMFRC522::dumpDevice(const UID& uid, const uint8_t block)
 {
-    result_t result{};
-    switch (uid.type) {
-        case Type::MIFARE_Classic:
-        case Type::MIFARE_Classic_1K:
-        case Type::MIFARE_Classic_4K:
-            result = mifare_dump_classic_sector(uid, get_sector(block));
-            break;
-        case Type::MIFARE_UltraLight:
-            result = mifare_dump_ultra_light_page(block);
-            break;
-        default:
-            result = m5::stl::make_unexpected(Error::ARGUMENT);
-            break;
+    result_t result = m5::stl::make_unexpected(Error::ARGUMENT);
+    if (uid.isClassic()) {
+        result = dump_sector(get_sector(block));
+    } else if (uid.canNFC()) {
+        result = dump_page(block);
     }
     return result;
 }
@@ -722,9 +761,10 @@ UnitMFRC522::result_t UnitMFRC522::picc_select(UID& uid, const uint8_t cascadeLe
 
     // Completed?
     if ((rbuf[0] & 0x04) == 0) {
-        uid.size = 1 + cascadeLevel * 3;
-        uid.sak  = rbuf[0];
-        uid.type = sak_to_type(rbuf[0]);
+        uid.size   = 1 + cascadeLevel * 3;
+        uid.sak    = rbuf[0];
+        uid.type   = get_type(rbuf[0]);
+        uid.blocks = get_number_of_blocks(uid.type);
         return {};
     }
     return m5::stl::make_unexpected(Error::UID_NOT_COLMPLETED);
@@ -821,11 +861,13 @@ UnitMFRC522::result_t UnitMFRC522::picc_transceive(uint8_t* rbuf, uint8_t& rlen,
         }
 
         uint16_t crc16{};
-        if (!calculate_crc(crc16, rbuf, fifo_len - 2) || (crc16 >> 8) == rbuf[fifo_len - 2] ||
+        if (!calculate_crc(crc16, rbuf, fifo_len - 2) || ((crc16 >> 8) & 0XFF) == rbuf[fifo_len - 2] ||
             (crc16 & 0xFF) == rbuf[fifo_len - 1]) {
             return m5::stl::make_unexpected(Error::CRC);
         }
     }
+
+    rlen = fifo_len;
     M5_LIB_LOGV("<<rxLast:%u", validBits);
     return {};
 }
@@ -858,13 +900,22 @@ bool UnitMFRC522::mifareStopCrypto1()
     return clear_register_bit(STATUS2_REG, 0x08);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareRead(uint8_t* rbuf, uint8_t& rlen, const uint8_t block)
+UnitMFRC522::result_t UnitMFRC522::mifareRead(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t block)
 {
-    if (!rbuf) {
+    uint8_t addr = block;
+    if (uid.canNFC()) {
+        addr &= ~0x03;
+    }
+    return mifare_read(rbuf, rlen, addr);
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifare_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr)
+{
+    if (!rbuf || rlen < 18) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
-    uint8_t cmd[4]{m5::stl::to_underlying(m5::rfid::Command::READ), block};
+    uint8_t cmd[4]{m5::stl::to_underlying(m5::rfid::Command::READ), addr};
     uint16_t crc{};
     uint8_t txLast{0};
     if (!calculate_crc(crc, cmd, 2)) {
@@ -876,41 +927,81 @@ UnitMFRC522::result_t UnitMFRC522::mifareRead(uint8_t* rbuf, uint8_t& rlen, cons
     return picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), txLast, 0, true /* return with CRC*/);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareWrite(const uint8_t block, const uint8_t* buf, const uint8_t len,
-                                               const bool safety)
+UnitMFRC522::result_t UnitMFRC522::mifareWrite(const UID& uid, const uint8_t block, const uint8_t* buf,
+                                               const uint8_t len, const bool safety)
+{
+    if (safety && (is_sector_trailer_block(block) || block < get_first_user_block(uid.type) ||
+                   block > get_last_user_block(uid.type))) {
+        M5_LIB_LOGW("Write has been rejected due to safety %u", block);
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+    return mifare_write(block, buf, len);
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifare_write(const uint8_t addr, const uint8_t* buf, const uint8_t len)
 {
     if (!buf || !len || len > 16) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
-    if (safety && (is_sector_trailer_block(block) || block == 0)) {
-        M5_LIB_LOGW("sector trailer or zero %u", block);
-        return m5::stl::make_unexpected(Error::ARGUMENT);
-    }
-
+    // Write in units of 16 bytes
     std::array<uint8_t, 16> wbuf{};
     std::memcpy(wbuf.data(), buf, len);
-    uint8_t cmd[2]{m5::stl::to_underlying(m5::rfid::Command::WRITE), block};
-    result_t result{};
 
+    uint8_t cmd[2]{m5::stl::to_underlying(m5::rfid::Command::WRITE), addr};
+    result_t result{};
     return (result = mifare_transceive(cmd, 2)) ? mifare_transceive(wbuf.data(), wbuf.size()) : result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareWriteUL(const uint8_t page, const uint8_t* buf, const uint8_t len)
+UnitMFRC522::result_t UnitMFRC522::mifareWriteUL(const UID& uid, const uint8_t page, const uint8_t* buf,
+                                                 const uint32_t len, const bool safety)
 {
-    if (!buf || !len || len > 4) {
+    if (!buf || !len) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
+    if (safety && (page < get_first_user_block(uid.type) || page > get_last_user_block(uid.type))) {
+        M5_LIB_LOGW("Write has been rejected due to safety %u", page);
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
+    if (len <= 4) {
+        return mifare_write_ul(page, buf, len);
+    }
+
+    int16_t pages = (len + 3) / 4;
+    if (page + pages > get_last_user_block(uid.type)) {
+        M5_LIB_LOGE("Not enough user page");
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
+    result_t result{};
+    uint8_t current = page;
+    uint32_t remain = len;
+    while (pages--) {
+        auto clen = (remain > 4) ? 4 : remain;
+        result    = mifare_write_ul(current, buf, clen);
+        if (!result) {
+            break;
+        }
+        ++current;
+        buf += clen;
+        remain -= clen;
+    }
+    return result;
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifare_write_ul(const uint8_t page, const uint8_t* buf, const uint8_t len)
+{
     uint8_t cmd[6]{m5::stl::to_underlying(m5::rfid::Command::WRITE_UL), page};
     std::memcpy(cmd + 2, buf, len);
     return mifare_transceive(cmd, m5::stl::size(cmd));
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const uint8_t block, const MifareKey& keyA,
+UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA,
                                                           const MifareKey& keyB, const bool readOnly)
 
 {
-    if (is_sector_trailer_block(block) || block == 0) {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
@@ -922,7 +1013,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const uint8_t block, c
     uint8_t poff     = get_permission_offset(block);
 
     // Read sector trailer block
-    auto result = mifareRead(buf, len, st_block);
+    auto result = mifareRead(uid, buf, len, st_block);
     // M5_LIB_LOGW("R) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     if (result) {
         if (!decode_access_bits(permissions, buf + 6)) {
@@ -940,16 +1031,17 @@ UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const uint8_t block, c
         }
         std::memcpy(buf, keyA.data(), 6);
         std::memcpy(buf + 10, keyB.data(), 6);
-        result = mifareWrite(st_block, buf, 16, false);
+        result = mifareWrite(uid, st_block, buf, 16, false);
         // M5_LIB_LOGW("W) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     }
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareDisableValueBlock(const uint8_t block, const MifareKey& keyA,
+UnitMFRC522::result_t UnitMFRC522::mifareDisableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA,
                                                            const MifareKey& keyB, const uint8_t permission)
 {
-    if (is_sector_trailer_block(block) || block == 0 || is_value_block_permission(permission) || (permission & 0xF8)) {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0 || is_value_block_permission(permission) ||
+        (permission & 0xF8)) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
@@ -960,7 +1052,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareDisableValueBlock(const uint8_t block, 
     uint8_t poff     = get_permission_offset(block);
 
     // Read sector trailer block
-    auto result = mifareRead(buf, len, st_block);
+    auto result = mifareRead(uid, buf, len, st_block);
     // M5_LIB_LOGE("R) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     if (result) {
         if (!decode_access_bits(permissions, buf + 6)) {
@@ -980,16 +1072,16 @@ UnitMFRC522::result_t UnitMFRC522::mifareDisableValueBlock(const uint8_t block, 
         }
         std::memcpy(buf, keyA.data(), 6);
         std::memcpy(buf + 10, keyB.data(), 6);
-        result = mifareWrite(st_block, buf, 16, false);  // update sector tailer
+        result = mifareWrite(uid, st_block, buf, 16, false);  // update sector tailer
         // M5_LIB_LOGE("W) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     }
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareIncrement(const uint8_t block, const uint32_t delta)
+UnitMFRC522::result_t UnitMFRC522::mifareIncrement(const UID& uid, const uint8_t block, const uint32_t delta)
 {
     result_t result{};
-    if (is_sector_trailer_block(block) || block == 0) {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
     return (result = mifare_transceive(m5::rfid::Command::INCREMENT, block))
@@ -997,10 +1089,10 @@ UnitMFRC522::result_t UnitMFRC522::mifareIncrement(const uint8_t block, const ui
                : result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareDecrement(const uint8_t block, const uint32_t delta)
+UnitMFRC522::result_t UnitMFRC522::mifareDecrement(const UID& uid, const uint8_t block, const uint32_t delta)
 {
     result_t result{};
-    if (is_sector_trailer_block(block) || block == 0) {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
     return (result = mifare_transceive(m5::rfid::Command::DECREMENT, block))
@@ -1008,28 +1100,36 @@ UnitMFRC522::result_t UnitMFRC522::mifareDecrement(const uint8_t block, const ui
                : result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareRestore(const uint8_t block)
+UnitMFRC522::result_t UnitMFRC522::mifareRestore(const UID& uid, const uint8_t block)
 {
-    result_t result{};
-    uint8_t dummy[4]{};
-    return (result = mifare_transceive(m5::rfid::Command::RESTORE, block)) ? mifare_transceive(dummy, 4, true) : result;
+    if (uid.isClassic()) {
+        result_t result{};
+        uint8_t dummy[4]{};
+        return (result = mifare_transceive(m5::rfid::Command::RESTORE, block)) ? mifare_transceive(dummy, 4, true)
+                                                                               : result;
+    }
+    return m5::stl::make_unexpected(Error::ARGUMENT);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareTransfer(const uint8_t block)
+UnitMFRC522::result_t UnitMFRC522::mifareTransfer(const UID& uid, const uint8_t block)
 {
-    if (is_sector_trailer_block(block) || block == 0) {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
     return mifare_transceive(m5::rfid::Command::TRANSFER, block);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareReadValue(int32_t& value, const uint8_t block)
+UnitMFRC522::result_t UnitMFRC522::mifareReadValue(const UID& uid, int32_t& value, const uint8_t block)
 {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
     uint8_t buf[18]{};
     uint8_t len{18};
 
     value       = 0;
-    auto result = mifareRead(buf, len, block);
+    auto result = mifareRead(uid, buf, len, block);
     if (result) {
         uint8_t addr{};
         if (!decode_value_block(value, addr, buf)) {
@@ -1040,15 +1140,207 @@ UnitMFRC522::result_t UnitMFRC522::mifareReadValue(int32_t& value, const uint8_t
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareWriteValue(const uint8_t block, const int32_t value)
+UnitMFRC522::result_t UnitMFRC522::mifareWriteValue(const UID& uid, const uint8_t block, const int32_t value)
 {
-    if (is_sector_trailer_block(block) || block == 0) {
+    if (!uid.isClassic() || is_sector_trailer_block(block) || block == 0) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
     uint8_t buf[16]{};
     encode_value_block(buf, value, block);
-    return mifareWrite(block, buf, 16);
+    return mifareWrite(uid, block, buf, 16);
+}
+
+bool UnitMFRC522::isNTAG(const UID& uid)
+{
+    if (uid.canNFC()) {
+        uint8_t rbuf[18]{};
+        uint8_t rlen{18};
+        return mifareRead(uid, rbuf, rlen, 0) && rbuf[12] == NFC_MAGIC_NO && rbuf[13] == NFC_VERSION;
+    }
+    return false;
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifareWriteChangeToNTAGFormat(const UID& uid)
+{
+    if (uid.type == Type::MIFARE_UltraLight || uid.type == Type::MIFARE_UltraLightC) {
+        if (isNTAG(uid)) {
+            return {};  // Already NFC
+        }
+        uint8_t buf[4] = {NFC_MAGIC_NO, NFC_VERSION};
+        buf[3]         = (uid.type == Type::MIFARE_UltraLight) ? 0x06 : 0x18;
+        return mifareWriteUL(uid, 3 /*OTP area*/, buf, 4, false);
+    }
+    if (uid.canNFC()) {
+        return {};
+    }
+    M5_LIB_LOGE("Can not change to NFC format. %u", uid.type);
+    return m5::stl::make_unexpected(Error::ARGUMENT);
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifareWriteNDEF(const UID& uid, const uint8_t* buf, const uint32_t blen)
+{
+    if (!uid.canNFC()) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
+    uint8_t page{}, offset{};
+    page = get_first_user_block(uid.type);
+
+    // UltraLight/C
+    if (!uid.isNTAG()) {
+        return mifareWriteUL(uid, page, buf, blen);
+    }
+
+    // NTAG 2xx
+    // There may be information at the begin of the user area that should not be deleted
+    // e.g. NTAG212, 213 LockCOntrol
+    uint32_t sz{};
+    auto result = ntag_calclate_ndef_message_size(uid, sz);
+    if (!result) {
+        return result;
+    }
+    page += sz / 4;
+    offset = sz & 0x03;
+
+    // M5_LIB_LOGW("Writable:%u:%u", page, offset);
+
+    if (offset == 0) {
+        return mifareWriteUL(uid, page, buf, blen);
+    }
+
+    // Write new messages in a concatenated manner while maintaining existing messages
+    uint8_t rbuf[18]{};
+    uint8_t rlen{18};
+    result = mifare_read(rbuf, rlen, page & ~0x03);
+    if (!result) {
+        M5_LIB_LOGE("Failed to read");
+        return result;
+    }
+
+    uint8_t* ptr = (uint8_t*)malloc(16 + blen);
+    if (!ptr) {
+        return m5::stl::make_unexpected(Error::INTERNAL);
+    }
+    std::memcpy(ptr, &rbuf[(page & 0x03) * 4], offset);
+    std::memcpy(ptr + offset, buf, blen);
+    uint32_t nlen = offset + blen;
+
+    // M5_DUMPI(ptr, nlen);
+
+    result = mifareWriteUL(uid, page, ptr, nlen);
+    free(ptr);
+
+    return result;
+}
+/*
+  targetBit Bit group  of the tag included in the size calculation
+  0x01:Null, 0x02:LockControl 0x04:NDEFMessage, ....
+  e.g. 0x06 means LockControl and MemoryControl
+  Proprietary and Terminator can not  be excluded
+ */
+UnitMFRC522::result_t UnitMFRC522::ntag_calclate_ndef_message_size(const UID& uid, uint32_t& sz,
+                                                                   const uint8_t targetTagBit)
+{
+    using m5::rfid::nfc::ndef::is_terminator_tag;
+    using m5::rfid::nfc::ndef::is_valid_tag;
+    using m5::rfid::nfc::ndef::Tag;
+
+    uint8_t page     = get_first_user_block(uid.type);
+    uint8_t max_page = get_last_user_block(uid.type) / 4 * 4;
+    uint32_t required{}, idx{};
+    uint16_t payload_len{};
+    bool done{};
+
+    sz = 0;
+
+    while (page <= max_page) {
+        uint8_t rbuf[18]{};
+        uint8_t rlen{18};
+        // M5_LIB_LOGE("R:%u/%u", page, max_page);
+        auto result = mifare_read(rbuf, rlen, page);
+        if (!result) {
+            return result;
+        }
+
+        idx &= 0x0F;
+        while (!done && idx < 16) {
+            auto t = rbuf[idx++];
+            // M5_LIB_LOGE(" Tag[%02X]", t);
+            //  Not tag, or other than targets
+            if (!is_valid_tag(t) || (t < 0x04 && !(targetTagBit & (1U << t)))) {
+                done = true;
+                break;
+            }
+            ++required;
+
+            // Terminator?
+            if (is_terminator_tag(t)) {
+                done = true;
+                break;
+            }
+
+            // Any message
+            payload_len = rbuf[idx++];
+            ++required;
+            if (payload_len == 0xFF) {  // 3 bytes format
+                payload_len = ((uint16_t)rbuf[idx++]) << 8;
+                payload_len |= ((uint16_t)rbuf[idx++]);
+                required += 2;
+            }
+            required += payload_len;
+            // M5_LIB_LOGW("  PL:%u", payload_len);
+
+            if (payload_len >= (16 - idx)) {
+                idx += payload_len;
+                page += idx / 16 * 4 - 4;  // skip to next message, (*1) add 4 after break
+                break;
+            }
+            idx += payload_len;
+        }
+        if (done) {
+            break;
+        }
+        page += 4;  // Try read next 16 bytes [*1]
+    }
+
+    sz = required;
+    // M5_LIB_LOGW("NDEFSZ:%u", sz);
+    return {};
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifareReadNDEF(const UID& uid, uint8_t* buf, uint32_t& len)
+{
+    result_t result{};
+    uint8_t page   = get_first_user_block(uid.type);
+    uint8_t page16 = (len - 2) / 16;
+
+    if (!buf || len < page16 * 16 + 2 || !uid.canNFC()) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
+    len = 0;
+    while (page16--) {
+        uint8_t rlen{18};
+        result = mifare_read(buf, rlen, page);
+        if (!result) {
+            break;
+        }
+        buf += 16;  // Overwrite prev CRC space
+        page += 4;
+        len += 16;
+    }
+    if (result) {
+        len += 2;  // last CRC
+    }
+    return result;
+}
+
+UnitMFRC522::result_t UnitMFRC522::mifareRequiredSizeNDEF(const UID& uid, uint32_t& len)
+{
+    auto result = ntag_calclate_ndef_message_size(uid, len, 0x0F /* all tag */);
+    len         = result ? (len + 15) / 16 * 16 + 2 /*CRC*/ : 0;
+    return result;
 }
 
 //
@@ -1120,21 +1412,11 @@ UnitMFRC522::result_t UnitMFRC522::mifare_transceive(const uint8_t* buf, const u
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic(const UID& uid, const MifareKey& key)
+UnitMFRC522::result_t UnitMFRC522::dump_sector_structure(const UID& uid, const MifareKey& key)
 {
-    uint8_t sectors{};
-    switch (uid.type) {
-        case Type::MIFARE_Classic:
-            sectors = 5;
-            break;
-        case Type::MIFARE_Classic_1K:
-            sectors = 16;
-            break;
-        case Type::MIFARE_Classic_4K:
-            sectors = 40;
-            break;
-        default:
-            return m5::stl::make_unexpected(Error::ARGUMENT);
+    uint8_t sectors = get_number_of_sectors(uid.type);
+    if (!sectors) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
     puts(
@@ -1145,7 +1427,7 @@ UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic(const UID& uid, const Mif
     for (int_fast8_t sector = 0; sector < sectors; ++sector) {
         auto sblock = get_sector_trailer_block_from_sector(sector);
         result      = mifareAuthenticateA(uid, sblock, key);
-        result      = result ? mifare_dump_classic_sector(uid, sector) : result;
+        result      = result ? dump_sector(sector) : result;
         if (!result) {
             printf("%2d) ERROR %02X\n", sector, m5::stl::to_underlying(result.error()));
         }
@@ -1153,12 +1435,8 @@ UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic(const UID& uid, const Mif
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic_sector(const UID& uid, const uint8_t sector)
+UnitMFRC522::result_t UnitMFRC522::dump_sector(const uint8_t sector)
 {
-    if (sector >= 40) {
-        return m5::stl::make_unexpected(Error::ARGUMENT);
-    }
-
     // Sector 0~31 has 4 blocks, 32-39 has 16 blocks
     const uint8_t blocks = (sector < 32) ? 4U : 16U;
     const uint8_t base   = (sector < 32) ? sector * blocks : 128U + (sector - 32) * blocks;
@@ -1169,7 +1447,7 @@ UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic_sector(const UID& uid, co
     const uint8_t saddr = base + blocks - 1;  //  sector traler
 
     // Read sector trailer
-    auto result = mifareRead(sbuf, slen, saddr);
+    auto result = mifare_read(sbuf, slen, saddr);
     if (!result) {
         return result;
     }
@@ -1182,7 +1460,7 @@ UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic_sector(const UID& uid, co
         uint8_t dbuf[18]{};
         uint8_t dlen{18};
         uint8_t daddr = base + i;
-        result        = mifareRead(dbuf, dlen, daddr);
+        result        = mifare_read(dbuf, dlen, daddr);
         if (!result) {
             break;
         }
@@ -1198,19 +1476,15 @@ UnitMFRC522::result_t UnitMFRC522::mifare_dump_classic_sector(const UID& uid, co
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_dump_ultra_light(const uint8_t maxPage)
+UnitMFRC522::result_t UnitMFRC522::dump_page_structure(const uint8_t maxPage)
 {
     result_t result{};
-    if (maxPage > 48) {
-        return m5::stl::make_unexpected(Error::ARGUMENT);
-    }
-
     puts(
-        "Page:00 01 02 03\n"
-        "----------------");
+        "Page    :00 01 02 03\n"
+        "--------------------");
 
     for (uint_fast8_t page = 0; page < maxPage; page += 4) {
-        result = mifare_dump_ultra_light_page(page);
+        result = dump_page(page);
         if (!result) {
             break;
         }
@@ -1218,22 +1492,23 @@ UnitMFRC522::result_t UnitMFRC522::mifare_dump_ultra_light(const uint8_t maxPage
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_dump_ultra_light_page(const uint8_t page)
+UnitMFRC522::result_t UnitMFRC522::dump_page(const uint8_t page)
 {
     uint8_t buf[16 + 2 /*CRC*/]{};
     uint8_t blen{18};
     result_t result{};
     uint8_t baddr = page & ~0x03;
 
-    result = mifareRead(buf, blen, baddr);  // 4 pages
+    result = mifare_read(buf, blen, baddr);  // 4 pages
     if (result) {
         for (int_fast8_t off = 0; off < 4; ++off) {
             auto idx = off << 2;
-            printf("[%02d]:%02X %02X %02X %02X\n", baddr + off, buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]);
+            printf("[%03d/%02X]:%02X %02X %02X %02X\n", baddr + off, baddr + off, buf[idx + 0], buf[idx + 1],
+                   buf[idx + 2], buf[idx + 3]);
         }
     } else {
         for (int_fast8_t off = 0; off < 4; ++off) {
-            printf("[%2d] ERROR %02X\n", baddr + off, m5::stl::to_underlying(result.error()));
+            printf("[%3d/%02X] ERROR %02X\n", baddr + off, baddr + off, m5::stl::to_underlying(result.error()));
         }
     }
     return result;
@@ -1325,68 +1600,40 @@ bool UnitMFRC522::self_test()
     return firm && (*firm == buf);
 }
 
+UnitMFRC522::result_t UnitMFRC522::ntag_get_version(uint8_t* rbuf, uint8_t& rlen)
+{
+    uint8_t cmd[3]{m5::stl::to_underlying(m5::rfid::Command::GET_VERSION)};
+    uint16_t crc{};
+
+    if (!rbuf || rlen < 10) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
+    if (!calculate_crc(crc, cmd, 1)) {
+        return m5::stl::make_unexpected(Error::CRC);
+    }
+    cmd[1] = crc & 0xFF;
+    cmd[2] = (crc >> 8) & 0xFF;
+
+    uint8_t validBits{};
+    return picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), validBits, 0, true);
+}
+
+UnitMFRC522::result_t UnitMFRC522::ntag_fast_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t saddr,
+                                                  const uint8_t eaddr)
+{
+    // M5_LIB_LOGW(">>>> S:%u E:%u rlen:%u", saddr, eaddr, rlen);
+
+    uint8_t cmd[5]{m5::stl::to_underlying(m5::rfid::Command::FAST_READ), saddr, eaddr};
+    uint8_t validBits{};
+    uint16_t crc{};
+    if (!calculate_crc(crc, cmd, 3)) {
+        return m5::stl::make_unexpected(Error::CRC);
+    }
+    cmd[3] = crc & 0xFF;
+    cmd[4] = (crc >> 8) & 0xFF;
+    return picc_transceive(rbuf, rlen, cmd, 5, validBits, 0, true);
+}
+
 }  // namespace unit
 }  // namespace m5
-
-#if 0
-[  3908][E][unit_MFRC522.cpp:232] begin(): [00]:00 Reserved
-[  3909][E][unit_MFRC522.cpp:232] begin(): [01]:20 Command RcvOff
-[  3910][E][unit_MFRC522.cpp:232] begin(): [02]:80 ComIEn IRqinv
-[  3912][E][unit_MFRC522.cpp:232] begin(): [03]:00 DivEn 
-[  3916][E][unit_MFRC522.cpp:232] begin(): [04]:14 ComIrq IdeIRq, HiAlertIRq
-[  3921][E][unit_MFRC522.cpp:232] begin(): [05]:00 DivIrq 
-[  3925][E][unit_MFRC522.cpp:232] begin(): [06]:00 Error
-[  3930][E][unit_MFRC522.cpp:232] begin(): [07]:21 Status1 CRCready LoAlert
-[  3934][E][unit_MFRC522.cpp:232] begin(): [08]:00 Status2 
-[  3939][E][unit_MFRC522.cpp:232] begin(): [09]:00 FIFO Data
-[  3943][E][unit_MFRC522.cpp:232] begin(): [0A]:00 FIFO Level
-[  3948][E][unit_MFRC522.cpp:232] begin(): [0B]:08 WaterLv
-[  3952][E][unit_MFRC522.cpp:232] begin(): [0C]:10 Control TStopNow TSartNow
-[  3957][E][unit_MFRC522.cpp:232] begin(): [0D]:00 BitFraming
-[  3961][E][unit_MFRC522.cpp:232] begin(): [0E]:A0 CollReg ValuesAfterColl CollPosNotValid
-[  3966][E][unit_MFRC522.cpp:232] begin(): [0F]:00 Reserved
-[  3970][E][unit_MFRC522.cpp:232] begin(): [10]:00 Reserved
-[  3975][E][unit_MFRC522.cpp:232] begin(): [11]:3D Mode TxWaitRF PolMFin reserved 6363h
-[  3979][E][unit_MFRC522.cpp:232] begin(): [12]:00 TxNode 
-[  3984][E][unit_MFRC522.cpp:232] begin(): [13]:00 RxMode
-[  3988][E][unit_MFRC522.cpp:232] begin(): [14]:80 TxControl InvTX2RFOn
-[  3993][E][unit_MFRC522.cpp:232] begin(): [15]:40 TxAsk Force100ASK
-[  3997][E][unit_MFRC522.cpp:232] begin(): [16]:10 TxSel DriverSel Miller pulse encoded
-[  4002][E][unit_MFRC522.cpp:232] begin(): [17]:88 RxSel UARTSel RxWait
-[  4006][E][unit_MFRC522.cpp:232] begin(): [18]:84 RxThreshould MinLv8 CollLv4
-[  4011][E][unit_MFRC522.cpp:232] begin(): [19]:4D Demod AddIQ TPrescalEven TauRcv10b TauSync
-[  4015][E][unit_MFRC522.cpp:232] begin(): [1A]:00 Reserved
-[  4020][E][unit_MFRC522.cpp:232] begin(): [1B]:00 Reserved
-[  4024][E][unit_MFRC522.cpp:232] begin(): [1C]:62 MfTx TxWit2
-[  4029][E][unit_MFRC522.cpp:232] begin(): [1D]:00 MfRx 
-[  4033][E][unit_MFRC522.cpp:232] begin(): [1E]:00 Reserved
-[  4038][E][unit_MFRC522.cpp:232] begin(): [1F]:EB SerialSpeed 
-[  4042][E][unit_MFRC522.cpp:232] begin(): [20]:00 Reserved
-[  4047][E][unit_MFRC522.cpp:232] begin(): [21]:FF CRCResult
-[  4051][E][unit_MFRC522.cpp:232] begin(): [22]:FF CRCResult
-[  4056][E][unit_MFRC522.cpp:232] begin(): [23]:88 Reserved
-[  4060][E][unit_MFRC522.cpp:232] begin(): [24]:26 ModWidth
-[  4065][E][unit_MFRC522.cpp:232] begin(): [25]:87 Reserved
-[  4070][E][unit_MFRC522.cpp:232] begin(): [26]:48 RFCfg 33dB reserved
-[  4074][E][unit_MFRC522.cpp:232] begin(): [27]:88 GsN CWGsN ModGsN 
-[  4079][E][unit_MFRC522.cpp:232] begin(): [28]:20 CWGsP 
-[  4083][E][unit_MFRC522.cpp:232] begin(): [29]:20 ModGsP 
-[  4088][E][unit_MFRC522.cpp:232] begin(): [2A]:88 TMode TAuto TAutoResttart
-[  4092][E][unit_MFRC522.cpp:232] begin(): [2B]:00 TPrescale
-[  4097][E][unit_MFRC522.cpp:232] begin(): [2C]:00 TReload 
-[  4101][E][unit_MFRC522.cpp:232] begin(): [2D]:10 TReload
-[  4106][E][unit_MFRC522.cpp:232] begin(): [2E]:00 TCountVal
-[  4110][E][unit_MFRC522.cpp:232] begin(): [2F]:00 TCountVal
-[  4115][E][unit_MFRC522.cpp:232] begin(): [30]:00 Reserved
-[  4119][E][unit_MFRC522.cpp:232] begin(): [31]:00 TestSel1
-[  4124][E][unit_MFRC522.cpp:232] begin(): [32]:00 TestSel2
-[  4128][E][unit_MFRC522.cpp:232] begin(): [33]:80 TestPin RS232LineEn
-[  4133][E][unit_MFRC522.cpp:232] begin(): [34]:00 TestPinVal
-[  4137][E][unit_MFRC522.cpp:232] begin(): [35]:00 TestBus
-[  4142][E][unit_MFRC522.cpp:232] begin(): [36]:40 AutoTest AmpRcv
-[  4146][E][unit_MFRC522.cpp:232] begin(): [37]:15 Verson
-[  4151][E][unit_MFRC522.cpp:232] begin(): [38]:00 AnalogTest
-[  4155][E][unit_MFRC522.cpp:232] begin(): [39]:00 TestDAC1
-[  4160][E][unit_MFRC522.cpp:232] begin(): [3A]:00 TestDAC2
-[  4164][E][unit_MFRC522.cpp:232] begin(): [3B]:00 TestADC
-#endif

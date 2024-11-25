@@ -20,10 +20,7 @@ m5::unit::UnitRFID2 unit;
 
 }  // namespace
 
-using namespace m5::unit::mfrc522;
-using m5::rfid::mifare::Key;
-using m5::rfid::mifare::UID;
-using m5::unit::UnitRFID2;
+using namespace m5::rfid;
 
 void setup()
 {
@@ -61,14 +58,11 @@ void setup()
 
 void loop()
 {
-    static bool dd{};
-
     M5.update();
 
     std::vector<UID> devices;
     // Detect new devices?
     while (unit.detectIdleDevice()) {
-        dd = true;
         // Store UID
         UID uid{};
         if (unit.activateDevice(uid)) {
@@ -86,9 +80,9 @@ void loop()
 
         uint32_t idx{1};
         for (auto&& uid : devices) {
-            M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
+            M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
             lcd.setCursor(8, lcd.fontHeight() * idx);
-            lcd.printf("%s", uid.uidString().c_str());
+            lcd.printf("%s:%s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
             ++idx;
         }
         M5_LOGI("<<--------------");

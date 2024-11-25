@@ -7,91 +7,14 @@
   @file mifare.cpp
   @brief Definition and utilities for MIFARE
 */
-#include "rfid.hpp"
 #include "mifare.hpp"
 #include <M5Utility.hpp>
-
-namespace {
-constexpr char type_unknow[]        = "Unknown";
-constexpr char type_classic[]       = "MIFARE Classic";
-constexpr char type_classic_1K[]    = "MIFARE Classsic 1K";
-constexpr char type_classic_4K[]    = "MIFARE Classsic 4K";
-constexpr char type_classic_2K[]    = "MIFARE Classsic 2K";
-constexpr char type_ultra_light[]   = "MIFARE Ultralight";
-constexpr char type_ultra_light_c[] = "MIFARE UltralightC";
-constexpr char type_plus[]          = "MIFARE Plus";
-constexpr char type_desfie[]        = "MIFARE DESFire";
-constexpr char type_iso14443_4[]    = "ISO14443-4";
-constexpr char type_iso18092[]      = "ISO18092";
-constexpr char type_not_completed[] = "NOT COMPLEDTED";
-constexpr const char* type_table[]  = {
-    type_unknow,        type_classic, type_classic_1K, type_classic_4K, type_classic_2K, type_ultra_light,
-    type_ultra_light_c, type_plus,    type_desfie,     type_iso14443_4, type_iso18092,
-};
-
-}  // namespace
 
 namespace m5 {
 namespace rfid {
 namespace mifare {
-
-Type sak_to_type(const uint8_t sak)
-{
-    if (sak & 0x02) {
-        return Type::Unknown;
-    }
-    if (sak & 0x04) {
-        return Type::NotCompleted;
-    }
-    if (sak & 0x20) {
-        return Type::ISO_14443_4;
-    }
-    if (sak & 0x40) {
-        return Type::ISO_18092;
-    }
-    switch (sak) {
-        case 0x00:
-            return Type::MIFARE_UltraLight;  // or C
-        case 0x01:                           // TagNPlay?
-            return Type::MIFARE_DESFire;
-        case 0x08:
-            return Type::MIFARE_Classic_1K;
-        case 0x09:
-            return Type::MIFARE_Classic;
-        case 0x10:
-        case 0x11:
-            return Type::MIFARE_Plus;
-        case 0x18:
-            return Type::MIFARE_Classic_4K;
-        case 0x19:
-            return Type::MIFARE_Classic_2K;
-        default:
-            break;
-    }
-    return Type::Unknown;
-}
-
-std::string UID::uidString() const
-{
-    char buf[2 * 10 + 1]{};
-    if (this->size == 0 || this->size > 10) {
-        return std::string();
-    }
-    uint8_t left{};
-    for (uint8_t i = 0; i < this->size; ++i) {
-        left += snprintf(buf + left, 3, "%02X", this->uid[i]);
-    }
-    return std::string(buf);
-}
-
-std::string UID::typeString() const
-{
-    return std::string(m5::stl::to_underlying(this->type) <= m5::stl::size(type_table)
-                           ? type_table[m5::stl::to_underlying(this->type)]
-                           : type_not_completed);
-}
-
 namespace classic {
+
 bool decode_value_block(int32_t& value, uint8_t& addr, const uint8_t* buf)
 {
     if (*((uint32_t*)&buf[0]) == *((uint32_t*)&buf[8]) && *((uint32_t*)&buf[0]) == ~*((uint32_t*)&buf[4]) &&
@@ -156,6 +79,7 @@ bool decode_access_bits(uint8_t permissions[4], const uint8_t ab0, const uint8_t
     }
     return valid;
 }
+
 }  // namespace classic
 }  // namespace mifare
 }  // namespace rfid

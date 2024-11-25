@@ -5,7 +5,7 @@
  */
 /*
   Example using M5UnitUnified for UnitRFID2
-  Read/Write block example
+  Read/Write example
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -20,11 +20,7 @@ m5::unit::UnitRFID2 unit;
 
 }  // namespace
 
-using namespace m5::unit::mfrc522;
-using m5::rfid::mifare::Key;
-using m5::rfid::mifare::Type;
-using m5::rfid::mifare::UID;
-using m5::unit::UnitRFID2;
+using namespace m5::rfid;
 
 void setup()
 {
@@ -60,7 +56,7 @@ void setup()
     M5_LOGI("Please put the devices\n and click A or touch screen...");
 }
 
-void read_write(const UID& uid, const uint8_t block)
+void read_write_sector_structure(const UID& uid, const uint8_t block)
 {
     constexpr char msg[] = "M5Stack";
 
@@ -71,21 +67,21 @@ void read_write(const UID& uid, const uint8_t block)
     }
 
     M5_LOGI("Before[%u] ----", block);
-    unit.mifareDumpBlock(uid, block);
+    unit.dumpDevice(uid, block);
 
     // Write (If less than 16 bytes, 0x00 is padded)
-    auto result = unit.mifareWrite(block, (const uint8_t*)msg, m5::stl::size(msg));
+    auto result = unit.mifareWrite(uid, block, (const uint8_t*)msg, m5::stl::size(msg));
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
     }
     M5_LOGI("After[%u] ----", block);
-    unit.mifareDumpBlock(uid, block);
+    unit.dumpDevice(uid, block);
 
     // Read
     uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
     uint8_t rlen{18};    // Number of bytes to be read
-    result = unit.mifareRead(rbuf, rlen, block);
+    result = unit.mifareRead(uid, rbuf, rlen, block);
     if (!result) {
         M5_LOGE("Failed to read %02X", result.error());
         return;
@@ -96,35 +92,35 @@ void read_write(const UID& uid, const uint8_t block)
 
     // Clear
     uint8_t c[1]{};
-    result = unit.mifareWrite(block, c, 1);
+    result = unit.mifareWrite(uid, block, c, 1);
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
     }
     M5_LOGI("Clear[%u] ----", block);
-    unit.mifareDumpBlock(uid, block);
+    unit.dumpDevice(uid, block);
 }
 
-void read_write_light(const UID& uid, const uint8_t page)
+void read_write_page_structure(const UID& uid, const uint8_t page)
 {
     constexpr char msg[] = "M5S";
 
     M5_LOGI("Before[%u] ----", page);
-    unit.mifareDumpBlock(uid, page);
+    unit.dumpDevice(uid, page);
 
     // Write (If less than 16 bytes, 0x00 is padded)
-    auto result = unit.mifareWriteUL(page, (const uint8_t*)msg, m5::stl::size(msg));
+    auto result = unit.mifareWriteUL(uid, page, (const uint8_t*)msg, m5::stl::size(msg));
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
     }
     M5_LOGI("After[%u] ----", page);
-    unit.mifareDumpBlock(uid, page);
+    unit.dumpDevice(uid, page);
 
     // Read
     uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
     uint8_t rlen{18};    // Number of bytes to be read
-    result = unit.mifareRead(rbuf, rlen, page);
+    result = unit.mifareRead(uid, rbuf, rlen, page);
     if (!result) {
         M5_LOGE("Failed to read %02X", result.error());
         return;
@@ -135,13 +131,13 @@ void read_write_light(const UID& uid, const uint8_t page)
 
     // Clear
     uint8_t c[1]{};
-    result = unit.mifareWriteUL(page, c, 1);
+    result = unit.mifareWriteUL(uid, page, c, 1);
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
     }
     M5_LOGI("Clear[%u] ----", page);
-    unit.mifareDumpBlock(uid, page);
+    unit.dumpDevice(uid, page);
 }
 
 void loop()
@@ -153,19 +149,20 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 M5.Speaker.tone(1000, 20);
-                M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
+                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
                 switch (uid.type) {
                     case Type::MIFARE_Classic_1K:
-                        read_write(uid, 12);
+                        read_write_sector_structure(uid, 12);
                         break;
                     case Type::MIFARE_Classic_4K:
-                        read_write(uid, 12);
-                        read_write(uid, 145);
+                        read_write_sector_structure(uid, 12);
+                        read_write_sector_structure(uid, 145);
                         break;
                     case Type::MIFARE_UltraLight:
-                        read_write_light(uid, 12);
+                        read_write_page_structure(uid, 12);
                         break;
                     default:
+                        M5_LOGE("For Classic1/4K and LightC");
                         break;
                 }
                 unit.deactivateDevice();

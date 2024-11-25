@@ -20,10 +20,7 @@ m5::unit::UnitRFID2 unit;
 
 }  // namespace
 
-using namespace m5::unit::mfrc522;
-using m5::rfid::mifare::Key;
-using m5::rfid::mifare::UID;
-using m5::unit::UnitRFID2;
+using namespace m5::rfid;
 
 void setup()
 {
@@ -70,8 +67,8 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 M5.Speaker.tone(1000, 20);
-                M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
-                unit.mifareDump(uid);  // Using defaukt keyA
+                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                unit.dumpDevice(uid);  // Using defaukt keyA if Classic
                 unit.deactivateDevice();
             }
         }

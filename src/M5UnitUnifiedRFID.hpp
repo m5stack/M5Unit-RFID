@@ -15,6 +15,8 @@
 
 #include "rfid/rfid.hpp"
 #include "rfid/mifare.hpp"
+#include "rfid/nfc/nfc.hpp"
+
 #include "unit/unit_MFRC522.hpp"
 #include "unit/unit_WS1850S.hpp"
 

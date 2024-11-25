@@ -95,7 +95,7 @@ public:
       @typedef UID
       @brief MIFARE UID
      */
-    using UID = m5::rfid::mifare::UID;
+    using UID = m5::rfid::UID;
 
     //! @brief KEY of factory default
     static const MifareKey DEFAULT_CLASSIC_KEY;
@@ -279,36 +279,15 @@ public:
     {
         return mifare_authenticate(m5::rfid::Command::AUTH_WITH_KEY_B, uid, block, key);
     }
-    result_t mifareRead(uint8_t* rbuf, uint8_t& rlen, const uint8_t block);
-    /*!
-      @brief Write data to the block
-      @param block block address(Classic)
-      @param buf buffer
-      @param len Length of the buffer (1-16)
-      @param safety  Fail to write to sector trailer or 0 if true (safety measure)
-      @return True if successful
-      @noteg If the buffer is less than 16 bytes, 0x00 is padded and written
-      @pre Requires block authentication
-    */
-    result_t mifareWrite(const uint8_t block, const uint8_t* buf, const uint8_t len, const bool safety = true);
-    /*!
-      @brief Write data to the block for UltraLight/C
-      @param page Page address
-      @param buf buffer
-      @param len Length of the buffer(1-4)
-      @return True if successful
-      @note If the buffer is less than 4 bytes, 0x00 is padded and written
-      @warning Page address 0-3 are system pages,
-      @warning Page address 40-47 are system pages if UltraLighC
-    */
-    result_t mifareWriteUL(const uint8_t page, const uint8_t* buf, const uint8_t len);
     /*!
       @brief  Exit from authenticated state
       @return True if successful
      */
     bool mifareStopCrypto1();
+
     /*!
       @brief Change the specified block to value block
+      @param uid PICC UID
       @param block Block address
       @param keyA Authentication key A
       @param keyB Authentication key B
@@ -319,10 +298,11 @@ public:
       @warning Sector trailer access bits are changed to 001 (need auth B for R/W)
       @warning 0 or sector trailer as block address is prohibited
     */
-    result_t mifareEnableValueBlock(const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
+    result_t mifareEnableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
                                     const bool readOnly = false);
     /*!
       @brief Change the specified block to normal block
+      @param uid PICC UID
       @param block Block address
       @param keyA Authentication key A
       @param keyB Authentication key B
@@ -332,10 +312,11 @@ public:
       Writes to sector trailer, so keyAB of the target sector is required.
       @warning 0 or sector trailer as block address is prohibited
     */
-    result_t mifareDisableValueBlock(const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
+    result_t mifareDisableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
                                      const uint8_t permission = 0x00);
     /*!
       @brief Increments the contents of a block and stores the result in the internal Transfer Buffer
+      @param uid PICC UID
       @param block Block address
       @param delta incremental value
       @return True if successful
@@ -344,9 +325,10 @@ public:
       @pre Requires the sector to which the block belongs authentication
       @post Applied to the actual block by mifareTransfer
     */
-    result_t mifareIncrement(const uint8_t block, const uint32_t delta);
+    result_t mifareIncrement(const UID& uid, const uint8_t block, const uint32_t delta);
     /*!
       @brief Decrements the contents of a block and stores the result in the internal Transfer Buffer
+      @param uid PICC UID
       @param block Block address
       @param delta decremental value
       @return True if successful
@@ -355,63 +337,157 @@ public:
       @pre Requires the sector to which the block belongs authentication
       @post Applied to the actual block by mifareTransfer
     */
-    result_t mifareDecrement(const uint8_t block, const uint32_t delta);
+    result_t mifareDecrement(const UID& uid, const uint8_t block, const uint32_t delta);
     /*!
       @brief Writes the contents of the internal Transfer Buffer to a value block
+      @param uid PICC UID
       @param block Block address
       @return True if successful
       @pre Requires the sector to which the block belongs authentication
      */
-    result_t mifareTransfer(const uint8_t block);
+    result_t mifareTransfer(const UID& uid, const uint8_t block);
     /*!
       @brief Moves the contents of a block into the internal Transfer Buffer
+      @param uid PICC UID
       @param block Block address
       @return True if successful
       @warning Only value block is executable
       @pre Requires the sector to which the block belongs authentication
      */
-    result_t mifareRestore(const uint8_t block);
+    result_t mifareRestore(const UID& uid, const uint8_t block);
     /*!
       @brief Read the value assuming the specified block is the value block
+      @param uid PICC UID
       @param[out] value value
       @param block Block address
       @return True if successful
       @pre Requires block authentication
     */
-    result_t mifareReadValue(int32_t& value, const uint8_t block);
+    result_t mifareReadValue(const UID& uid, int32_t& value, const uint8_t block);
     /*!
       @brief Writes as a specified value block
+      @param uid PICC UID
       @param block Block address
       @param value value
       @return True if successful
       @pre Requires block authentication
      */
-    result_t mifareWriteValue(const uint8_t block, const int32_t value);
-    /*!
-      @brief Dump all sectors to serial
-      @param uid Device UID
-      @param keyA Key used for authentication A
-      @return True if successful
-      @warning All blocks must be readable with the specified key
-     */
-    result_t mifareDump(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
-    /*!
-      @brief Dump specific block/page to serial
-      @param uid Device UID
-      @param block block address(Classic) page address(UltraLight/C)
-      @return True if successful
-      @pre Requires block authentication
-     */
-    result_t mifareDumpBlock(const UID& uid, const uint8_t block);
+    result_t mifareWriteValue(const UID& uid, const uint8_t block, const int32_t value);
+    ///@}
+
+    ///@name Read/Write
+    ////@{
     /*!
       @brief Read data from the block
-      @param block block address(Classic) or page address(UltraLight/C)
+      @param uid PICC UID
       @param[out] rbuf The buffer to store
       @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
+      @param block block address or page address
       @return True if successful
       @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
       @pre Requires block authentication
      */
+    result_t mifareRead(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t block);
+#if 0
+    /*!
+      @brief Read data from the page for 
+      @param uid PICC UID
+      @param block block address or page address
+      @param[out] rbuf The buffer to store
+      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
+      @return True if successful
+      @note Using FAST_READ command
+     */
+    result_t mifareFastRead(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
+#endif
+    /*!
+      @brief Write data to the block
+      @param uid PICC UID
+      @param block block address or page address
+      @param buf buffer
+      @param len Length of the buffer (1-16)
+      @param safety  Fail to write to sector trailer or 0 if true (safety measure)
+      @return True if successful
+      @noteg If the buffer is less than 16 bytes, 0x00 is padded and written
+      @pre Requires block authentication
+    */
+    result_t mifareWrite(const UID& uid, const uint8_t block, const uint8_t* buf, const uint8_t len,
+                         const bool safety = true);
+    /*!
+      @brief Write data to the block for UltraLight/C
+      @param uid PICC UID
+      @param page Page address
+      @param buf buffer
+      @param len Length of the buffer
+      @return True if successful
+      @note If the buffer is less than 4 bytes, 0x00 is padded and written
+      @note If the buffer is greater than 4 bytes, overwrite next pages until maximum user pages
+      @note Using WRITE_UL command
+    */
+    result_t mifareWriteUL(const UID& uid, const uint8_t page, const uint8_t* buf, const uint32_t len,
+                           const bool safety = true);
+
+    ///@}
+
+    ///@name Dump
+    /*!
+      @brief Dump to serial
+      @param uid Device UID
+      @param keyA Key used for authentication A for Classic
+      @return True if successful
+      @warning All blocks must be readable with the specified key
+     */
+    result_t dumpDevice(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
+    /*!
+      @brief Dump specific block/page to serial
+      @param uid Device UID
+      @param block block address(Classic) or page address
+      @return True if successful
+      @pre Requires block authentication
+     */
+    result_t dumpDevice(const UID& uid, const uint8_t addr);
+    ///@}
+
+    ///@warning For MIFARE UltraLight/C
+    ///@warning Executable only on activated devices
+    ///@name NFC
+    ///@{
+    /*!
+      @brief NFC-A Type-2 formatted?
+      @note Read OTP area
+    */
+    bool isNTAG(const UID& uid);
+    /*!
+      @brief Write change to NFC-A Type-2 format
+      @return True if NTAG or NTAG format Light/C
+    */
+    result_t mifareWriteChangeToNTAGFormat(const UID& uid);
+
+    /*!
+      @brief Calculation of required size for read
+      @param uid Device UID
+      @patam[out] len Required length
+      @return True if successful
+     */
+    result_t mifareRequiredSizeNDEF(const UID& uid, uint32_t& len);
+    /*!
+      @brief Read the NFC NDEF message
+      @param uid Device UID
+      @param buf[out] Buffer in NDEF Message or NDEF Record format
+      @param blen[in,out] in: Buffer length out:Read length
+      @return True if successful or NTAG device
+     */
+    result_t mifareReadNDEF(const UID& uid, uint8_t* buf, uint32_t& len);
+    /*!
+      @brief Write the NFC NDEF message
+      @param uid Device UID
+      @param buf Buffer in NDEF Message or NDEF Record format
+      @param blen Buffer length
+      @return True if successful or NTAG device
+      @warning Already existing data will be overwritten
+      @warning When making additions or changes to already existing data, read and edit first
+     */
+    result_t mifareWriteNDEF(const UID& uid, const uint8_t* buf, const uint32_t blen);
     ///@}
 
 protected:
@@ -440,17 +516,29 @@ protected:
     result_t picc_anti_collision(const uint8_t cascadeLevel, uint8_t* buf);
     result_t picc_haltA();
 
+    result_t activate(UID& uid);
+    result_t reactivate(UID& uid, const UID& prev);
+
     // MIFARE
     result_t mifare_authenticate(const m5::rfid::Command cmd, const UID& uid, const uint8_t block,
                                  const MifareKey& key);
     result_t mifare_transceive(const m5::rfid::Command cmd, const uint8_t block);
     result_t mifare_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
 
+    result_t mifare_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
+    result_t mifare_write(const uint8_t addr, const uint8_t* buf, const uint8_t len);
+    result_t mifare_write_ul(const uint8_t page, const uint8_t* buf, const uint8_t len);
+
+    // NTAG
+    result_t ntag_get_version(uint8_t* rbuf, uint8_t& rlen);
+    result_t ntag_fast_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t saddr, const uint8_t eaddr);
+    result_t ntag_calclate_ndef_message_size(const UID& uid, uint32_t& sz, const uint8_t targetTagBit = 0x06);
+
     // dump
-    result_t mifare_dump_classic(const UID& uid, const MifareKey& key);
-    result_t mifare_dump_classic_sector(const UID& uid, const uint8_t sector);
-    result_t mifare_dump_ultra_light(const uint8_t maxPage);  // Light:16 LightC:48
-    result_t mifare_dump_ultra_light_page(const uint8_t page);
+    result_t dump_sector_structure(const UID& uid, const MifareKey& key);
+    result_t dump_sector(const uint8_t sector);
+    result_t dump_page_structure(const uint8_t maxPage);
+    result_t dump_page(const uint8_t page);
 
     // crc
     inline bool calculate_crc(uint16_t& result, const uint8_t* buf, const uint8_t len)

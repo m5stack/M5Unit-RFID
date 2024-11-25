@@ -20,9 +20,7 @@ m5::unit::UnitRFID2 unit;
 
 }  // namespace
 
-using namespace m5::unit::mfrc522;
-using m5::rfid::mifare::Key;
-using m5::rfid::mifare::UID;
+using namespace m5::rfid;
 using m5::unit::UnitRFID2;
 
 void setup()
@@ -62,7 +60,7 @@ void setup()
 }
 
 // Set block to normal block and also set the trailer sector block to the default value
-void restore_sector_trailer(const m5::rfid::mifare::UID& uid, const uint8_t block)
+void restore_sector_trailer(const UID& uid, const uint8_t block)
 {
     if (!uid.isClassic()) {
         return;
@@ -75,7 +73,7 @@ void restore_sector_trailer(const m5::rfid::mifare::UID& uid, const uint8_t bloc
         if (m5::rfid::mifare::classic::encode_access_bits(buf + 6, permissions)) {
             std::memcpy(buf, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
             std::memcpy(buf + 10, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
-            if (unit.mifareWrite(st_block, buf, 16, false)) {
+            if (unit.mifareWrite(uid, st_block, buf, 16, false)) {
                 M5_LOGI("block:%u sector trailer:%u to [001]", block, st_block);
                 return;
             }
@@ -84,7 +82,7 @@ void restore_sector_trailer(const m5::rfid::mifare::UID& uid, const uint8_t bloc
     M5_LOGE("Failed");
 }
 
-void value_block(const m5::rfid::mifare::UID& uid, const uint8_t block)
+void value_block(const UID& uid, const uint8_t block)
 {
     // Write permission to the sector trailer is required to change to the value block
     uint8_t st_block = m5::rfid::mifare::classic::get_sector_trailer_block(block);
@@ -94,20 +92,21 @@ void value_block(const m5::rfid::mifare::UID& uid, const uint8_t block)
     }
 
     M5_LOGI("Before[%u] ----", block);
-    unit.mifareDumpBlock(uid, block);
+    unit.dumpDevice(uid, block);
 
     ////////////////////////////////
     // Writable value block
     // To value block
-    auto result = unit.mifareWriteValue(block, 12345678);  // initial value
-    result = result ? unit.mifareEnableValueBlock(block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY)
-                    : result;
+    auto result = unit.mifareWriteValue(uid, block, 12345678);  // initial value
+    result =
+        result ? unit.mifareEnableValueBlock(uid, block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY)
+               : result;
     if (!result) {
         M5_LOGE("Failed to enable value block %02X", result.error());
         return;
     }
     M5_LOGI("To value block ----");
-    unit.mifareDumpBlock(uid, block);
+    unit.dumpDevice(uid, block);
 
     // Key B authentication is required for value block increment operations
     if (!unit.mifareAuthenticateB(uid, block)) {
@@ -116,20 +115,19 @@ void value_block(const m5::rfid::mifare::UID& uid, const uint8_t block)
     }
 
     // Increment/decrement (bNote that it will not be applied to the device unless it is transferred)
-    result = result ? unit.mifareIncrement(block, 987654321) : result;  // 12345678 -> 999999999
-    result = result ? unit.mifareTransfer(block) : result;              // apply
-    result = result ? unit.mifareDecrement(block, 9999) : result;       // 999999999 -> 999990000
-    result = result ? unit.mifareTransfer(block) : result;              // apply
+    result = result ? unit.mifareIncrement(uid, block, 987654321) : result;  // 12345678 -> 999999999
+    result = result ? unit.mifareTransfer(uid, block) : result;              // apply
+    result = result ? unit.mifareDecrement(uid, block, 9999) : result;       // 999999999 -> 999990000
+    result = result ? unit.mifareTransfer(uid, block) : result;              // apply
     if (!result) {
         M5_LOGE("Failed to value block operation %02X", result.error());
         return;
     }
     M5_LOGI("Inc/Dec ----");
-    unit.mifareDumpBlock(uid, block);
-
+    unit.dumpDevice(uid, block);
 }
 
-void value_block_readonly(const m5::rfid::mifare::UID& uid, const uint8_t block)
+void value_block_readonly(const UID& uid, const uint8_t block)
 {
     if (!uid.isClassic()) {
         return;
@@ -147,39 +145,33 @@ void value_block_readonly(const m5::rfid::mifare::UID& uid, const uint8_t block)
     ////////////////////////////////
     // Readnly value block (Decrementing is allowed)
     // raedonly value block does not allow write operation, so write the initial value first.
-    auto result = unit.mifareWriteValue(block, 1234);  // initial value
-    result = result ? unit.mifareEnableValueBlock(block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY,
-                                                  true)
-                    : result;  // // Using default keyAB
+    auto result = unit.mifareWriteValue(uid, block, 1234);  // initial value
+    result =
+        result ? unit.mifareEnableValueBlock(uid, block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY,
+                                             true)
+               : result;  // // Using default keyAB
     if (!result) {
         M5_LOGE("Failed to enable value block %02X", result.error());
         return;
     }
     M5_LOGI("To value block ----");
-    unit.mifareDumpBlock(uid, block);
+    unit.dumpDevice(uid, block);
 
     // Decrement
-    result = result ? unit.mifareDecrement(block, 1234 * 2) : result;  // 1234 -> -1234
-    result = result ? unit.mifareTransfer(block) : result;             // apply
+    result = result ? unit.mifareDecrement(uid, block, 1234 * 2) : result;  // 1234 -> -1234
+    result = result ? unit.mifareTransfer(uid, block) : result;             // apply
     if (!result) {
         M5_LOGE("Failed to value block operation %02X", result.error());
         return;
     }
     M5_LOGI("Dec ----");
-    unit.mifareDumpBlock(uid, block);
-
-    #if 0
-    // Key B authentication is required for disableValueBlock
-    if (!unit.mifareAuthenticateB(uid, block)) {
-        M5_LOGE("Auth error B");
-        return;
-    }
-    #endif
-    
+    unit.dumpDevice(uid, block);
 }
 
 void loop()
 {
+    static constexpr bool read_only{false};
+
     M5.update();
     auto touch = M5.Touch.getDetail();
 
@@ -190,12 +182,16 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 if (uid.isClassic()) {
+                    M5_LOGI("ValueBlock");
                     M5.Speaker.tone(1000, 20);
-                    M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
+                    M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
-                    uint8_t block = uid.type == m5::rfid::mifare::Type::MIFARE_Classic_4K ? 128 : 44;
-                    value_block(uid, block);
-                    //value_block_readonly(uid, block);
+                    uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
+                    if (read_only) {
+                        value_block_readonly(uid, block);
+                    } else {
+                        value_block(uid, block);
+                    }
 
                     unit.deactivateDevice();
                 } else {
@@ -204,9 +200,8 @@ void loop()
             }
         }
     }
-
     // Restore sector traler (IDLE)
-    if (M5.BtnA.isHolding() || touch.isHolding()) {
+    else if (M5.BtnA.isHolding() || touch.isHolding()) {
         // Detect new devices?
         while (unit.detectIdleDevice()) {
             UID uid{};
@@ -214,12 +209,12 @@ void loop()
                 if (uid.isClassic()) {
                     M5_LOGI("Restore");
                     M5.Speaker.tone(1000, 20);
-                    M5_LOGI("UID:%s %s", uid.uidString().c_str(), uid.typeString().c_str());
+                    M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
-                    uint8_t block = uid.type == m5::rfid::mifare::Type::MIFARE_Classic_4K ? 128 : 44;
+                    uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
                     restore_sector_trailer(uid, block);
                     if (unit.mifareAuthenticateA(uid, block)) {
-                        unit.mifareDumpBlock(uid, block);
+                        unit.dumpDevice(uid, block);
                     }
 
                     unit.deactivateDevice();
@@ -229,24 +224,25 @@ void loop()
             }
         }
     }
-
+#if 0
     // Dump (IDLE/HLT)
-    if (M5.BtnA.wasDoubleClicked() || touch.wasFlicked()) {
-        if (unit.detectDevice()) {
-            UID uid{};
-            if (unit.activateDevice(uid)) {
-                if (uid.isClassic()) {
-                    M5_LOGI("Dump");
-                    uint8_t block = uid.type == m5::rfid::mifare::Type::MIFARE_Classic_4K ? 128 : 44;
-                    if (unit.mifareAuthenticateA(uid, block)) {
-                        M5.Speaker.tone(1000, 20);
-                        unit.mifareDumpBlock(uid, block);
-                        unit.deactivateDevice();
-                    }
-                } else {
-                    M5_LOGE("Classic only");
+    if (unit.detectIdleDevice()) {
+        UID uid{};
+        if (unit.activateDevice(uid)) {
+            if (uid.isClassic()) {
+                M5_LOGI("Dump");
+                M5.Speaker.tone(3000, 20);
+                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
+                if (unit.mifareAuthenticateA(uid, block)) {
+                    M5.Speaker.tone(1000, 20);
+                    unit.dumpDevice(uid, block);
+                    unit.deactivateDevice();
                 }
+            } else {
+                M5_LOGE("Classic only");
             }
         }
     }
+#endif
 }
