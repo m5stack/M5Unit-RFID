@@ -116,6 +116,7 @@ inline uint16_t timerToTprescale(const float timer, const bool even)
     return std::round((F_CLOCK / timer - ((int)even + 1)) / 2);
 }
 
+#if 0
 inline float modulationWidth(const uint8_t tm)
 {
     return tm + 1 / F_CLOCK;
@@ -126,6 +127,7 @@ inline uint8_t bits_to_NVB(const uint8_t bits)
     // High nibble:bytes Low nibble:fraction bits
     return (bits >> 3) | (bits & 0x07);
 }
+#endif
 
 void dump_block(const uint8_t* buf, const int16_t block = -1, const int16_t sector = -1, const uint8_t ab = 0xFF,
                 const bool aberror = false, const bool valueblock = false)

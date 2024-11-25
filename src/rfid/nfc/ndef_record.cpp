@@ -54,7 +54,7 @@ uint32_t Record::required() const
            1 +                                // Type length
            (_payload.size() < 256 ? 1 : 4) +  // Payload length
            (_id.empty() ? 0 : 1) +            // ID length
-           _type.length() +                   // Type
+           _type.size() +                     // Type
            _id.size() +                       // ID
            _payload.size();                   // Payload
 }
@@ -280,7 +280,7 @@ void Record::dump() const
     puts("|MB|ME|CF|SR|IL|TNF|");
     printf("|%02u|%02u|%02u|%02u|%02u|%03u|\n", _attr.messageBegin(), _attr.messageEnd(), _attr.chunk(),
            _attr.shortRecord(), _attr.idLength(), m5::stl::to_underlying(_attr.tnf()));
-    printf("|   Type length %3d|\n", tlen);
+    printf("|   Type length %3zu|\n", tlen);
     printf("|Payload length %3zu|\n", _payload.size());
     if (!_id.empty()) {
         printf("|     ID length %3zu|\n", _id.size());
