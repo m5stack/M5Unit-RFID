@@ -16,6 +16,8 @@ namespace nfc {
 namespace ndef {
 
 
+
+
 }  // namespace ndef
 }  // namespace nfc
 }  // namespace rfid
