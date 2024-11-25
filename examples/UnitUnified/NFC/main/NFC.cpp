@@ -63,7 +63,7 @@ void nfc_read(const UID& uid)
     uint8_t rbuf[1024]{};
     uint32_t sz{};
 
-    if (!unit.mifareRequiredSizeNDEF(uid, sz)) {
+    if (!unit.nfcReadRequiredSize(uid, sz)) {
         M5_LOGE("Failed to read");
         return;
     }
@@ -78,7 +78,7 @@ void nfc_read(const UID& uid)
     lcd.setCursor(0, lcd.fontHeight());
     lcd.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
-    auto result = unit.mifareReadNDEF(uid, rbuf, sz);
+    auto result = unit.nfcReadDevice(uid, rbuf, sz);
     if (!result) {
         M5_LOGE("Failed to read %02X", result.error());
         return;
@@ -147,8 +147,8 @@ void nfc_write(const UID& uid)
 
     // Write (and Change formatif  UltraLight/C)
     // true if NATG or NTAG format Light/C already exists
-    if (unit.mifareWriteChangeToNTAGFormat(uid)) {
-        auto result = unit.mifareWriteNDEF(uid, buf, encoded);
+    if (unit.nfcWriteChangeToNTAGFormat(uid)) {
+        auto result = unit.nfcWriteDevice(uid, buf, encoded);
         if (result) {
             M5_LOGI("Write OK");
         } else {
@@ -218,7 +218,7 @@ void nfc_write_png(const UID& uid)
 
     // Encode
     uint8_t buf[1024]{};
-    if (msg.required()  > m5::stl::size(buf)) {
+    if (msg.required() > m5::stl::size(buf)) {
         M5_LOGE("Not enough buffer");
         return;
     }
@@ -230,8 +230,8 @@ void nfc_write_png(const UID& uid)
     M5_LOGI("Write length: %u", encoded);
     //    M5_DUMPI(buf, encoded);
 
-    if (unit.mifareWriteChangeToNTAGFormat(uid)) {
-        auto result = unit.mifareWriteNDEF(uid, buf, encoded);
+    if (unit.nfcWriteChangeToNTAGFormat(uid)) {
+        auto result = unit.nfcWriteDevice(uid, buf, encoded);
         if (result) {
             M5_LOGI("Write OK");
         } else {
@@ -247,6 +247,7 @@ void nfc_write_png(const UID& uid)
 void loop()
 {
     M5.update();
+    Units.update();
     auto touch = M5.Touch.getDetail();
 
     // Read NFC data

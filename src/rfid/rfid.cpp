@@ -131,7 +131,7 @@ Type get_type(const uint8_t sak)
     return Type::Unknown;
 }
 
-uint8_t get_number_of_blocks(const Type t)
+uint16_t get_number_of_blocks(const Type t)
 {
     uint8_t idx = m5::stl::to_underlying(t);
     return max_block_table[idx < m5::stl::size(max_block_table) ? idx : 0];

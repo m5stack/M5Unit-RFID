@@ -129,6 +129,9 @@ public:
 
     ///@name Payload
     ///@{
+    //! @brief Obtain the payload as a string
+    std::string payloadAsString() const;
+
     //! @brief Gets the payload size
     inline uint32_t payloadSize() const
     {
@@ -171,9 +174,6 @@ public:
      */
     bool setURIPayload(const char* uri, URIProtocol protocol);
     ///@}
-
-    //! @brief Obtain the payload as a string
-    std::string payloadAsString() const;
 
     //! @brief Size required for encoding
     uint32_t required() const;

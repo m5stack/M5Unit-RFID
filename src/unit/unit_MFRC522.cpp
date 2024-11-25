@@ -409,7 +409,10 @@ UnitMFRC522::result_t UnitMFRC522::activateDevice(UID& uid)
 {
     result_t result = activate(uid);
     // UltraLight according to SAK judgment or activate error occurred
-    if (!result || uid.type != Type::MIFARE_UltraLight) {
+    if (uid.type != Type::MIFARE_UltraLight) {
+        if (result) {
+            M5_LIB_LOGV("Type:%u %u", uid.type, uid.blocks);
+        }
         return result;
     }
 
@@ -463,7 +466,7 @@ UnitMFRC522::result_t UnitMFRC522::activateDevice(UID& uid)
 
     uint8_t buf[18]{};
     uint8_t blen{18};
-    result = mifareRead(uid, buf, blen, 0);
+    result = read_block(buf, blen, 0);
     if (!result) {
         return result;
     }
@@ -894,22 +897,18 @@ UnitMFRC522::result_t UnitMFRC522::picc_haltA()
     return result;
 }
 
-// MIFARE
-bool UnitMFRC522::mifareStopCrypto1()
-{
-    return clear_register_bit(STATUS2_REG, 0x08);
-}
+// Read/Write
 
-UnitMFRC522::result_t UnitMFRC522::mifareRead(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t block)
+UnitMFRC522::result_t UnitMFRC522::readDevice(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t addr)
 {
-    uint8_t addr = block;
-    if (uid.canNFC()) {
-        addr &= ~0x03;
+    uint8_t raddr = addr;
+    if (uid.canNFC()) {  // page structure
+        raddr &= ~0x03;
     }
-    return mifare_read(rbuf, rlen, addr);
+    return read_block(rbuf, rlen, raddr);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr)
+UnitMFRC522::result_t UnitMFRC522::read_block(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr)
 {
     if (!rbuf || rlen < 18) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
@@ -927,18 +926,30 @@ UnitMFRC522::result_t UnitMFRC522::mifare_read(uint8_t* rbuf, uint8_t& rlen, con
     return picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), txLast, 0, true /* return with CRC*/);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareWrite(const UID& uid, const uint8_t block, const uint8_t* buf,
+UnitMFRC522::result_t UnitMFRC522::writeDevice(const UID& uid, const uint8_t addr, const uint8_t* buf,
                                                const uint8_t len, const bool safety)
+{
+    if (uid.canNFC()) {
+        return writeDevicePage(uid, addr, buf, len, safety);
+    }
+    return writeDeviceBlock(uid, addr, buf, len, safety);
+}
+
+UnitMFRC522::result_t UnitMFRC522::writeDeviceBlock(const UID& uid, const uint8_t block, const uint8_t* buf,
+                                                    const uint8_t len, const bool safety)
 {
     if (safety && (is_sector_trailer_block(block) || block < get_first_user_block(uid.type) ||
                    block > get_last_user_block(uid.type))) {
         M5_LIB_LOGW("Write has been rejected due to safety %u", block);
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
-    return mifare_write(block, buf, len);
+    if (block >= uid.blocks) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+    return write_block(block, buf, len);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_write(const uint8_t addr, const uint8_t* buf, const uint8_t len)
+UnitMFRC522::result_t UnitMFRC522::write_block(const uint8_t block, const uint8_t* buf, const uint8_t len)
 {
     if (!buf || !len || len > 16) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
@@ -948,13 +959,13 @@ UnitMFRC522::result_t UnitMFRC522::mifare_write(const uint8_t addr, const uint8_
     std::array<uint8_t, 16> wbuf{};
     std::memcpy(wbuf.data(), buf, len);
 
-    uint8_t cmd[2]{m5::stl::to_underlying(m5::rfid::Command::WRITE), addr};
+    uint8_t cmd[2]{m5::stl::to_underlying(m5::rfid::Command::WRITE), block};
     result_t result{};
     return (result = mifare_transceive(cmd, 2)) ? mifare_transceive(wbuf.data(), wbuf.size()) : result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareWriteUL(const UID& uid, const uint8_t page, const uint8_t* buf,
-                                                 const uint32_t len, const bool safety)
+UnitMFRC522::result_t UnitMFRC522::writeDevicePage(const UID& uid, const uint8_t page, const uint8_t* buf,
+                                                   const uint32_t len, const bool safety)
 {
     if (!buf || !len) {
         return m5::stl::make_unexpected(Error::ARGUMENT);
@@ -965,12 +976,12 @@ UnitMFRC522::result_t UnitMFRC522::mifareWriteUL(const UID& uid, const uint8_t p
     }
 
     if (len <= 4) {
-        return mifare_write_ul(page, buf, len);
+        return write_page(page, buf, len);
     }
 
     int16_t pages = (len + 3) / 4;
-    if (page + pages > get_last_user_block(uid.type)) {
-        M5_LIB_LOGE("Not enough user page");
+    if (page + pages > uid.blocks) {
+        M5_LIB_LOGE("Not enough page");
         return m5::stl::make_unexpected(Error::ARGUMENT);
     }
 
@@ -979,7 +990,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareWriteUL(const UID& uid, const uint8_t p
     uint32_t remain = len;
     while (pages--) {
         auto clen = (remain > 4) ? 4 : remain;
-        result    = mifare_write_ul(current, buf, clen);
+        result    = write_page(current, buf, clen);
         if (!result) {
             break;
         }
@@ -990,11 +1001,20 @@ UnitMFRC522::result_t UnitMFRC522::mifareWriteUL(const UID& uid, const uint8_t p
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifare_write_ul(const uint8_t page, const uint8_t* buf, const uint8_t len)
+UnitMFRC522::result_t UnitMFRC522::write_page(const uint8_t page, const uint8_t* buf, const uint8_t len)
 {
+    if (!buf || len > 4) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
     uint8_t cmd[6]{m5::stl::to_underlying(m5::rfid::Command::WRITE_UL), page};
     std::memcpy(cmd + 2, buf, len);
     return mifare_transceive(cmd, m5::stl::size(cmd));
+}
+
+// MIFARE
+bool UnitMFRC522::mifareStopCrypto1()
+{
+    return clear_register_bit(STATUS2_REG, 0x08);
 }
 
 UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA,
@@ -1013,7 +1033,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const UID& uid, const 
     uint8_t poff     = get_permission_offset(block);
 
     // Read sector trailer block
-    auto result = mifareRead(uid, buf, len, st_block);
+    auto result = read_block(buf, len, st_block);
     // M5_LIB_LOGW("R) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     if (result) {
         if (!decode_access_bits(permissions, buf + 6)) {
@@ -1031,7 +1051,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareEnableValueBlock(const UID& uid, const 
         }
         std::memcpy(buf, keyA.data(), 6);
         std::memcpy(buf + 10, keyB.data(), 6);
-        result = mifareWrite(uid, st_block, buf, 16, false);
+        result = write_block(st_block, buf, 16);
         // M5_LIB_LOGW("W) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     }
     return result;
@@ -1052,7 +1072,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareDisableValueBlock(const UID& uid, const
     uint8_t poff     = get_permission_offset(block);
 
     // Read sector trailer block
-    auto result = mifareRead(uid, buf, len, st_block);
+    auto result = read_block(buf, len, st_block);
     // M5_LIB_LOGE("R) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     if (result) {
         if (!decode_access_bits(permissions, buf + 6)) {
@@ -1072,7 +1092,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareDisableValueBlock(const UID& uid, const
         }
         std::memcpy(buf, keyA.data(), 6);
         std::memcpy(buf + 10, keyB.data(), 6);
-        result = mifareWrite(uid, st_block, buf, 16, false);  // update sector tailer
+        result = write_block(st_block, buf, 16);  // update sector tailer
         // M5_LIB_LOGE("W) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
     }
     return result;
@@ -1129,7 +1149,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareReadValue(const UID& uid, int32_t& valu
     uint8_t len{18};
 
     value       = 0;
-    auto result = mifareRead(uid, buf, len, block);
+    auto result = read_block(buf, len, block);
     if (result) {
         uint8_t addr{};
         if (!decode_value_block(value, addr, buf)) {
@@ -1148,28 +1168,19 @@ UnitMFRC522::result_t UnitMFRC522::mifareWriteValue(const UID& uid, const uint8_
 
     uint8_t buf[16]{};
     encode_value_block(buf, value, block);
-    return mifareWrite(uid, block, buf, 16);
+    return write_block(block, buf, 16);
 }
 
-bool UnitMFRC522::isNTAG(const UID& uid)
-{
-    if (uid.canNFC()) {
-        uint8_t rbuf[18]{};
-        uint8_t rlen{18};
-        return mifareRead(uid, rbuf, rlen, 0) && rbuf[12] == NFC_MAGIC_NO && rbuf[13] == NFC_VERSION;
-    }
-    return false;
-}
-
-UnitMFRC522::result_t UnitMFRC522::mifareWriteChangeToNTAGFormat(const UID& uid)
+// NFC
+UnitMFRC522::result_t UnitMFRC522::nfcWriteChangeToNTAGFormat(const UID& uid)
 {
     if (uid.type == Type::MIFARE_UltraLight || uid.type == Type::MIFARE_UltraLightC) {
-        if (isNTAG(uid)) {
+        if (ntag_check_format(uid)) {
             return {};  // Already NFC
         }
         uint8_t buf[4] = {NFC_MAGIC_NO, NFC_VERSION};
         buf[3]         = (uid.type == Type::MIFARE_UltraLight) ? 0x06 : 0x18;
-        return mifareWriteUL(uid, 3 /*OTP area*/, buf, 4, false);
+        return write_page(3 /*OTP area*/, buf, 4);
     }
     if (uid.canNFC()) {
         return {};
@@ -1178,61 +1189,6 @@ UnitMFRC522::result_t UnitMFRC522::mifareWriteChangeToNTAGFormat(const UID& uid)
     return m5::stl::make_unexpected(Error::ARGUMENT);
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareWriteNDEF(const UID& uid, const uint8_t* buf, const uint32_t blen)
-{
-    if (!uid.canNFC()) {
-        return m5::stl::make_unexpected(Error::ARGUMENT);
-    }
-
-    uint8_t page{}, offset{};
-    page = get_first_user_block(uid.type);
-
-    // UltraLight/C
-    if (!uid.isNTAG()) {
-        return mifareWriteUL(uid, page, buf, blen);
-    }
-
-    // NTAG 2xx
-    // There may be information at the begin of the user area that should not be deleted
-    // e.g. NTAG212, 213 LockCOntrol
-    uint32_t sz{};
-    auto result = ntag_calclate_ndef_message_size(uid, sz);
-    if (!result) {
-        return result;
-    }
-    page += sz / 4;
-    offset = sz & 0x03;
-
-    // M5_LIB_LOGW("Writable:%u:%u", page, offset);
-
-    if (offset == 0) {
-        return mifareWriteUL(uid, page, buf, blen);
-    }
-
-    // Write new messages in a concatenated manner while maintaining existing messages
-    uint8_t rbuf[18]{};
-    uint8_t rlen{18};
-    result = mifare_read(rbuf, rlen, page & ~0x03);
-    if (!result) {
-        M5_LIB_LOGE("Failed to read");
-        return result;
-    }
-
-    uint8_t* ptr = (uint8_t*)malloc(16 + blen);
-    if (!ptr) {
-        return m5::stl::make_unexpected(Error::INTERNAL);
-    }
-    std::memcpy(ptr, &rbuf[(page & 0x03) * 4], offset);
-    std::memcpy(ptr + offset, buf, blen);
-    uint32_t nlen = offset + blen;
-
-    // M5_DUMPI(ptr, nlen);
-
-    result = mifareWriteUL(uid, page, ptr, nlen);
-    free(ptr);
-
-    return result;
-}
 /*
   targetBit Bit group  of the tag included in the size calculation
   0x01:Null, 0x02:LockControl 0x04:NDEFMessage, ....
@@ -1258,7 +1214,7 @@ UnitMFRC522::result_t UnitMFRC522::ntag_calclate_ndef_message_size(const UID& ui
         uint8_t rbuf[18]{};
         uint8_t rlen{18};
         // M5_LIB_LOGE("R:%u/%u", page, max_page);
-        auto result = mifare_read(rbuf, rlen, page);
+        auto result = read_block(rbuf, rlen, page);
         if (!result) {
             return result;
         }
@@ -1309,7 +1265,7 @@ UnitMFRC522::result_t UnitMFRC522::ntag_calclate_ndef_message_size(const UID& ui
     return {};
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareReadNDEF(const UID& uid, uint8_t* buf, uint32_t& len)
+UnitMFRC522::result_t UnitMFRC522::nfcReadDevice(const UID& uid, uint8_t* buf, uint32_t& len)
 {
     result_t result{};
     uint8_t page   = get_first_user_block(uid.type);
@@ -1322,7 +1278,7 @@ UnitMFRC522::result_t UnitMFRC522::mifareReadNDEF(const UID& uid, uint8_t* buf, 
     len = 0;
     while (page16--) {
         uint8_t rlen{18};
-        result = mifare_read(buf, rlen, page);
+        result = read_block(buf, rlen, page);
         if (!result) {
             break;
         }
@@ -1336,10 +1292,66 @@ UnitMFRC522::result_t UnitMFRC522::mifareReadNDEF(const UID& uid, uint8_t* buf, 
     return result;
 }
 
-UnitMFRC522::result_t UnitMFRC522::mifareRequiredSizeNDEF(const UID& uid, uint32_t& len)
+UnitMFRC522::result_t UnitMFRC522::nfcReadRequiredSize(const UID& uid, uint32_t& len)
 {
     auto result = ntag_calclate_ndef_message_size(uid, len, 0x0F /* all tag */);
     len         = result ? (len + 15) / 16 * 16 + 2 /*CRC*/ : 0;
+    return result;
+}
+
+UnitMFRC522::result_t UnitMFRC522::nfcWriteDevice(const UID& uid, const uint8_t* buf, const uint32_t blen)
+{
+    if (!uid.canNFC()) {
+        return m5::stl::make_unexpected(Error::ARGUMENT);
+    }
+
+    uint8_t page{}, offset{};
+    page = get_first_user_block(uid.type);
+
+    // UltraLight/C
+    if (!uid.isNTAG()) {
+        return writeDevicePage(uid, page, buf, blen);
+    }
+
+    // NTAG 2xx
+    // There may be information at the begin of the user area that should not be deleted
+    // e.g. NTAG212, 213 LockCOntrol
+    uint32_t sz{};
+    auto result = ntag_calclate_ndef_message_size(uid, sz);
+    if (!result) {
+        return result;
+    }
+    page += sz / 4;
+    offset = sz & 0x03;
+
+    // M5_LIB_LOGW("Writable:%u:%u", page, offset);
+
+    if (offset == 0) {
+        return writeDevicePage(uid, page, buf, blen);
+    }
+
+    // Write new messages in a concatenated manner while maintaining existing messages
+    uint8_t rbuf[18]{};
+    uint8_t rlen{18};
+    result = read_block(rbuf, rlen, page & ~0x03);
+    if (!result) {
+        M5_LIB_LOGE("Failed to read");
+        return result;
+    }
+
+    uint8_t* ptr = (uint8_t*)malloc(16 + blen);
+    if (!ptr) {
+        return m5::stl::make_unexpected(Error::INTERNAL);
+    }
+    std::memcpy(ptr, &rbuf[(page & 0x03) * 4], offset);
+    std::memcpy(ptr + offset, buf, blen);
+    uint32_t nlen = offset + blen;
+
+    // M5_DUMPI(ptr, nlen);
+
+    result = writeDevicePage(uid, page, ptr, nlen);
+    free(ptr);
+
     return result;
 }
 
@@ -1447,7 +1459,7 @@ UnitMFRC522::result_t UnitMFRC522::dump_sector(const uint8_t sector)
     const uint8_t saddr = base + blocks - 1;  //  sector traler
 
     // Read sector trailer
-    auto result = mifare_read(sbuf, slen, saddr);
+    auto result = read_block(sbuf, slen, saddr);
     if (!result) {
         return result;
     }
@@ -1460,7 +1472,7 @@ UnitMFRC522::result_t UnitMFRC522::dump_sector(const uint8_t sector)
         uint8_t dbuf[18]{};
         uint8_t dlen{18};
         uint8_t daddr = base + i;
-        result        = mifare_read(dbuf, dlen, daddr);
+        result        = read_block(dbuf, dlen, daddr);
         if (!result) {
             break;
         }
@@ -1499,7 +1511,7 @@ UnitMFRC522::result_t UnitMFRC522::dump_page(const uint8_t page)
     result_t result{};
     uint8_t baddr = page & ~0x03;
 
-    result = mifare_read(buf, blen, baddr);  // 4 pages
+    result = read_block(buf, blen, baddr);  // 16bytes(4 pages)
     if (result) {
         for (int_fast8_t off = 0; off < 4; ++off) {
             auto idx = off << 2;
@@ -1619,6 +1631,15 @@ UnitMFRC522::result_t UnitMFRC522::ntag_get_version(uint8_t* rbuf, uint8_t& rlen
     return picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), validBits, 0, true);
 }
 
+bool UnitMFRC522::ntag_check_format(const UID& uid)
+{
+    if (uid.canNFC()) {
+        uint8_t rbuf[18]{};
+        uint8_t rlen{18};
+        return read_block(rbuf, rlen, 0) && rbuf[12] == NFC_MAGIC_NO && rbuf[13] == NFC_VERSION;
+    }
+    return false;
+}
 UnitMFRC522::result_t UnitMFRC522::ntag_fast_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t saddr,
                                                   const uint8_t eaddr)
 {

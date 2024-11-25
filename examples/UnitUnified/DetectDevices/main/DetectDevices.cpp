@@ -29,7 +29,7 @@ void setup()
     auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
     auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
     M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
-    Wire.begin(pin_num_sda, pin_num_scl, 400 * 1000U);
+    Wire.begin(pin_num_sda, pin_num_scl, 100 * 1000U);
 
     if (!Units.add(unit, Wire) || !Units.begin()) {
         M5_LOGE("Failed to begin");
@@ -59,6 +59,7 @@ void setup()
 void loop()
 {
     M5.update();
+    Units.update();
 
     std::vector<UID> devices;
     // Detect new devices?

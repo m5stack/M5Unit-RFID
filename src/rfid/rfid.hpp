@@ -125,7 +125,7 @@ inline bool has_fast_read(const Type t)
  */
 Type get_type(const uint8_t sak);
 //! @brief Get the number of the blocks
-uint8_t get_number_of_blocks(const Type t);
+uint16_t get_number_of_blocks(const Type t);
 //! @brief Get the number of the sectors
 uint8_t get_number_of_sectors(const Type t);
 //! @brief Get the first user area block
@@ -146,10 +146,10 @@ struct UID {
     uint8_t sak{};
     //! @brief PICC type
     Type type{};
-    //! @brief The number of the blocks or pages
-    uint8_t blocks{};
     //! @brief uid data (Valid up to the value of size)
     uint8_t uid[10]{};
+    //! @brief The number of the blocks or pages
+    uint16_t blocks{};
 
     //! @brief Is MIFARE classic?
     inline bool isClassic() const

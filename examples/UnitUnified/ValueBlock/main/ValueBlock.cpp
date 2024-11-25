@@ -73,7 +73,7 @@ void restore_sector_trailer(const UID& uid, const uint8_t block)
         if (m5::rfid::mifare::classic::encode_access_bits(buf + 6, permissions)) {
             std::memcpy(buf, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
             std::memcpy(buf + 10, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
-            if (unit.mifareWrite(uid, st_block, buf, 16, false)) {
+            if (unit.writeDevice(uid, st_block, buf, 16, false)) {
                 M5_LOGI("block:%u sector trailer:%u to [001]", block, st_block);
                 return;
             }
@@ -173,6 +173,7 @@ void loop()
     static constexpr bool read_only{false};
 
     M5.update();
+    Units.update();
     auto touch = M5.Touch.getDetail();
 
     // Value block operatrion (IDLE)

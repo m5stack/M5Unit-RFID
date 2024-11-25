@@ -93,7 +93,7 @@ public:
     using MifareKey = m5::rfid::mifare::Key;
     /*!
       @typedef UID
-      @brief MIFARE UID
+      @brief Device UID
      */
     using UID = m5::rfid::UID;
 
@@ -107,11 +107,9 @@ public:
     struct config_t {
         //! mode reg value. See also 9.3.2.2 ModeReg register
         uint8_t mode_reg{0x3D};
-        //
-        // float timer{};
         //! Enable antenna on begin if true
         bool enable_antenna{true};
-        //! the receiver’s signal voltage gain factor
+        //! The receiver’s signal voltage gain factor
         mfrc522::ReceiverGain receiver_gain{mfrc522::ReceiverGain::dB48};
         //! Using sotware CRC
         bool software_crc{false};
@@ -256,12 +254,85 @@ public:
     result_t deactivateDevice();
     ///@}
 
-    ///@warning Executable only on activated devices
-    ///@name MIFARE
+    ///@name Read/Write
+    ///@{
+    /*!
+      @brief Read data from the block for MIFARE,NTAG
+      @param uid Device UID
+      @param[out] rbuf The buffer to store
+      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
+      @param addr block address or page address
+      @return True if successful
+      @note Since the data is read in 16-byte units, care should be taken with devices that have a page structure
+      @note Therefore, for devices with page configuration, specify an addr that is a multiple of 4
+      @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
+      @pre Requires block authentication if needed
+     */
+    result_t readDevice(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
+
+    /*!
+      @brief Write data to the block
+      @param uid Device UID
+      @param addr block address or page address
+      @param buf buffer
+      @param len Length of the buffer (-16)
+      @param safety Fail to write to our of the user memory area if true (safety measure)
+      @return True if successful
+      @noteg Sector structure: If the buffer is less than 16 bytes, 0x00 is padded and written
+      @note Page structure: If the buffer is less than 4 bytes, 0x00 is padded and written
+      @pre Requires block authentication if needed
+    */
+    result_t writeDevice(const UID& uid, const uint8_t addr, const uint8_t* buf, const uint8_t len,
+                         const bool safety = true);
+
+    /*!
+      @brief Write data to the block for sector structure device
+      @param uid Device UID
+      @param block block address
+      @param buf buffer
+      @param len Length of the buffer (-16)
+      @param safety Fail to write to our of the user memory area if true (safety measure)
+      @return True if successful
+      @note If the buffer is less than 16 bytes, 0x00 is padded and written
+      @pre Requires block authentication if needed
+    */
+    result_t writeDeviceBlock(const UID& uid, const uint8_t block, const uint8_t* buf, const uint8_t len,
+                              const bool safety = true);
+    /*!
+      @brief Write data to the page for page structure device
+      @param uid Device UID
+      @param page Page address
+      @param buf buffer
+      @param len Length of the buffer
+      @param safety Fail to write to our of the user memory area if true (safety measure)
+      @return True if successful
+      @note If the buffer is less than 4 bytes, 0x00 is padded and written
+      @note If the buffer is greater than 4 bytes, overwrite next pages until maximum user memory area
+      @note Using WRITE_UL command
+    */
+    result_t writeDevicePage(const UID& uid, const uint8_t page, const uint8_t* buf, const uint32_t len,
+                             const bool safety = true);
+
+#if 0
+    /*!
+      @brief Read data from the page for NTAG21x
+      @param uid Device UID
+      @param block block address or page address
+      @param[out] rbuf The buffer to store
+      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
+      @return True if successful
+      @note Using FAST_READ command
+     */
+    result_t readDevicePage(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
+#endif
+    ///@}
+
+    ///@warning Executable only on MIFARE classic devices
+    ///@name MIFARE classic
     ///@{
     /*!
       @brief Authentication by KeyA
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @param key Authentication key
       @return True if successful
@@ -287,7 +358,7 @@ public:
 
     /*!
       @brief Change the specified block to value block
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @param keyA Authentication key A
       @param keyB Authentication key B
@@ -295,14 +366,14 @@ public:
       @return True if successful
       @pre Requires the sector to which the block belongs authentication
       @note Writes to sector trailer, so keyAB of the target sector is required
-      @warning Sector trailer access bits are changed to 001 (need auth B for R/W)
+      @warning Sector trailer access bits are changed to 011 (need auth B for R/W)
       @warning 0 or sector trailer as block address is prohibited
     */
     result_t mifareEnableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
                                     const bool readOnly = false);
     /*!
       @brief Change the specified block to normal block
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @param keyA Authentication key A
       @param keyB Authentication key B
@@ -316,7 +387,7 @@ public:
                                      const uint8_t permission = 0x00);
     /*!
       @brief Increments the contents of a block and stores the result in the internal Transfer Buffer
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @param delta incremental value
       @return True if successful
@@ -328,7 +399,7 @@ public:
     result_t mifareIncrement(const UID& uid, const uint8_t block, const uint32_t delta);
     /*!
       @brief Decrements the contents of a block and stores the result in the internal Transfer Buffer
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @param delta decremental value
       @return True if successful
@@ -340,7 +411,7 @@ public:
     result_t mifareDecrement(const UID& uid, const uint8_t block, const uint32_t delta);
     /*!
       @brief Writes the contents of the internal Transfer Buffer to a value block
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @return True if successful
       @pre Requires the sector to which the block belongs authentication
@@ -348,7 +419,7 @@ public:
     result_t mifareTransfer(const UID& uid, const uint8_t block);
     /*!
       @brief Moves the contents of a block into the internal Transfer Buffer
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @return True if successful
       @warning Only value block is executable
@@ -357,119 +428,39 @@ public:
     result_t mifareRestore(const UID& uid, const uint8_t block);
     /*!
       @brief Read the value assuming the specified block is the value block
-      @param uid PICC UID
+      @param uid Device UID
       @param[out] value value
       @param block Block address
       @return True if successful
-      @pre Requires block authentication
+      @pre Requires block authentication if needed
     */
     result_t mifareReadValue(const UID& uid, int32_t& value, const uint8_t block);
     /*!
       @brief Writes as a specified value block
-      @param uid PICC UID
+      @param uid Device UID
       @param block Block address
       @param value value
       @return True if successful
-      @pre Requires block authentication
+      @pre Requires block authentication if needed
      */
     result_t mifareWriteValue(const UID& uid, const uint8_t block, const int32_t value);
     ///@}
 
-    ///@name Read/Write
-    ////@{
-    /*!
-      @brief Read data from the block
-      @param uid PICC UID
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @param block block address or page address
-      @return True if successful
-      @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
-      @pre Requires block authentication
-     */
-    result_t mifareRead(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t block);
-#if 0
-    /*!
-      @brief Read data from the page for 
-      @param uid PICC UID
-      @param block block address or page address
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @return True if successful
-      @note Using FAST_READ command
-     */
-    result_t mifareFastRead(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
-#endif
-    /*!
-      @brief Write data to the block
-      @param uid PICC UID
-      @param block block address or page address
-      @param buf buffer
-      @param len Length of the buffer (1-16)
-      @param safety  Fail to write to sector trailer or 0 if true (safety measure)
-      @return True if successful
-      @noteg If the buffer is less than 16 bytes, 0x00 is padded and written
-      @pre Requires block authentication
-    */
-    result_t mifareWrite(const UID& uid, const uint8_t block, const uint8_t* buf, const uint8_t len,
-                         const bool safety = true);
-    /*!
-      @brief Write data to the block for UltraLight/C
-      @param uid PICC UID
-      @param page Page address
-      @param buf buffer
-      @param len Length of the buffer
-      @return True if successful
-      @note If the buffer is less than 4 bytes, 0x00 is padded and written
-      @note If the buffer is greater than 4 bytes, overwrite next pages until maximum user pages
-      @note Using WRITE_UL command
-    */
-    result_t mifareWriteUL(const UID& uid, const uint8_t page, const uint8_t* buf, const uint32_t len,
-                           const bool safety = true);
-
-    ///@}
-
-    ///@name Dump
-    /*!
-      @brief Dump to serial
-      @param uid Device UID
-      @param keyA Key used for authentication A for Classic
-      @return True if successful
-      @warning All blocks must be readable with the specified key
-     */
-    result_t dumpDevice(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
-    /*!
-      @brief Dump specific block/page to serial
-      @param uid Device UID
-      @param block block address(Classic) or page address
-      @return True if successful
-      @pre Requires block authentication
-     */
-    result_t dumpDevice(const UID& uid, const uint8_t addr);
-    ///@}
-
-    ///@warning For MIFARE UltraLight/C
-    ///@warning Executable only on activated devices
+    ///@warning Executable only on page structure devices
     ///@name NFC
-    ///@{
-    /*!
-      @brief NFC-A Type-2 formatted?
-      @note Read OTP area
-    */
-    bool isNTAG(const UID& uid);
     /*!
       @brief Write change to NFC-A Type-2 format
       @return True if NTAG or NTAG format Light/C
     */
-    result_t mifareWriteChangeToNTAGFormat(const UID& uid);
+    result_t nfcWriteChangeToNTAGFormat(const UID& uid);
 
     /*!
-      @brief Calculation of required size for read
+      @brief Read and calculation of required size
       @param uid Device UID
       @patam[out] len Required length
       @return True if successful
      */
-    result_t mifareRequiredSizeNDEF(const UID& uid, uint32_t& len);
+    result_t nfcReadRequiredSize(const UID& uid, uint32_t& len);
     /*!
       @brief Read the NFC NDEF message
       @param uid Device UID
@@ -477,7 +468,7 @@ public:
       @param blen[in,out] in: Buffer length out:Read length
       @return True if successful or NTAG device
      */
-    result_t mifareReadNDEF(const UID& uid, uint8_t* buf, uint32_t& len);
+    result_t nfcReadDevice(const UID& uid, uint8_t* buf, uint32_t& len);
     /*!
       @brief Write the NFC NDEF message
       @param uid Device UID
@@ -487,7 +478,26 @@ public:
       @warning Already existing data will be overwritten
       @warning When making additions or changes to already existing data, read and edit first
      */
-    result_t mifareWriteNDEF(const UID& uid, const uint8_t* buf, const uint32_t blen);
+    result_t nfcWriteDevice(const UID& uid, const uint8_t* buf, const uint32_t blen);
+    ///@}
+
+    ///@name Dump
+    /*!
+      @brief Dump to serial
+      @param uid Device UID
+      @param keyA Key used for authentication A for Classic
+      @return True if successful
+      @warning All blocks must be readable with the specified key if needed
+     */
+    result_t dumpDevice(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
+    /*!
+      @brief Dump specific block/page to serial
+      @param uid Device UID
+      @param block block address(Classic) or page address
+      @return True if successful
+      @pre Requires block authentication if needed
+     */
+    result_t dumpDevice(const UID& uid, const uint8_t addr);
     ///@}
 
 protected:
@@ -497,7 +507,6 @@ protected:
     bool read_register_with_align(const uint8_t reg, uint8_t* buf, const uint8_t len, const uint8_t align);
     bool write_pcd_command(const mfrc522::Command cmd);
 
-    //
     bool reset_baud_rates();
     bool flush_fifo_buffer();
     bool wait_comm_irq(const uint8_t irq, const uint32_t duration);
@@ -519,17 +528,19 @@ protected:
     result_t activate(UID& uid);
     result_t reactivate(UID& uid, const UID& prev);
 
+    // Read/Wrte
+    result_t read_block(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
+    result_t write_block(const uint8_t block, const uint8_t* buf, const uint8_t len);
+    result_t write_page(const uint8_t page, const uint8_t* buf, const uint8_t len);
+
     // MIFARE
     result_t mifare_authenticate(const m5::rfid::Command cmd, const UID& uid, const uint8_t block,
                                  const MifareKey& key);
     result_t mifare_transceive(const m5::rfid::Command cmd, const uint8_t block);
     result_t mifare_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
 
-    result_t mifare_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
-    result_t mifare_write(const uint8_t addr, const uint8_t* buf, const uint8_t len);
-    result_t mifare_write_ul(const uint8_t page, const uint8_t* buf, const uint8_t len);
-
     // NTAG
+    bool ntag_check_format(const UID& uid);
     result_t ntag_get_version(uint8_t* rbuf, uint8_t& rlen);
     result_t ntag_fast_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t saddr, const uint8_t eaddr);
     result_t ntag_calclate_ndef_message_size(const UID& uid, uint32_t& sz, const uint8_t targetTagBit = 0x06);

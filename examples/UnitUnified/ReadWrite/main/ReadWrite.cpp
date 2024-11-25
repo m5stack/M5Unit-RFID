@@ -29,7 +29,7 @@ void setup()
     auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
     auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
     M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
-    Wire.begin(pin_num_sda, pin_num_scl, 400 * 1000U);
+    Wire.begin(pin_num_sda, pin_num_scl, 100 * 1000U);
 
     if (!Units.add(unit, Wire) || !Units.begin()) {
         M5_LOGE("Failed to begin");
@@ -70,7 +70,7 @@ void read_write_sector_structure(const UID& uid, const uint8_t block)
     unit.dumpDevice(uid, block);
 
     // Write (If less than 16 bytes, 0x00 is padded)
-    auto result = unit.mifareWrite(uid, block, (const uint8_t*)msg, m5::stl::size(msg));
+    auto result = unit.writeDevice(uid, block, (const uint8_t*)msg, m5::stl::size(msg));
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
@@ -81,7 +81,7 @@ void read_write_sector_structure(const UID& uid, const uint8_t block)
     // Read
     uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
     uint8_t rlen{18};    // Number of bytes to be read
-    result = unit.mifareRead(uid, rbuf, rlen, block);
+    result = unit.readDevice(uid, rbuf, rlen, block);
     if (!result) {
         M5_LOGE("Failed to read %02X", result.error());
         return;
@@ -92,7 +92,7 @@ void read_write_sector_structure(const UID& uid, const uint8_t block)
 
     // Clear
     uint8_t c[1]{};
-    result = unit.mifareWrite(uid, block, c, 1);
+    result = unit.writeDevice(uid, block, c, 1);
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
@@ -108,8 +108,8 @@ void read_write_page_structure(const UID& uid, const uint8_t page)
     M5_LOGI("Before[%u] ----", page);
     unit.dumpDevice(uid, page);
 
-    // Write (If less than 16 bytes, 0x00 is padded)
-    auto result = unit.mifareWriteUL(uid, page, (const uint8_t*)msg, m5::stl::size(msg));
+    // Write (If less than 4 bytes, 0x00 is padded)
+    auto result = unit.writeDevice(uid, page, (const uint8_t*)msg, m5::stl::size(msg));
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
@@ -120,7 +120,7 @@ void read_write_page_structure(const UID& uid, const uint8_t page)
     // Read
     uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
     uint8_t rlen{18};    // Number of bytes to be read
-    result = unit.mifareRead(uid, rbuf, rlen, page);
+    result = unit.readDevice(uid, rbuf, rlen, page);
     if (!result) {
         M5_LOGE("Failed to read %02X", result.error());
         return;
@@ -131,7 +131,7 @@ void read_write_page_structure(const UID& uid, const uint8_t page)
 
     // Clear
     uint8_t c[1]{};
-    result = unit.mifareWriteUL(uid, page, c, 1);
+    result = unit.writeDevice(uid, page, c, 1);
     if (!result) {
         M5_LOGE("Failed to write %02X", result.error());
         return;
@@ -143,7 +143,10 @@ void read_write_page_structure(const UID& uid, const uint8_t page)
 void loop()
 {
     M5.update();
-    if (M5.BtnA.wasClicked() || M5.Touch.getCount()) {
+    Units.update();
+    auto touch = M5.Touch.getDetail();
+
+    if (M5.BtnA.wasClicked() || touch.wasClicked()) {
         // Detect new devices?
         if (unit.detectIdleDevice()) {
             UID uid{};

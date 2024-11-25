@@ -10,6 +10,7 @@
 #include "ndef_message.hpp"
 #include <M5Utility.hpp>
 #include <numeric>
+#include <cinttypes>
 
 namespace {
 uint32_t calculate_record_size(const std::vector<m5::rfid::nfc::ndef::Record>& v)
@@ -208,8 +209,9 @@ void Message::clear()
 
 void Message::dump()
 {
-    auto rec_len = (_tag == Tag::NDEFMessage) ? calculate_record_size(_records) : _payload.size();
-    printf("== NDEF Mesage Tag:%02X Payload:%u\n", m5::stl::to_underlying(_tag), rec_len);
+    uint32_t payload_len = (_tag == Tag::NDEFMessage) ? calculate_record_size(_records) : _payload.size();
+    printf("== NDEF Mesage Tag:%02X Payload:%" PRIu32 "\n", m5::stl::to_underlying(_tag),
+           payload_len);  // PRIu32 for compile on NanoC6
 
     if (_tag == Tag::NDEFMessage) {
         for (auto&& r : _records) {
