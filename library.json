@@ -1,27 +1,30 @@
 {
-  "name": "M5Unit-RFID",
-  "description": "Library for M5Stack UNIT RFID Using M5UnitUnified",
-  "keywords": "M5Stack UNIT RFID, M5UnitUnified",
-  "authors": {
-    "name": "M5Stack",
-    "url": "http://www.m5stack.com"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/m5stack/M5Unit-RFID.git"
-  },
-  "dependencies": [
-    {
-      "name": "M5UnitUnified"
+    "name": "M5Unit-RFID",
+    "description": "Library for M5Stack UNIT RFID using M5UnitUnified",
+    "keywords": "M5Stack UNIT RFIDT,M5UnitUnified",
+    "authors": {
+        "name": "M5Stack",
+        "url": "http://www.m5stack.com"
     },
-    {
-      "name": "M5Utility"
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/m5stack/M5Unit-RFID.git"
     },
-    {
-      "name": "M5HAL"
+    "dependencies": {
+        "M5UnitUnified": "https://github.com/m5stack/M5UnitUnified.git"
+    },
+    "version": "0.0.1",
+    "frameworks": [
+        "arduino"
+    ],
+    "platforms": [
+        "espressif32"
+    ],
+    "headers": "M5UnitUnifiedRFID.h",
+    "license": "MIT",
+    "export": {
+        "exclude": [
+            "docs/html"
+        ]
     }
-  ],
-  "version": "0.0.0",
-  "frameworks": ["arduino", "espidf"],
-  "platforms": ["espressif32"]
 }
