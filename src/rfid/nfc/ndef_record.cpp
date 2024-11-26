@@ -35,14 +35,6 @@ const char* find_first_mismatch(const char* s1, const char* s2)
 
 }  // namespace
 
-#define M5_RFID2_NDEF_COPY(ptr, cnt, d, m) \
-    do {                                   \
-        (ptr)[(cnt)++] = (d);              \
-        if ((cnt) >= (m)) {                \
-            return 0;                      \
-        }                                  \
-    } while (0)
-
 namespace m5 {
 namespace rfid {
 namespace nfc {
@@ -88,28 +80,34 @@ uint32_t Record::encode(uint8_t* buf, const uint32_t mlen) const
     uint32_t count{};
     uint8_t tlen = _type.length();
 
-    if (!buf || !mlen || !tlen || _payload.empty()) {
+    if (!buf || mlen < 3 || !tlen || _payload.empty()) {
         return 0;
     }
 
-    //
-    M5_RFID2_NDEF_COPY(buf, count, _attr.value, mlen);  // Attribute
-    M5_RFID2_NDEF_COPY(buf, count, tlen, mlen);         // Type length
+    // Attribute, type length
+    buf[count++] = _attr.value;
+    buf[count++] = tlen;
 
     // Payload length
     if (_attr.shortRecord()) {  // 1 byte
-        M5_RFID2_NDEF_COPY(buf, count, _payload.size(), mlen);
+        buf[count++] = _payload.size();
     } else {  // 4 bytes
+        if (mlen < 6) {
+            return 0;
+        }
         uint32_t plen = _payload.size();
-        M5_RFID2_NDEF_COPY(buf, count, (plen >> 24) & 0xFF, mlen);
-        M5_RFID2_NDEF_COPY(buf, count, (plen >> 16) & 0xFF, mlen);
-        M5_RFID2_NDEF_COPY(buf, count, (plen >> 8) & 0xFF, mlen);
-        M5_RFID2_NDEF_COPY(buf, count, plen & 0xFF, mlen);
+        buf[count++]  = (plen >> 24) & 0xFF;
+        buf[count++]  = (plen >> 16) & 0xFF;
+        buf[count++]  = (plen >> 8) & 0xFF;
+        buf[count++]  = (plen >> 0) & 0xFF;
     }
 
     // ID length (Not exists if id length is 0)
     if (_attr.idLength()) {
-        M5_RFID2_NDEF_COPY(buf, count, _id.size(), mlen);
+        if (count >= mlen) {
+            return 0;
+        }
+        buf[count++] = _id.size();
     }
 
     // Type

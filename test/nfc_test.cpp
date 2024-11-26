@@ -49,7 +49,7 @@ TEST(NDEF, Record)
         r.setIdentifier(id, 7);
         EXPECT_EQ(r.required(), 4U + 7U);  // attr + type len + payload len + id len + id[7]
         EXPECT_TRUE(r.attribute().idLength());
-        EXPECT_NE(r.identifierSize(), 0U);
+        EXPECT_EQ(r.identifierSize(), 7U);
         EXPECT_NE(r.identifier(), nullptr);
         // r.dump();
 
@@ -57,7 +57,7 @@ TEST(NDEF, Record)
         r.setIdentifier(&id2, 1);
         EXPECT_EQ(r.required(), 4U + 1U);  // id[1]
         EXPECT_TRUE(r.attribute().idLength());
-        EXPECT_NE(r.identifierSize(), 0U);
+        EXPECT_EQ(r.identifierSize(), 1U);
         EXPECT_NE(r.identifier(), nullptr);
         // r.dump();
 
@@ -71,7 +71,7 @@ TEST(NDEF, Record)
         r.setIdentifier(id, 7);
         EXPECT_EQ(r.required(), 4U + 7U);
         EXPECT_TRUE(r.attribute().idLength());
-        EXPECT_NE(r.identifierSize(), 0U);
+        EXPECT_EQ(r.identifierSize(), 7U);
         EXPECT_NE(r.identifier(), nullptr);
         // r.dump();
     }
@@ -84,7 +84,7 @@ TEST(NDEF, Record)
         EXPECT_TRUE(strcmp(r.type(), "T") == 0);
         EXPECT_EQ(r.required(), 4U + 1U + 7U +       // attr + type len + payload len + id len + type[1] + id[7]
                                     1U + 2U + 13U);  // status + lang[2] + txt[13]
-        r.dump();
+        // r.dump();
 
         r.setURIPayload("https://m5stack.com", URIProtocol::HTTPS);
         EXPECT_TRUE(strcmp(r.type(), "U") == 0);
@@ -101,27 +101,52 @@ TEST(NDEF, Record)
                                     1U + 2U + 14U);  // status + lang[2] + txt[14]
         // r.dump();
     }
+
+    {
+        uint8_t buf[256]{};
+        auto encoded = r.encode(buf, 256);
+        EXPECT_EQ(encoded, 4U + 1U + 7U +       //
+                               1U + 2U + 14U);  // status + lang[2] + txt[14]
+        Record r2{};
+        auto decoded = r2.decode(buf, encoded);
+        EXPECT_EQ(encoded, decoded);
+
+        EXPECT_EQ(r.attribute().value, r2.attribute().value);
+        auto tlen  = strlen(r.type());
+        auto tlen2 = strlen(r2.type());
+        EXPECT_EQ(tlen, tlen2);
+        EXPECT_TRUE(std::memcmp(r.type(), r2.type(), tlen) == 0);
+
+        auto ilen  = r.identifierSize();
+        auto ilen2 = r2.identifierSize();
+        EXPECT_EQ(ilen, ilen2);
+        EXPECT_TRUE(std::memcmp(r.identifier(), r2.identifier(), ilen) == 0);
+
+        auto plen  = r.payloadSize();
+        auto plen2 = r2.payloadSize();
+        EXPECT_EQ(plen, plen2);
+        EXPECT_TRUE(std::memcmp(r.payload(), r2.payload(), plen) == 0);
+    }
 }
 
 TEST(NDEF, Message)
 {
     constexpr uint8_t empty[3] = {0x03, 0x00, 0xFE};
     uint8_t buf[1024]{};
+    Message msg{};
+    Record r0{}, r1{}, r2{};
 
     {
-        Message msg{};
-
         EXPECT_EQ(msg.tag(), Tag::NDEFMessage);
         EXPECT_EQ(msg.records().size(), 0U);
         EXPECT_EQ(msg.required(), 3);  // tag + record len + terminator
-        msg.dump();
+        // msg.dump();
 
         auto encoded = msg.encode(buf, 256);
         EXPECT_EQ(encoded, 3);
         EXPECT_TRUE(std::memcmp(buf, empty, 3) == 0);
 
         //
-        Record r0{}, r1{}, r2{};
 
         // 0
         r0.setTextPayload(en_data, en_lang);
@@ -170,5 +195,19 @@ TEST(NDEF, Message)
 
         // M5_LOGI("[%s]", r2.payloadAsString().c_str());
         // msg.dump();
+    }
+
+    {
+        auto encoded = msg.encode(buf, 256, false /* exclude terminator */);
+        Message msg2{};
+        auto decoded = msg2.decode(buf, encoded);
+
+        EXPECT_EQ(encoded, decoded);
+        auto t  = msg.tag();
+        auto t2 = msg2.tag();
+        EXPECT_EQ(t, t2);
+        EXPECT_EQ(msg.records().size(), msg2.records().size());
+        EXPECT_EQ(msg.required(), msg2.required());
+        EXPECT_EQ(msg.records(), msg2.records());
     }
 }

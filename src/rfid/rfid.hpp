@@ -185,7 +185,7 @@ struct UID {
     std::string typeAsString() const;
 };
 
-//! @brief  equal?
+//! @brief Equal?
 inline bool operator==(const UID& a, const UID& b)
 {
     return (a.size == b.size) && (a.sak == b.sak) && (a.type == b.type) && (a.blocks == b.blocks) &&

@@ -32,6 +32,7 @@ namespace m5 {
  */
 namespace unit {
 
+using UnitRFID  = m5::unit::UnitMFRC522;
 using UnitRFID2 = m5::unit::UnitWS1850S;
 
 }  // namespace unit

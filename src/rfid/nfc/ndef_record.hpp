@@ -211,7 +211,20 @@ private:
     std::string _type{};
     std::vector<uint8_t> _payload{};
     std::vector<uint8_t> _id{};
+
+    friend bool operator==(const Record& a, const Record& b);
 };
+
+//! @brief Equal?
+inline bool operator==(const Record& a, const Record& b)
+{
+    return a._attr.value == b._attr.value && a._type == b._type && a._payload == b._payload && a._id == b._id;
+}
+//! @brief Not equal?
+inline bool operator!=(const Record& a, const Record& b)
+{
+    return !(a == b);
+}
 
 }  // namespace ndef
 }  // namespace nfc

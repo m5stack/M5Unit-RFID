@@ -11,6 +11,6 @@
 #ifdef __cplusplus
 #include "M5UnitUnifiedRFID.hpp"
 #else
-#error M5UnitWEIGHT requires a C++ compiler, please change file extension to .cc or .cpp
+#error M5UnitRFID requires a C++ compiler, please change file extension to .cc or .cpp
 #endif
 #endif
