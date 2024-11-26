@@ -89,6 +89,8 @@ void loop()
 See also [examples/UnitUnified](examples/UnitUnified)
 
 ## Doxygen document
+[GitHub Pages](https://m5stack.github.io/M5Unit-RFID/)
+
 If you want to generate documents on your local machine, execute the following command
 
 ```
