@@ -1,48 +1,106 @@
-# Product Name
+# M5Unit - RFID
 
 ## Overview
 
-### SKU:xxx
+Library for Unit-RFID using [M5UnitUnified](https://github.com/m5stack/M5UnitUnified).  
+M5UnitUnfied has a unified API and can control multiple units via PaHub, etc.
 
-Description of the product
+### SKU:U031-B
+
+RFID2 is a radio frequency identification unit. Built-in WS1850S chip, working frequency is 13.56MHz. Supports reading card, writing card, recognition, recording, and encoding RF card Multiple functions such as authorization and authorization. Use magnetic field induction technology to realize non-contact two-way information interaction, read and verify the information of proximity cards. It can be used in access control systems, check-in systems, warehouse goods entry and storage, and community vehicle entry and exit registration needs Application scenarios for information verification.
 
 ## Related Link
 
-- [Document & Datasheet](https://docs.m5stack.com/en/unit/product_Link)
+- [Unit RFID2 & Datasheet](https://docs.m5stack.com/en/unit/rfid2)
 
 ## Required Libraries:
 
-- [Adafruit_BMP280_Library](https://github.com/adafruit/Required_Libraries_Link)
+- [M5UnitUnified](https://github.com/m5stack/M5UnitUnified)
+- [M5Utility](https://github.com/m5stack/M5Utility)
+- [M5HAL](https://github.com/m5stack/M5HAL)
 
 ## License
 
-- [Product Name- MIT](LICENSE)
+- [M5Unit-RFID -MIT](LICENSE)
 
-## Remaining steps(Editorial Staff Look,After following the steps, remember to delete all the content below)
 
-1. Change [clang format check path](./.github/workflows/clang-format-check.yml#L9-L15).
-2. Add License content to [LICENSE](/LICENSE).
-3. Change link on line 78 of [bug-report.yml](./.github/ISSUE_TEMPLATE/bug-report.yml#L78).
+## Feature
+- Detection with collision resolution when multiple devices are in the detection range
+- Identify MIFARE and NTAG devices in detail
+- Support NFC-A Type-2 NDEF Read/Write
+
+
+## Usage
 
 ```cpp
-Example
-# M5Unit-ENV
+#include <M5Unified.h>
+#include <M5UnitUnified.h>
+#include <M5UnitUnifiedRFID.h>
+namespace {
+m5::unit::UnitUnified Units;
+m5::unit::UnitRFID2 unit;
+}  // namespace
 
-## Overview
+using namespace m5::rfid;
 
-### SKU:U001 & U001-B & U001-C
+void setup()
+{
+    M5.begin();
 
-Contains M5Stack-**UNIT ENV** series related case programs.ENV is an environmental sensor with integrated SHT30 and QMP6988 internally to detect temperature, humidity, and atmospheric pressure data.
+    auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
+    auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
+    M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
+    Wire.begin(pin_num_sda, pin_num_scl, 400 * 1000U);
 
-## Related Link
+    if (!Units.add(unit, Wire) || !Units.begin()) {
+        M5_LOGE("Failed to begin");
+        while (true) {
+            m5::utility::delay(10000);
+        }
+    }
+    M5_LOGI("M5UnitUnified has been begun");
+    M5_LOGI("%s", Units.debugInfo().c_str());
+    M5_LOGI("Please put the devices...");
+}
 
-- [Document & Datasheet](https://docs.m5stack.com/en/unit/envIII)
+void loop()
+{
+    M5.update();
+    Units.update();
+    auto touch = M5.Touch.getDetail();
+    if (M5.BtnA.wasClicked() || touch.wasClicked()) {
+        if (unit.detectDevice()) {
+            UID uid{};
+            if (unit.activateDevice(uid)) {
+                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
-## Required Libraries:
-
-- [Adafruit_BMP280_Library](https://github.com/adafruit/Adafruit_BMP280_Library)
-
-## License
-
-- [M5Unit-ENV - MIT](LICENSE)
+                //
+                // Use any API...
+                //
+                
+                unit.deactivateDevice(); // Once activated, clean up with deactivate.
+            }
+        }
+    }
+}
 ```
+
+## Examples
+See also [examples/UnitUnified](examples/UnitUnified)
+
+## Doxygen document
+[GitHub Pages](https://m5stack.github.io/M5Unit-RFID/)
+
+If you want to generate documents on your local machine, execute the following command
+
+```
+bash docs/doxy.sh
+```
+
+It will output it under docs/html  
+If you want to output Git commit hashes to html, do it for the git cloned folder.
+
+### Required
+- [Doxyegn](https://www.doxygen.nl/)
+- [pcregrep](https://formulae.brew.sh/formula/pcre2)
+- [Git](https://git-scm.com/) (Output commit hash to html)
