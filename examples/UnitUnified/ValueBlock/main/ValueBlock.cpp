@@ -209,7 +209,7 @@ void loop()
             if (unit.activateDevice(uid)) {
                 if (uid.isClassic()) {
                     M5_LOGI("Restore");
-                    M5.Speaker.tone(1000, 20);
+                    M5.Speaker.tone(2000, 20);
                     M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
                     uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;

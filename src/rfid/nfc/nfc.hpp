@@ -18,12 +18,11 @@
 namespace m5 {
 namespace rfid {
 /*!
-  @namespce nfc
-  @brief namespace for NFC
+  @namespace nfc
+  @brief For NFC
  */
 namespace nfc {
 }  // namespace nfc
-
 }  // namespace rfid
 }  // namespace m5
 #endif

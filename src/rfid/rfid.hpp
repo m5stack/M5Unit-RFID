@@ -75,11 +75,11 @@ enum class Type : uint8_t {
     MIFARE_Classic_4K,    //!< Also known as MIFARE Standard 4K
     MIFARE_UltraLight,    //!< MIFARE Ultralight
     MIFARE_UltraLightC,   //!< MIFARE UltralightC
-    MIFARE_Plus_2K,       //!< MIFARE Plus 2K
-    MIFARE_Plus_4K,       //!< MIFARE Plus 4K
-    MIFARE_DESFire_2K,    //!< MIFARE DESFire 2K
-    MIFARE_DESFire_4K,    //!< MIFARE DESFire 4K
-    MIFARE_DESFire_8K,    //!< MIFARE DESFire 8K
+    MIFARE_Plus_2K,       //!< MIFARE Plus 2K [Not supported]
+    MIFARE_Plus_4K,       //!< MIFARE Plus 4K [Not supported]
+    MIFARE_DESFire_2K,    //!< MIFARE DESFire 2K [Not supported]
+    MIFARE_DESFire_4K,    //!< MIFARE DESFire 4K [Not supported]
+    MIFARE_DESFire_8K,    //!< MIFARE DESFire 8K [Not supported]
     NTAG_203,             //!< NATG 203
     NTAG_210u,            //!< NTAG 210μ
     NTAG_210,             //!< NTAG 210
@@ -87,8 +87,8 @@ enum class Type : uint8_t {
     NTAG_213,             //!< NTAG 213
     NTAG_215,             //!< NTAG 215
     NTAG_216,             //!< NTAG 216
-    ISO_14443_4,          //!< PICC compliant with ISO/IEC 14443-4
-    ISO_18092,            //!< PICC compliant with ISO/IEC 18092 (NFC)
+    ISO_14443_4,          //!< PICC compliant with ISO/IEC 14443-4 [Not supported]
+    ISO_18092,            //!< PICC compliant with ISO/IEC 18092 (NFC) [Not supported]
     NotCompleted = 0xFF,  //!< SAK indicates UID is not complete
 };
 

@@ -26,17 +26,17 @@ namespace mfrc522 {
   @brief PCD command
 */
 enum class Command : uint8_t {
-    Idle,                //!< no action, cancels current command execution
-    Mem,                 //!< stores 25 bytes into the internal buffer
-    GenerateRandomID,    //!< generates a 10-byte random ID number
-    CalcCRC,             //!< activates the CRC coprocessor or performs a self test
-    Transmit,            //!< transmits data from the FIFO buffer
-    NoCmdChange = 0x07,  //!< no command change
-    Receive,             //!< activates the receiver circuits
-    Transceive = 0x0C,   //!< transmits data from FIFO buffer to antenna and automatically activates the receiver after
+    Idle,                //!< No action, cancels current command execution
+    Mem,                 //!< Stores 25 bytes into the internal buffer
+    GenerateRandomID,    //!< Generates a 10-byte random ID number
+    CalcCRC,             //!< Activates the CRC coprocessor or performs a self test
+    Transmit,            //!< Transmits data from the FIFO buffer
+    NoCmdChange = 0x07,  //!< No command change
+    Receive,             //!< Activates the receiver circuits
+    Transceive = 0x0C,   //!< Transmits data from FIFO buffer to antenna and automatically activates the receiver after
                          //!< transmission
-    MFAuthent = 0x0E,    //!< performs the MIFARE standard authentication as a reader
-    SoftReset,           //!< performs the MIFARE standard authentication as a reader
+    MFAuthent = 0x0E,    //!< Performs the MIFARE standard authentication as a reader
+    SoftReset,           //!< Resets the MFRC522
 };
 
 /*!
@@ -61,7 +61,7 @@ enum class ReceiverGain : uint8_t {
 enum class Error : uint8_t {
     OCCUR_COLLISION,     //!< Ccollision occurs
     UID_NOT_COLMPLETED,  //!< UID is not yet complete
-    ARGUMENT = 0x80,     //!< Error caused by arguments
+    ARGUMENT = 0x80,     //!< Error caused by arguments (0x80)
     COMMUNICATION,       //!< Error in communication (0x81)
     REGISTER,            //!< Error by error register value (0x82)
     TIMEOUT,             //!< Timeout occurs (0x83)
@@ -84,6 +84,10 @@ class UnitMFRC522 : public Component {
     M5_UNIT_COMPONENT_HPP_BUILDER(UnitMFRC522, 0x28);
 
 public:
+    /*!
+      @brief API return value
+      @note The user can treat it as if it were a bool type
+    */
     using result_t = m5::stl::expected<void, mfrc522::Error>;
 
     /*!
@@ -192,11 +196,16 @@ public:
     bool writeReceiverGain(const mfrc522::ReceiverGain gain);
     ///@}
 
+    ///@note Timer settings
     ///@name TPrescale
     ///@{
+    //! @brief Read the TPrescale
     bool readTPrescale(uint16_t& tprescale);
+    //! @brief Read the TPrescale
     bool readTPrescale(float& tprescale);
+    //! @brief Write the TPrescale
     bool writeTPrescale(const uint16_t tprescale);
+    //! @brief Write the TPrescale
     bool writeTPrescale(const float tprescale);
     ///@}
 
@@ -242,14 +251,16 @@ public:
       @note Device status changes from READY to ACTIVE
       @note Device status changes from READY* to ACTIVE*
       @note ISO14443-4 processing can be performed on devices in ACTIVE state
+      @warning Whenever an operation on an activated device is no longer required, it must be deactivated
     */
     result_t activateDevice(UID& uid);
     /*!
       @brief Deactivate device
-      @param uid target UID
+      @param uid Target UID
       @return True if successful
       @note Send HLTA command and stop crypt1
       @note Device status changes from ACTIVE to HALT
+      @note Device status changes from ACTIVE* to HALT
     */
     result_t deactivateDevice();
     ///@}

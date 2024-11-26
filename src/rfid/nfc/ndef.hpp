@@ -16,6 +16,10 @@
 namespace m5 {
 namespace rfid {
 namespace nfc {
+/*!
+  @namespace ndef
+  @brief For NDEF
+ */
 namespace ndef {
 
 /*!

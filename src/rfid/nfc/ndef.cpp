@@ -5,8 +5,7 @@
  */
 /*!
   @file ndef.cpp
-  @brief NFC related
-  @warning Only support NFC-A Type-2
+  @brief NDEF related
 */
 
 #include "ndef.hpp"
