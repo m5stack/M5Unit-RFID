@@ -72,6 +72,7 @@ enum class Type : uint8_t {
     Unknown,              //!< Unknown type
     MIFARE_Classic,       //!< Also known as MIFARE Standard mini
     MIFARE_Classic_1K,    //!< Also known as MIFARE Standard 1K
+    MIFARE_Classic_2K,    //!< Also known as MIFARE Standard 2K
     MIFARE_Classic_4K,    //!< Also known as MIFARE Standard 4K
     MIFARE_UltraLight,    //!< MIFARE Ultralight
     MIFARE_UltraLightC,   //!< MIFARE UltralightC
