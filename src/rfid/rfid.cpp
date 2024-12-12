@@ -14,6 +14,7 @@ namespace {
 constexpr char type_unknown[]       = "Unknown";
 constexpr char type_classic[]       = "MIFARE Classic";
 constexpr char type_classic_1K[]    = "MIFARE Classsic 1K";
+constexpr char type_classic_2K[]    = "MIFARE Classsic 2K";
 constexpr char type_classic_4K[]    = "MIFARE Classsic 4K";
 constexpr char type_ultra_light[]   = "MIFARE Ultralight";
 constexpr char type_ultra_light_c[] = "MIFARE UltralightC";
@@ -33,25 +34,25 @@ constexpr char type_iso14443_4[]    = "ISO14443-4";
 constexpr char type_iso18092[]      = "ISO18092";
 constexpr char type_not_completed[] = "NOT COMPLEDTED";
 constexpr const char* type_table[]  = {
-    type_unknown,                                           //
-    type_classic,     type_classic_1K,    type_classic_4K,  // Classic
-    type_ultra_light, type_ultra_light_c,                   // Light
-    type_plus_2K,     type_plus_4K,                         // Plus
-    type_desfire_2K,  type_desfire_4K,    type_desfire_8K,  // DESFire
-    type_ntag203,     type_ntag210u,      type_ntag210,     // NTAG
-    type_ntag212,     type_ntag213,       type_ntag215,     // NTAG
-    type_ntag216,                                           // NTAG
-    type_iso14443_4,  type_iso18092,                        //
+    type_unknown,                                                            //
+    type_classic,     type_classic_1K,    type_classic_2K, type_classic_4K,  // Classic
+    type_ultra_light, type_ultra_light_c,                                    // Light
+    type_plus_2K,     type_plus_4K,                                          // Plus
+    type_desfire_2K,  type_desfire_4K,    type_desfire_8K,                   // DESFire
+    type_ntag203,     type_ntag210u,      type_ntag210,                      // NTAG
+    type_ntag212,     type_ntag213,       type_ntag215,                      // NTAG
+    type_ntag216,                                                            // NTAG
+    type_iso14443_4,  type_iso18092,                                         //
 };
 
 // included system area
 constexpr uint16_t max_block_table[] = {
-    0,                               // Unknown
-    20,  64,  256,                   // Classic
-    16,  48,                         // Light
-    128, 256,                        // Plus
-    0,   0,   0,                     // DESFire (Not has blocks, File base system)
-    42,  19,  16,  40, 44, 134, 230  // NTAG
+    0,                                // Unknown
+    20,  64,  128, 256,               // Classic
+    16,  48,                          // Light
+    128, 256,                         // Plus
+    0,   0,   0,                      // DESFire (Not has blocks, File base system)
+    42,  19,  16,  40,  44, 134, 230  // NTAG
 };
 
 // [min/max]
@@ -60,6 +61,7 @@ constexpr uint8_t user_block_table[][2] = {
     // Classic
     {1, 19},
     {1, 63},
+    {0, 127},
     {0, 255},
     // Light
     {4, 15},
@@ -82,10 +84,10 @@ constexpr uint8_t user_block_table[][2] = {
 };
 
 constexpr uint8_t max_sector_table[] = {
-    0,           //
-    5,  16, 40,  // Classic
-    0,  0,       // Light
-    32, 40,      // Plus
+    0,               //
+    5,  16, 32, 40,  // Classic
+    0,  0,           // Light
+    32, 40,          // Plus
 };
 
 }  // namespace
@@ -117,14 +119,13 @@ Type get_type(const uint8_t sak)
         case 0x09:
             return Type::MIFARE_Classic;
         case 0x10:
+            return Type::MIFARE_Plus_2K;
         case 0x11:
-            return Type::MIFARE_Plus_2K;  // or 4K
+            return Type::MIFARE_Plus_4K;
         case 0x18:
             return Type::MIFARE_Classic_4K;
         case 0x19:
-            // AN10833 says Classic 2K but does not exist as a product?
-            [[fallthrough]];
-            // Fall through
+            return Type::MIFARE_Classic_2K;
         default:
             break;
     }

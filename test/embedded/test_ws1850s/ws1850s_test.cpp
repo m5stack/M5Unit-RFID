@@ -13,10 +13,10 @@
 #include <googletest/test_template.hpp>
 #include <unit/unit_WS1850S.hpp>
 #include <M5Utility.hpp>
-//#include <chrono>
-//#include <cmath>
+// #include <chrono>
+// #include <cmath>
 #include <random>
-//#include <array>
+// #include <array>
 #include <cstring>
 
 namespace {
@@ -30,7 +30,30 @@ using namespace m5::rfid;
 using namespace m5::rfid::mifare;
 using namespace m5::rfid::mifare::classic;
 
-const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixture<100 * 1000U>());
+class GlobalFixtureWS1850S : public GlobalFixture<100 * 1000U, 0> {
+public:
+    void SetUp() override
+    {
+        auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
+        auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
+
+        if (M5.getBoard() == m5::board_t::board_M5Dial) {
+            // Using inner WS1850S
+            pin_num_sda = M5.getPin(m5::pin_name_t::in_i2c_sda);
+            pin_num_scl = M5.getPin(m5::pin_name_t::in_i2c_scl);
+        }
+
+        TwoWire* w[2] = {&Wire, &Wire1};
+        if (i2cIsInit(0)) {
+            M5_LOGW("Already inititlized Wire. Terminate and restart");
+            w[0]->end();
+        }
+        w[0]->begin(pin_num_sda, pin_num_scl, 100 * 1000U);
+    }
+};
+
+// const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixture<100 * 1000U>());
+const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixtureWS1850S());
 
 class TestWS1850S : public ComponentTestBase<UnitWS1850S, bool> {
 protected:
