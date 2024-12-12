@@ -10,8 +10,8 @@
   @mainpage M5Unit-RFID
   Library for Unit-RFID using M5UnitUnified.
 */
-#ifndef M5_UNIT_UNIFIED_WEIGHT_HPP
-#define M5_UNIT_UNIFIED_WEIGHT_HPP
+#ifndef M5_UNIT_UNIFIED_RFID_HPP
+#define M5_UNIT_UNIFIED_RFID_HPP
 
 #include "rfid/rfid.hpp"
 #include "rfid/mifare.hpp"
