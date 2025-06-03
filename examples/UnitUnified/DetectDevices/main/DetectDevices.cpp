@@ -29,6 +29,7 @@ void setup()
     auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
     auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
     M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
+    Wire.end();
     Wire.begin(pin_num_sda, pin_num_scl, 100 * 1000U);
 
     if (!Units.add(unit, Wire) || !Units.begin()) {
@@ -53,7 +54,7 @@ void setup()
     lcd.clear(0);
     lcd.setCursor(8, 0);
     lcd.printf("Please put the devices...");
-    M5_LOGI("Please put the devices...");
+    M5.Log.printf("Please put the devices...\n");
 }
 
 void loop()
@@ -75,18 +76,18 @@ void loop()
     }
     // display / logging
     if (!devices.empty()) {
-        M5_LOGI(">>--------------");
+        M5.Log.printf(">>--------------\n");
         M5.Speaker.tone(1000, 20);
         lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight(), 0);
 
         uint32_t idx{1};
         for (auto&& uid : devices) {
-            M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+            M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
             lcd.setCursor(8, lcd.fontHeight() * idx);
             lcd.printf("%s:%s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
             ++idx;
         }
-        M5_LOGI("<<--------------");
+        M5.Log.printf("<<--------------\n");
     }
     m5::utility::delay(1);
 }

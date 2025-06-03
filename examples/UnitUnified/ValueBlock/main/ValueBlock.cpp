@@ -56,7 +56,7 @@ void setup()
     lcd.clear(0);
     lcd.setCursor(8, 0);
     lcd.printf("Please put the devices\n and click A or touch screen...");
-    M5_LOGI("Please put the devices\n and click A or touch screen...");
+    M5.Log.printf("Please put the devices\n and click A or touch screen...\n");
 }
 
 // Set block to normal block and also set the trailer sector block to the default value
@@ -74,7 +74,7 @@ void restore_sector_trailer(const UID& uid, const uint8_t block)
             std::memcpy(buf, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
             std::memcpy(buf + 10, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
             if (unit.writeDevice(uid, st_block, buf, 16, false)) {
-                M5_LOGI("block:%u sector trailer:%u to [001]", block, st_block);
+                M5.Log.printf("block:%u sector trailer:%u to [001]\n", block, st_block);
                 return;
             }
         }
@@ -91,7 +91,7 @@ void value_block(const UID& uid, const uint8_t block)
         return;
     }
 
-    M5_LOGI("Before[%u] ----", block);
+    M5.Log.printf("Before[%u] ----\n", block);
     unit.dumpDevice(uid, block);
 
     ////////////////////////////////
@@ -105,7 +105,7 @@ void value_block(const UID& uid, const uint8_t block)
         M5_LOGE("Failed to enable value block %02X", result.error());
         return;
     }
-    M5_LOGI("To value block ----");
+    M5.Log.printf("To value block ----\n");
     unit.dumpDevice(uid, block);
 
     // Key B authentication is required for value block increment operations
@@ -123,7 +123,7 @@ void value_block(const UID& uid, const uint8_t block)
         M5_LOGE("Failed to value block operation %02X", result.error());
         return;
     }
-    M5_LOGI("Inc/Dec ----");
+    M5.Log.printf("Inc/Dec ----\n");
     unit.dumpDevice(uid, block);
 }
 
@@ -149,12 +149,12 @@ void value_block_readonly(const UID& uid, const uint8_t block)
     result =
         result ? unit.mifareEnableValueBlock(uid, block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY,
                                              true)
-               : result;  // // Using default keyAB
+               : result;  // Using default keyAB
     if (!result) {
         M5_LOGE("Failed to enable value block %02X", result.error());
         return;
     }
-    M5_LOGI("To value block ----");
+    M5.Log.printf("To value block ----\n");
     unit.dumpDevice(uid, block);
 
     // Decrement
@@ -164,7 +164,7 @@ void value_block_readonly(const UID& uid, const uint8_t block)
         M5_LOGE("Failed to value block operation %02X", result.error());
         return;
     }
-    M5_LOGI("Dec ----");
+    M5.Log.printf("Dec ----\n");
     unit.dumpDevice(uid, block);
 }
 
@@ -183,9 +183,9 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 if (uid.isClassic()) {
-                    M5_LOGI("ValueBlock");
+                    M5.Log.printf("ValueBlock");
                     M5.Speaker.tone(1000, 20);
-                    M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                    M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
                     uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
                     if (read_only) {
@@ -208,9 +208,9 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 if (uid.isClassic()) {
-                    M5_LOGI("Restore");
+                    M5.Log.printf("Restore\n");
                     M5.Speaker.tone(2000, 20);
-                    M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                    M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
                     uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
                     restore_sector_trailer(uid, block);

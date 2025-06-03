@@ -53,7 +53,7 @@ void setup()
     lcd.clear(0);
     lcd.setCursor(8, 0);
     lcd.printf("Please put the devices\n and click A or touch screen...");
-    M5_LOGI("Please put the devices\n and click A or touch screen...");
+    M5.Log.printf("Please put the devices\n and click A or touch screen...\n");
 }
 
 void read_write_sector_structure(const UID& uid, const uint8_t block)
