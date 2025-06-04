@@ -64,7 +64,7 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 M5.Speaker.tone(1000, 20);
-                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
                 unit.dumpDevice(uid);  // Using defaukt keyA if Classic
                 unit.deactivateDevice();
             }

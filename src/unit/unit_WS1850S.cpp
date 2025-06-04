@@ -16,6 +16,7 @@ constexpr uint8_t ws1850s_firmware_version{0x15};
 }  // namespace
 
 using namespace m5::utility::mmh3;
+using namespace m5::unit::types;
 
 namespace m5 {
 namespace unit {
@@ -26,7 +27,7 @@ using namespace mfrc522::command;
 // class UnitWS1850S
 const char UnitWS1850S::name[] = "UnitWS1850S";
 const types::uid_t UnitWS1850S::uid{"UnitWS1850S"_mmh3};
-const types::uid_t UnitWS1850S::attr{0};
+const types::attr_t UnitWS1850S::attr{attribute::AccessI2C};
 
 bool UnitWS1850S::begin()
 {

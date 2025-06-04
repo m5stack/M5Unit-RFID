@@ -17,6 +17,7 @@
 
 using namespace m5::unit::mfrc522;
 using namespace m5::unit::mfrc522::command;
+using namespace m5::unit::types;
 using namespace m5::rfid;
 using namespace m5::rfid::mifare;
 using namespace m5::rfid::mifare::classic;
@@ -180,7 +181,7 @@ namespace unit {
 // class UnitMFRC522
 const char UnitMFRC522::name[] = "UnitMFRC522";
 const types::uid_t UnitMFRC522::uid{"UnitMFRC522"_mmh3};
-const types::uid_t UnitMFRC522::attr{0};
+const types::attr_t UnitMFRC522::attr{attribute::AccessI2C};
 const UnitMFRC522::MifareKey UnitMFRC522::DEFAULT_CLASSIC_KEY{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 bool UnitMFRC522::readTPrescale(uint16_t& tprescale)

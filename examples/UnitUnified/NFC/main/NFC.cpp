@@ -55,7 +55,7 @@ void setup()
     lcd.clear(0);
     lcd.setCursor(8, 0);
     lcd.printf("Please put the devices");
-    M5_LOGI("Please put the devices");
+    M5.Log.printf("Please put the devices\n");
 }
 
 void nfc_read(const UID& uid)
@@ -103,7 +103,7 @@ void nfc_read(const UID& uid)
             for (auto&& r : msg.records()) {
                 if (r.tnf() == TNF::Wellknown) {
                     auto s = r.payloadAsString().c_str();
-                    M5_LOGI("R:%u TNF:%u T:%s [%s]", r.required(), r.tnf(), r.type(), s);
+                    M5.Log.printf("R:%u TNF:%u T:%s [%s]\n", r.required(), r.tnf(), r.type(), s);
                     lcd.printf("T:%s [%s]\n", r.type(), s);
                 }
             }
@@ -150,9 +150,9 @@ void nfc_write(const UID& uid)
     if (unit.nfcWriteChangeToNTAGFormat(uid)) {
         auto result = unit.nfcWriteDevice(uid, buf, encoded);
         if (result) {
-            M5_LOGI("Write OK");
+            M5.Log.printf("Write OK\n");
         } else {
-            M5_LOGI("Write NG:%02X", result.error());
+            M5.Log.printf("Write NG:%02X\n", result.error());
         }
     } else {
         M5_LOGE("Failed to changeToNTAGFormat");
@@ -256,7 +256,7 @@ void loop()
             UID uid{};
             if (unit.activateDevice(uid)) {
                 M5.Speaker.tone(1000, 20);
-                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
                 if (uid.canNFC()) {
                     nfc_read(uid);
@@ -276,7 +276,7 @@ void loop()
             if (unit.activateDevice(uid)) {
                 if (uid.canNFC()) {
                     M5.Speaker.tone(2000, 20);
-                    M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                    M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
 
                     nfc_write(uid);
                     // nfc_write_png(uid);
