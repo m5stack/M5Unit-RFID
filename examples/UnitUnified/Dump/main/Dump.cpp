@@ -10,14 +10,19 @@
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
+#include <M5UnitUnifiedNFC.h>
+#include <M5Utility.h>
+#include <vector>
 
 namespace {
 auto& lcd = M5.Display;
 m5::unit::UnitUnified Units;
 m5::unit::UnitRFID2 unit;
+m5::unit::nfc::NFCLayerA nfc_a{unit};
+
 }  // namespace
 
-using namespace m5::rfid;
+using namespace m5::nfc::a;
 
 void setup()
 {
@@ -26,6 +31,7 @@ void setup()
     auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
     auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
     M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
+    Wire.end();
     Wire.begin(pin_num_sda, pin_num_scl, 100 * 1000U);
 
     if (!Units.add(unit, Wire) || !Units.begin()) {
@@ -47,27 +53,31 @@ void setup()
     } else {
         lcd.setFont(&fonts::Font2);
     }
-    lcd.clear(0);
-    lcd.setCursor(8, 0);
-    lcd.printf("Please put the devices...");
-    M5_LOGI("Please put the devices...");
+    lcd.fillScreen(0);
+    lcd.setCursor(0, 0);
+    lcd.printf("Please put the device and click A");
+    M5.Log.printf("Please put the device and click A\n");
 }
 
 void loop()
 {
     M5.update();
-    Units.update();
     auto touch = M5.Touch.getDetail();
+    Units.update();
 
     if (M5.BtnA.wasClicked() || touch.wasClicked()) {
-        if (unit.detectDevice()) {
-            UID uid{};
-            if (unit.activateDevice(uid)) {
-                M5.Speaker.tone(1000, 20);
-                M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
-                unit.dumpDevice(uid);  // Using defaukt keyA if Classic
-                unit.deactivateDevice();
-            }
+        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
+        std::vector<UID> devices;
+        if (nfc_a.detect(devices)) {
+            lcd.setCursor(0, lcd.fontHeight());
+            // If multiple occurrences are detected, only the first one detected
+            auto& uid = devices.front();
+            nfc_a.activate(uid);
+            M5.Log.printf("==== Dump %s %s ====\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+            nfc_a.dump();
+            nfc_a.deactivate();
+        } else {
+            M5.Log.printf("No devices\n");
         }
     }
 }

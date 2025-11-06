@@ -13,10 +13,7 @@
 #ifndef M5_UNIT_UNIFIED_RFID_HPP
 #define M5_UNIT_UNIFIED_RFID_HPP
 
-#include "rfid/rfid.hpp"
-#include "rfid/mifare.hpp"
-#include "rfid/nfc/nfc.hpp"
-
+#include <M5UnitUnifiedNFC.hpp>  // depends on M5Unit-NFC
 #include "unit/unit_MFRC522.hpp"
 #include "unit/unit_WS1850S.hpp"
 

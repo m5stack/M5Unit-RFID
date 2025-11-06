@@ -13,14 +13,97 @@
 #include <M5Utility.h>
 #include <vector>
 
+using namespace m5::nfc::a;
+using namespace m5::nfc::a::mifare;
+
 namespace {
 auto& lcd = M5.Display;
 m5::unit::UnitUnified Units;
 m5::unit::UnitRFID2 unit;
+m5::unit::nfc::NFCLayerA nfc_a{unit};
+
+//
+void read_write_sector_structure(const UID& uid, const uint8_t block, const Key& mkey = DEFAULT_CLASSIC_KEY)
+{
+    constexpr char msg[] = "M5Unit-RFID";
+
+    // Read and write access with A authentication
+    if (!nfc_a.mifareAuthenticateA(uid, block, mkey)) {
+        M5_LOGE("Failed to AuthA");
+        return;
+    }
+
+    M5.Log.printf("Before[%u] ----\n", block);
+    nfc_a.dump(uid, block);
+
+    M5.Log.printf("Write\n");
+    // Write (If less than 16 bytes, 0x00 is padded)
+    if (!nfc_a.writeBlock(block, (const uint8_t*)msg, m5::stl::size(msg))) {
+        M5_LOGE("Failed to write");
+        return;
+    }
+    M5.Log.printf("After[%u] ----\n", block);
+    nfc_a.dump(uid, block);
+
+    // Read
+    uint8_t rbuf[16]{};
+    uint16_t rlen{16};
+    if (!nfc_a.readBlock(rbuf, rlen, block)) {
+        M5_LOGE("Failed to read");
+        return;
+    }
+
+    // Verify
+    bool verify = std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)) == 0;
+    M5.Log.printf("Verify msg:[%s] %d %s\n", (const char*)rbuf, rlen, verify ? "OK" : "!!!VERIFY NG!!!");
+
+    // Clear
+    M5.Log.printf("Clear\n");
+    uint8_t c[1]{};
+    if (!nfc_a.writeBlock(block, c, 1)) {
+        M5_LOGE("Failed to write");
+        return;
+    }
+    nfc_a.dump(uid, block);
+}
+
+void read_write_page_structure(const UID& uid, const uint8_t page)
+{
+    constexpr char msg[] = "M5S";
+
+    M5.Log.printf("Before[%u] ----\n", page);
+    nfc_a.dump(uid, page);
+
+    // Write (If less than 4 bytes, 0x00 is padded)
+    if (!nfc_a.writeBlock(page, (const uint8_t*)msg, m5::stl::size(msg))) {
+        M5_LOGE("Failed to write");
+        return;
+    }
+    M5.Log.printf("After[%u] ----\n", page);
+    nfc_a.dump(uid, page);
+
+    // Read
+    uint8_t rbuf[16]{};
+    uint16_t rlen{16};
+    if (!nfc_a.readBlock(rbuf, rlen, page)) {
+        M5_LOGE("Failed to read");
+        return;
+    }
+
+    bool verify = std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)) == 0;
+    M5.Log.printf("Verify msg:[%s] %d %s\n", (const char*)rbuf, rlen, verify ? "OK" : "!!!VERIFY NG!!!");
+
+    // Clear
+    M5.Log.printf("Clear\n");
+    uint8_t c[1]{};
+    if (!nfc_a.writeBlock(page, c, 1)) {
+        M5_LOGE("Failed to write");
+        return;
+    }
+    nfc_a.dump(uid, page);
+}
 
 }  // namespace
-
-using namespace m5::rfid;
 
 void setup()
 {
@@ -28,7 +111,7 @@ void setup()
 
     auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
     auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
-    M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
+    M5.Log.printf("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
     Wire.begin(pin_num_sda, pin_num_scl, 100 * 1000U);
 
     if (!Units.add(unit, Wire) || !Units.begin()) {
@@ -39,8 +122,8 @@ void setup()
         }
     }
 
-    M5_LOGI("M5UnitUnified has been begun");
-    M5_LOGI("%s", Units.debugInfo().c_str());
+    M5.Log.printf("M5UnitUnified has been begun");
+    M5.Log.printf("%s", Units.debugInfo().c_str());
 
     if (lcd.width() < lcd.height()) {
         lcd.setRotation(1);
@@ -52,92 +135,8 @@ void setup()
     }
     lcd.clear(0);
     lcd.setCursor(8, 0);
-    lcd.printf("Please put the devices\n and click A or touch screen...");
-    M5.Log.printf("Please put the devices\n and click A or touch screen...\n");
-}
-
-void read_write_sector_structure(const UID& uid, const uint8_t block)
-{
-    constexpr char msg[] = "M5Stack";
-
-    // Auth
-    if (!unit.mifareAuthenticateA(uid, block)) {  // using default key
-        M5_LOGE("Auth error A");
-        return;
-    }
-
-    M5_LOGI("Before[%u] ----", block);
-    unit.dumpDevice(uid, block);
-
-    // Write (If less than 16 bytes, 0x00 is padded)
-    auto result = unit.writeDevice(uid, block, (const uint8_t*)msg, m5::stl::size(msg));
-    if (!result) {
-        M5_LOGE("Failed to write %02X", result.error());
-        return;
-    }
-    M5_LOGI("After[%u] ----", block);
-    unit.dumpDevice(uid, block);
-
-    // Read
-    uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
-    uint8_t rlen{18};    // Number of bytes to be read
-    result = unit.readDevice(uid, rbuf, rlen, block);
-    if (!result) {
-        M5_LOGE("Failed to read %02X", result.error());
-        return;
-    }
-
-    // Verify
-    M5_LOGI("Read msg:[%s] %d,%d", (const char*)rbuf, rlen, std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)));
-
-    // Clear
-    uint8_t c[1]{};
-    result = unit.writeDevice(uid, block, c, 1);
-    if (!result) {
-        M5_LOGE("Failed to write %02X", result.error());
-        return;
-    }
-    M5_LOGI("Clear[%u] ----", block);
-    unit.dumpDevice(uid, block);
-}
-
-void read_write_page_structure(const UID& uid, const uint8_t page)
-{
-    constexpr char msg[] = "M5S";
-
-    M5_LOGI("Before[%u] ----", page);
-    unit.dumpDevice(uid, page);
-
-    // Write (If less than 4 bytes, 0x00 is padded)
-    auto result = unit.writeDevice(uid, page, (const uint8_t*)msg, m5::stl::size(msg));
-    if (!result) {
-        M5_LOGE("Failed to write %02X", result.error());
-        return;
-    }
-    M5_LOGI("After[%u] ----", page);
-    unit.dumpDevice(uid, page);
-
-    // Read
-    uint8_t rbuf[18]{};  // Need 18bytes or greater (rbuf[16,17] re CRC)
-    uint8_t rlen{18};    // Number of bytes to be read
-    result = unit.readDevice(uid, rbuf, rlen, page);
-    if (!result) {
-        M5_LOGE("Failed to read %02X", result.error());
-        return;
-    }
-
-    // Verify
-    M5_LOGI("Read msg:[%s] %d,%d", (const char*)rbuf, rlen, std::memcmp(rbuf, (uint8_t*)msg, m5::stl::size(msg)));
-
-    // Clear
-    uint8_t c[1]{};
-    result = unit.writeDevice(uid, page, c, 1);
-    if (!result) {
-        M5_LOGE("Failed to write %02X", result.error());
-        return;
-    }
-    M5_LOGI("Clear[%u] ----", page);
-    unit.dumpDevice(uid, page);
+    lcd.printf("Please put the devices\n and click A");
+    M5.Log.printf("Please put the devices\n and click A\n");
 }
 
 void loop()
@@ -147,29 +146,28 @@ void loop()
     auto touch = M5.Touch.getDetail();
 
     if (M5.BtnA.wasClicked() || touch.wasClicked()) {
-        // Detect new devices?
-        if (unit.detectIdleDevice()) {
-            UID uid{};
-            if (unit.activateDevice(uid)) {
-                M5.Speaker.tone(1000, 20);
-                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
-                switch (uid.type) {
-                    case Type::MIFARE_Classic_1K:
-                        read_write_sector_structure(uid, 12);
-                        break;
-                    case Type::MIFARE_Classic_4K:
-                        read_write_sector_structure(uid, 12);
+        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
+        std::vector<UID> devices;
+        if (nfc_a.detect(devices)) {
+            M5.Speaker.tone(2000, 30);
+            // If multiple occurrences are detected, only the first one detected
+            auto& uid = devices.front();
+            if (nfc_a.activate(uid)) {
+                // nfc_a.dump(uid);
+                M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+                if (uid.isClassic()) {
+                    read_write_sector_structure(uid, 13);
+                    if (uid.type == Type::MIFARE_Classic_4K) {
                         read_write_sector_structure(uid, 145);
-                        break;
-                    case Type::MIFARE_UltraLight:
-                        read_write_page_structure(uid, 12);
-                        break;
-                    default:
-                        M5_LOGE("For Classic1/4K and LightC");
-                        break;
+                    }
+                } else if (uid.supportsNFC()) {
+                    read_write_page_structure(uid, 13);
+                } else {
                 }
-                unit.deactivateDevice();
+                nfc_a.deactivate();
             }
+        } else {
+            M5.Log.printf("No devices\n");
         }
     }
 }

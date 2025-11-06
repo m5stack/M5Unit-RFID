@@ -5,11 +5,12 @@
  */
 /*
   Example using M5UnitUnified for UnitRFID2
-  Detect RFID devices
+  Detect NFC-A devices
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
+#include <M5UnitUnifiedNFC.h>
 #include <M5Utility.h>
 #include <vector>
 
@@ -17,10 +18,11 @@ namespace {
 auto& lcd = M5.Display;
 m5::unit::UnitUnified Units;
 m5::unit::UnitRFID2 unit;
+m5::unit::nfc::NFCLayerA nfc_a{unit};
 
 }  // namespace
 
-using namespace m5::rfid;
+using namespace m5::nfc::a;
 
 void setup()
 {
@@ -51,43 +53,29 @@ void setup()
     } else {
         lcd.setFont(&fonts::Font2);
     }
-    lcd.clear(0);
-    lcd.setCursor(8, 0);
-    lcd.printf("Please put the devices...");
-    M5.Log.printf("Please put the devices...\n");
+    lcd.fillScreen(0);
+    lcd.setCursor(0, 0);
 }
 
 void loop()
 {
     M5.update();
+    auto touch = M5.Touch.getDetail();
     Units.update();
 
     std::vector<UID> devices;
-    // Detect new devices?
-    while (unit.detectIdleDevice()) {
-        // Store UID
-        UID uid{};
-        if (unit.activateDevice(uid)) {
-            devices.push_back(uid);
-            unit.deactivateDevice();
-        } else {
-            M5_LOGE("Failed to activate");
-        }
-    }
-    // display / logging
-    if (!devices.empty()) {
-        M5.Log.printf(">>--------------\n");
-        M5.Speaker.tone(1000, 20);
-        lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight(), 0);
-
-        uint32_t idx{1};
-        for (auto&& uid : devices) {
-            M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
-            lcd.setCursor(8, lcd.fontHeight() * idx);
-            lcd.printf("%s:%s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+    if (nfc_a.detect(devices)) {
+        M5.Speaker.tone(3000, 10);
+        lcd.fillRect(0, 0, lcd.width(), lcd.height());
+        lcd.setCursor(0, 0);
+        M5.Log.printf("Devices: %zu\n", devices.size());
+        lcd.printf("Devices: %zu\n", devices.size());
+        uint32_t idx{};
+        for (auto&& u : devices) {
+            M5.Log.printf("[%2u]:UID:<%s> %s\n", idx, u.uidAsString().c_str(), u.typeAsString().c_str());
+            lcd.printf("[%2u]:UID:<%s> %s\n", idx, u.uidAsString().c_str(), u.typeAsString().c_str());
             ++idx;
         }
-        M5.Log.printf("<<--------------\n");
+        nfc_a.deactivate();
     }
-    m5::utility::delay(1);
 }
