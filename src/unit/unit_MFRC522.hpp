@@ -22,6 +22,8 @@ struct AdapterMFRC522;  // For layer
 
 namespace mfrc522 {
 
+constexpr uint16_t MAX_FIFO_DEPTH{64};  //!< Maximum FIFO depth
+
 /*!
   @enum Command
   @brief PCD command
@@ -227,6 +229,7 @@ public:
         uint8_t vbits{};
         return picc_transceive(rx, rx_len, tx, tx_len, vbits);
     }
+
     /*!
       @brief Request for idle devices
       @param[out atqa ATQA
@@ -238,13 +241,14 @@ public:
     }
     /*!
       @brief Wakeup for idle/halt devices
-      @param[out atqa ATQA
+      @param[out] atqa ATQA
       @return True if successful
      */
     inline bool wakeup(uint16_t& atqa)
     {
         return request_wakeup(atqa, false);
     }
+
     /*!
       @brief Select device with anti-collision
       @param[out] completed Completed select device?
@@ -259,21 +263,29 @@ public:
       @return True if successful
      */
     bool select(const m5::nfc::a::UID& uid);
+
     /*!
-      @brief Read the 1 block
-      @param rx Receiver buffer
-      @param[in/out] rx_len in:Size of receive buffer out:actual read size
+      @brief Read the 1 block / 4 page (16 bytes)
+      @param rx Receiver buffer (at least 16 bytes)
       @param block Block address
       @return True if successful
      */
-    bool readBlock(uint8_t* rx, uint16_t& rx_len, const uint8_t block);
+    bool readBlock(uint8_t rx[16], const uint8_t block);
     /*!
       @brief Write the 1 block
-      @param tx Send buffer
-      @param tx_len Size of send buffer
+      @param block Block address
+      @param tx Send buffer (at least 16 bytes)
       @return True if successful
      */
-    bool writeBlock(const uint8_t block, const uint8_t* tx, const uint16_t tx_len);
+    bool writeBlock(const uint8_t block, const uint8_t tx[16]);
+    /*!
+      @brief Write the 1 page
+      @param page Page address
+      @param tx Send buffer (at least 4 bytes)
+      @return True if successful
+     */
+    bool writePage(const uint8_t page, const uint8_t tx[4]);
+
     /*!
       @brief Hlt for devices
       @return True if successful
@@ -281,115 +293,35 @@ public:
     bool hlt();
     ///@}
 
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-
-    ///@name Read/Write
-    ///@{
-    /*!
-      @brief Read data from the block for MIFARE,NTAG
-      @param uid Device UID
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @param addr block address or page address
-      @return True if successful
-      @note Since the data is read in 16-byte units, care should be taken with devices that have a page structure
-      @note Therefore, for devices with page configuration, specify an addr that is a multiple of 4
-      @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
-      @pre Requires block authentication if needed
-     */
-    bool readBlock(const m5::nfc::a::UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
-
-    /*!
-      @brief Write data to the block
-      @param uid Device UID
-      @param addr block address or page address
-      @param buf buffer
-      @param len Length of the buffer (-16)
-      @param safety Fail to write to out of the user memory area if true (safety measure)
-      @return True if successful
-      @noteg Sector structure: If the buffer is less than 16 bytes, 0x00 is padded and written
-      @note Page structure: If the buffer is less than 4 bytes, 0x00 is padded and written
-      @pre Requires block authentication if needed
-    */
-    bool writeDevice(const m5::nfc::a::UID& uid, const uint8_t addr, const uint8_t* buf, const uint8_t len0,
-                     const bool safety = true);
-
-    /*!
-      @brief Write data to the block for sector structure device
-      @param uid Device UID
-      @param block block address
-      @param buf buffer
-      @param len Length of the buffer (-16)
-      @param safety Fail to write to out of the user memory area if true (safety measure)
-      @return True if successful
-      @note If the buffer is less than 16 bytes, 0x00 is padded and written
-      @pre Requires block authentication if needed
-    */
-    bool writeDeviceBlock(const m5::nfc::a::UID& uid, const uint8_t block, const uint8_t* buf, const uint8_t len,
-                          const bool safety = true);
-    /*!
-      @brief Write data to the page for page structure device
-      @param uid Device UID
-      @param page Page address
-      @param buf buffer
-      @param len Length of the buffer
-      @param safety Fail to write to out of the user memory area if true (safety measure)
-      @return True if successful
-      @note If the buffer is less than 4 bytes, 0x00 is padded and written
-      @note If the buffer is greater than 4 bytes, overwrite next pages until maximum user memory area
-      @note Using WRITE_UL command
-    */
-    bool writeDevicePage(const m5::nfc::a::UID& uid, const uint8_t page, const uint8_t* buf, const uint32_t len,
-                         const bool safety = true);
-
-#if 0
-    /*!
-      @brief Read data from the page for NTAG21x
-      @param uid Device UID
-      @param block block address or page address
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @return True if successful
-      @note Using FAST_READ command
-     */
-    bool readDevicePage(const m5::nfc::a::UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
-#endif
-    ///@}
-
-    ///@warning Executable only on MIFARE classic devices
     ///@name MIFARE classic
     ///@{
     /*!
-      @brief Authentication by KeyA
-      @param uid Device UID
+      @brief Authentication using keyA of the specified block
+      @param uid UID
       @param block Block address
-      @param key Authentication key
+      @param key MIFARE classic key
       @return True if successful
-      @note The scope of certification is the entire sector to which the block belongs
      */
     inline bool mifareClassicAuthenticateA(
         const m5::nfc::a::UID& uid, const uint8_t block,
-        const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_CLASSIC_KEY)
+        const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_KEY)
     {
         return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_A, uid, block, key);
     }
     /*!
-      @brief Authentication by KeyB
-      @copydetails authenticateA
-    */
+      @brief Authentication using keyB of the specified block
+      @param uid UID
+      @param block Block address
+      @param key MIFARE classic key
+      @return True if successful
+     */
     inline bool mifareClassicAuthenticateB(
         const m5::nfc::a::UID& uid, const uint8_t block,
-        const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_CLASSIC_KEY)
+        const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_KEY)
     {
         return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_B, uid, block, key);
     }
+
     /*!
       @brief  Exit from authenticated state for MIFARE classic
       @return True if successful
@@ -488,14 +420,64 @@ public:
     bool mifareClassicWriteValue(const m5::nfc::a::UID& uid, const uint8_t block, const int32_t value);
     ///@}
 
-    ///@warning Executable only on page structure devices
-    ///@name NFC
+    ///@}
+
+    ///@name NTAG
+    ///@{
+    /*!
+      @brief Read between specified pages
+      @param rx Receiver buffer
+      @param[in/out] rx_len in:Size of receive buffer out:actual read size
+      @param spage Start reading page
+      @param epage End reading page
+      @return True if successful
+      @warning Only PICC supporting the FAST_READ command
+     */
+    bool ntagReadPage(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage);
+    ///@}
+
+    //////////////////////
+    /*!
+      @brief Write change to NFC-A Type-2 format
+      @return True if NTAG or NTAG format Light/C
+    */
+    bool nfcWriteChangeToNTAGFormat(const m5::nfc::a::UID& uid);
 
     /*!
-
+      @brief Read and calculation of required size
+      @param uid Device UID
+      @patam[out] len Required length
+      @return True if successful
      */
-    bool ntagGetVersion(uint8_t info[10]);
+    bool nfcReadRequiredSize(const m5::nfc::a::UID& uid, uint32_t& len);
+    /*!
+      @brief Read the NFC NDEF message
+      @param uid Device UID
+      @param buf[out] Buffer in NDEF Message or NDEF Record format
+      @param blen[in,out] in: Buffer length out:Read length
+      @return True if successful or NTAG device
+     */
 
+
+    
+#if 0
+
+    
+#if 0
+    /*!
+      @brief Read data from the page for NTAG21x
+      @param uid Device UID
+      @param block block address or page address
+      @param[out] rbuf The buffer to store
+      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
+      @return True if successful
+      @note Using FAST_READ command
+     */
+    bool readDevicePage(const m5::nfc::a::UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
+#endif
+    ///@}
+
+    ///@name NTAG
     /*!
       @brief Write change to NFC-A Type-2 format
       @return True if NTAG or NTAG format Light/C
@@ -528,6 +510,7 @@ public:
      */
     bool nfcWriteDevice(const m5::nfc::a::UID& uid, const uint8_t* buf, const uint32_t blen);
     ///@}
+#endif
 
 protected:
     // register operation
@@ -565,6 +548,7 @@ protected:
     bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
 
     // NTAG
+    bool ntag_get_version(uint8_t info[10]);
     bool ntag_check_format(const m5::nfc::a::UID& uid);
     bool ntag_fast_read(uint8_t* rbuf, uint16_t& rlen, const uint8_t saddr, const uint8_t eaddr);
     bool ntag_calclate_ndef_message_size(const m5::nfc::a::UID& uid, uint32_t& sz, const uint8_t targetTagBit = 0x06);

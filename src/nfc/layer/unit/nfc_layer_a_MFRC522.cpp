@@ -28,6 +28,11 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
     {
     }
 
+    inline virtual uint16_t max_fifo_depth() override
+    {
+        return m5::unit::mfrc522::MAX_FIFO_DEPTH;
+    }
+
     virtual bool request(uint16_t& atqa) override;
     virtual bool wakeup(uint16_t& atqa) override;
 
@@ -35,24 +40,15 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
     virtual bool activate(const m5::nfc::a::UID& uid) override;
     virtual bool deactivate() override;
 
-    virtual bool nfca_transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
-                                 const uint32_t timeout_ms) override;
-    virtual bool nfca_read_block(uint8_t* rx, uint16_t& rx_len, const uint16_t addr) override;
-    virtual bool nfca_write_block(const uint16_t addr, const uint8_t* tx, const uint16_t tx_len) override;
+    virtual bool nfca_read_block(uint8_t rx[16], const uint8_t addr) override;         // READ
+    virtual bool nfca_write_block(const uint8_t addr, const uint8_t tx[16]) override;  // WRITE_BLOCK
+    virtual bool nfca_write_page(const uint8_t addr, const uint8_t tx[4]) override;    // WRITE_PAGE
 
     virtual bool mifare_classic_authenticate(const bool auth_a, const m5::nfc::a::UID& uid, const uint8_t block,
                                              const m5::nfc::a::mifare::classic::Key& key) override;
-    inline virtual bool mifare_classic_read_block(uint8_t* rx, uint16_t& rx_len, const uint16_t addr) override
-    {
-        return nfca_read_block(rx, rx_len, addr);
-    }
-    inline virtual bool mifare_classic_write_block(const uint16_t addr, const uint8_t* tx,
-                                                   const uint16_t tx_len) override
-    {
-        return nfca_write_block(addr, tx, tx_len);
-    }
 
-    virtual bool ntag_get_version(uint8_t info[10]) override;
+    virtual bool ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage,
+                                const uint8_t epage) override;  // FAST_READ
 
     UnitMFRC522& _u;
 };
@@ -91,8 +87,11 @@ bool AdapterMFRC522::deactivate()
     return _u.hlt() && _u.mifareClassicStopCrypto1();
 }
 
-bool AdapterMFRC522::nfca_read_block(uint8_t* rx, uint16_t& rx_len, const uint16_t addr)
+bool AdapterMFRC522::nfca_read_block(uint8_t rx[16], const uint8_t addr)
 {
+    return _u.readBlock(rx, addr);
+
+#if 0    
     uint8_t tmp[rx_len + 2 /* CRC */]{};
     uint16_t tmp_len = rx_len + 2;
     if (_u.readBlock(tmp, tmp_len, addr) && tmp_len > 2) {
@@ -101,19 +100,17 @@ bool AdapterMFRC522::nfca_read_block(uint8_t* rx, uint16_t& rx_len, const uint16
         return true;
     }
     return false;
+#endif
 }
 
-bool AdapterMFRC522::nfca_write_block(const uint16_t addr, const uint8_t* tx, const uint16_t tx_len)
+bool AdapterMFRC522::nfca_write_block(const uint8_t addr, const uint8_t tx[16])
 {
-    //    return _u.writeBlock(addr, tx, tx_len);
-    return false;
+    return _u.writeBlock(addr, tx);
 }
 
-bool AdapterMFRC522::nfca_transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
-                                     const uint32_t timeout_ms)
+bool AdapterMFRC522::nfca_write_page(const uint8_t addr, const uint8_t tx[4])
 {
-    //    return _u.transceive(rx, rx_len, tx, tx_len, timeout_ms);
-    return false;
+    return _u.writePage(addr, tx);
 }
 
 bool AdapterMFRC522::mifare_classic_authenticate(const bool auth_a, const UID& uid, const uint8_t block, const Key& key)
@@ -121,9 +118,9 @@ bool AdapterMFRC522::mifare_classic_authenticate(const bool auth_a, const UID& u
     return auth_a ? _u.mifareClassicAuthenticateA(uid, block, key) : _u.mifareClassicAuthenticateB(uid, block, key);
 }
 
-bool AdapterMFRC522::ntag_get_version(uint8_t info[10])
+bool AdapterMFRC522::ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage)
 {
-    return _u.ntagGetVersion(info);
+    return _u.ntagReadPage(rx, rx_len, spage, epage);
 }
 
 //

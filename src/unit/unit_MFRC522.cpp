@@ -495,19 +495,32 @@ bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::UID& uid,
     std::memcpy(uid.uid + (lv - 1) * 3, buf + 2 + (buf[2] == CASCADE_TAG), 4 - (buf[2] == CASCADE_TAG));
 
     // Completed?
-    if ((rbuf[0] & 0x04) == 0) {
-        uid.size = 1 + lv * 3;
-        uid.sak  = rbuf[0];
-        //        uid.type   = get_type(rbuf[0]);
-        //        uid.blocks = get_number_of_blocks(uid.type);
+    const uint8_t sak = rbuf[0];
+    if (is_sak_completed(sak)) {
         completed = true;
+        uid.size  = 1 + lv * 3;
+        uid.sak   = sak;
+        uid.type = sak_to_type(sak);  // WARNING: This is a preliminary diagnosis; a more accurate diagnosis is required
+        uid.blocks = get_number_of_blocks(uid.type);
+        // More check for type
+        if (uid.type == Type::MIFARE_Ultralight) {
+            uint8_t ver[10]{};
+            if (ntag_get_version(ver)) {
+                uid.type   = version_to_type(ver);
+                uid.blocks = get_number_of_blocks(uid.type);
+            } else {
+                // PICC to IDLE... so need reactivate
+                uint16_t discard{};
+                completed = request(discard) && select(uid);
+            }
+        }
     }
-    return true;
+    return completed || has_sak_dependent_bit(sak);  // completed or continue
 }
 
 bool UnitMFRC522::select(const UID& uid)
 {
-    if (!(uid.size == 4 || uid.size == 7 || uid.size == 10)) {
+    if (!uid.valid()) {
         return false;
     }
 
@@ -545,6 +558,76 @@ bool UnitMFRC522::select(const UID& uid)
     return completed;
 }
 
+bool UnitMFRC522::readBlock(uint8_t* rbuf, const uint8_t addr)
+{
+    if (!rbuf) {
+        return false;
+    }
+
+    uint8_t cmd[4]{m5::stl::to_underlying(m5::nfc::a::Command::READ), addr};
+    uint16_t crc{};
+    uint8_t txLast{0};
+    if (!calculate_crc(crc, cmd, 2)) {
+        return false;
+    }
+    cmd[2] = crc & 0xFF;
+    cmd[3] = (crc >> 8) & 0xFF;
+
+    uint8_t tmp[16 + 2 /*CRC*/]{};
+    uint16_t rlen = sizeof(tmp);
+    if (picc_transceive(tmp, rlen, cmd, m5::stl::size(cmd), txLast, 0, true /* return with CRC*/) && rlen == 18) {
+        memcpy(rbuf, tmp, 16);
+        return true;
+    }
+    return false;
+}
+
+bool UnitMFRC522::writeBlock(const uint8_t block, const uint8_t tx[16])
+{
+    if (!tx) {
+        return false;
+    }
+    uint8_t cmd[2]{m5::stl::to_underlying(m5::nfc::a::Command::WRITE_BLOCK), block};
+    return mifare_classic_transceive(cmd, 2) && mifare_classic_transceive(tx, 16);
+}
+
+bool UnitMFRC522::writePage(const uint8_t page, const uint8_t tx[4])
+{
+    if (!tx) {
+        return false;
+    }
+    uint8_t cmd[6]{m5::stl::to_underlying(m5::nfc::a::Command::WRITE_PAGE), page};
+    std::memcpy(cmd + 2, tx, 4);
+    return mifare_classic_transceive(cmd, m5::stl::size(cmd));
+}
+
+bool UnitMFRC522::ntagReadPage(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage)
+{
+    if (!rx || !rx_len) {
+        return false;
+    }
+
+    uint8_t cmd[5]{m5::stl::to_underlying(m5::nfc::a::Command::FAST_READ), spage, epage};
+    uint8_t validBits{};
+    uint16_t crc{};
+    if (!calculate_crc(crc, cmd, 3)) {
+        return false;
+    }
+    cmd[3] = crc & 0xFF;
+    cmd[4] = (crc >> 8) & 0xFF;
+
+    uint8_t tmp[rx_len + 2 /*CRC*/]{};
+    uint16_t rlen = sizeof(tmp);
+    if (picc_transceive(tmp, rlen, cmd, sizeof(cmd), validBits, 0, true) && rlen == rx_len + 2) {
+        memcpy(rx, tmp, std::min<uint16_t>(rx_len, rlen));
+        return true;
+    }
+
+    M5_LIB_LOGE("ERROR:%u", rlen);
+
+    return false;
+}
+
 bool UnitMFRC522::hlt()
 {
     uint8_t buf[4]{}, txLast{};
@@ -564,307 +647,6 @@ bool UnitMFRC522::hlt()
         M5_LIB_LOGD("Timeout");
     }
     return false;
-}
-
-//
-bool UnitMFRC522::set_register_bit(const uint8_t reg, const uint8_t bit)
-{
-    uint8_t v{};
-    return readRegister8(reg, v, 0) && writeRegister8(reg, v | bit);
-}
-
-bool UnitMFRC522::clear_register_bit(const uint8_t reg, const uint8_t bit)
-{
-    uint8_t v{};
-    return readRegister8(reg, v, 0) && writeRegister8(reg, v & ~bit);
-}
-
-// Read values from register with alignment
-// Update buf[0] with first data if align is not zero
-bool UnitMFRC522::read_register_with_align(const uint8_t reg, uint8_t* rwbuf, const uint8_t len, const uint8_t align)
-{
-    uint8_t lead = rwbuf[0];
-    if (readRegister(reg, rwbuf, len, 0)) {
-        if (align) {
-            uint8_t mask = 0xFF << align;
-            rwbuf[0]     = (lead & ~mask) | (rwbuf[0] & mask);
-        }
-        return true;
-    }
-    return false;
-}
-
-bool UnitMFRC522::write_pcd_command(const mfrc522::Command cmd)
-{
-    return writeRegister8(COM_IRQ_REG, 0x7F) &&
-           writeRegister8(mfrc522::command::COMMAND_REG, m5::stl::to_underlying(cmd) & 0x0F);
-    //    return writeRegister8(mfrc522::command::COMMAND_REG, m5::stl::to_underlying(cmd) & 0x0F);
-}
-
-bool UnitMFRC522::reset_baud_rates()
-{
-    return writeRegister8(TX_MODE_REG, 0x00) &&  // TxSpped 106kBd
-           writeRegister8(RX_MODE_REG, 0x00) &&  // RxSpeed 106kBd
-           writeRegister8(MOD_WIDTH_REG, 0x26);  //
-}
-
-bool UnitMFRC522::flush_fifo_buffer()
-{
-    return writeRegister8(FIFO_LEVEL_REG, 0x80);
-}
-
-bool UnitMFRC522::wait_comm_irq(const uint8_t irq, const uint32_t duration)
-{
-    uint8_t v{};
-    auto timeout_at = m5::utility::millis() + duration;
-    do {
-        if (readRegister8(COM_IRQ_REG, v, 0)) {
-            if (v & irq) {
-                return true;
-            }
-            if (v & 0x01) {  // occurs timeout or error
-                return false;
-            }
-        }
-        std::this_thread::yield();
-    } while (m5::utility::millis() <= timeout_at);
-    return false;
-}
-
-bool UnitMFRC522::wait_div_irq(const uint8_t irq, const uint32_t duration)
-{
-    uint8_t v{};
-    auto timeout_at = m5::utility::millis() + duration;
-    do {
-        readRegister8(DIV_IRQ_REG, v, 0);
-        if (v & irq) {
-            return true;
-        }
-        std::this_thread::yield();
-    } while (m5::utility::millis() <= timeout_at);
-    return false;
-}
-
-bool UnitMFRC522::picc_send(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast,
-                            const uint8_t rxAlign)
-{
-    if (!buf || !len) {
-        return false;
-    }
-    // bitframeing value RxAlign [6:4] TxLastBits [2:0]
-    uint8_t bfvalue = ((rxAlign & 0x07) << 4) | (txLast & 0x07);
-
-    // Execute transceive command
-    if (!write_pcd_command(mfrc522::Command::Idle) ||  // Force stop of running commands
-        !writeRegister8(COM_IRQ_REG, 0x7F) ||          // Clear interrupt request bits
-        !flush_fifo_buffer() ||                        // Flush FIFO
-        !writeRegister8(BIT_FRAMING_REG, bfvalue) ||   // Adjustments for bit-oriented frames
-        !writeRegister(FIFO_DATA_REG, buf, len) ||     // Write data to FIFO with adjustment (Not started)
-        !write_pcd_command(cmd) ||                     // Execute command
-        !set_register_bit(BIT_FRAMING_REG, 0x80)       // StartSend:7 Start the transmission
-    ) {
-        M5_LIB_LOGE("Failed to send");
-        return false;
-    }
-    return true;
-}
-
-bool UnitMFRC522::picc_transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len,
-                                  uint8_t& validBits, const uint8_t rxAlign, const bool crc, uint8_t* error)
-{
-    if (!rbuf || !rlen || !buf || !len) {
-        return false;
-    }
-    if (error) {
-        *error = 0;
-    }
-
-    M5_LIB_LOGV(">>txLast:%u rxAlign:%u", validBits, rxAlign);
-    if (!picc_send(mfrc522::Command::Transceive, buf, len, validBits, rxAlign)) {
-        return false;
-    }
-
-    // Wait for command completion (timeout 36ms)
-    if (!wait_comm_irq(RxIRq | IdleIRq, 36)) {
-        M5_LIB_LOGD("Timeout");
-        if (error) {
-            *error = ERROR_BIT_TIMEOUT;
-        }
-        return false;
-    }
-
-    uint8_t err{};
-    if (!readRegister8(ERROR_REG, err, 0)) {
-        return false;
-    }
-    if (error) {
-        *error = err;
-    }
-
-    // Check error
-    if (!has_collision(err) && (err & (ERROR_BIT_OVERFLOW | ERROR_BIT_PARITY | ERROR_BIT_PROTOCOL))) {
-        M5_LIB_LOGE("Error:%02X", err);
-        return false;
-    }
-
-    // Read FIFO
-    uint8_t fifo_len{};
-    uint8_t valid{};
-    if (!readRegister8(FIFO_LEVEL_REG, fifo_len, 0)) {
-        return false;
-    }
-    M5_LIB_LOGV("- Recv:%u", fifo_len);
-    if (fifo_len > rlen) {
-        M5_LIB_LOGE("Not enough rlen %zu : %u", rlen, fifo_len);
-        return false;
-    }
-    if (!read_register_with_align(FIFO_DATA_REG, rbuf, fifo_len, rxAlign) ||
-        // indicates the number of valid bits in the last received byte if this value is 000b, the whole byte is
-        // valid
-        !readRegister8(CONTROL_REG, valid, 0)) {
-        return false;
-    }
-    valid &= 0x07;
-    validBits = valid;  // It's indicates the number of valid bits in the last received
-
-    // Check collision
-    if (has_collision(err)) {
-        return false;
-    }
-
-    // CRC
-    if (crc) {
-        if (fifo_len == 1 && valid == 4) {
-            M5_LIB_LOGE("NG MIFARE Classic NAK %02X", rbuf[0]);
-            return false;
-        }
-        if (fifo_len < 2 || valid) {
-            M5_LIB_LOGE("Not in a condition to calculate CRC %u/%u", fifo_len, valid);
-            return false;
-        }
-
-        uint16_t crc16{};
-        if (!calculate_crc(crc16, rbuf, fifo_len - 2) || ((crc16 >> 8) & 0XFF) == rbuf[fifo_len - 2] ||
-            (crc16 & 0xFF) == rbuf[fifo_len - 1]) {
-            return false;
-        }
-    }
-
-    rlen = fifo_len;
-    M5_LIB_LOGV("<<rxLast:%u", validBits);
-    return true;
-}
-
-// Read/Write
-#if 0
-bool UnitMFRC522::readDevice(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t addr)
-{
-    uint8_t raddr = addr;
-    if (uid.supportsNFC()) {  // page structure?
-        raddr &= ~0x03;
-    }
-    return read_block(rbuf, rlen, raddr);
-}
-#endif
-
-bool UnitMFRC522::readBlock(uint8_t* rbuf, uint16_t& rlen, const uint8_t addr)
-{
-    if (!rbuf || rlen < 18) {
-        return false;
-    }
-
-    uint8_t cmd[4]{m5::stl::to_underlying(m5::nfc::a::Command::READ), addr};
-    uint16_t crc{};
-    uint8_t txLast{0};
-    if (!calculate_crc(crc, cmd, 2)) {
-        return false;
-    }
-    cmd[2] = crc & 0xFF;
-    cmd[3] = (crc >> 8) & 0xFF;
-
-    return picc_transceive(rbuf, rlen, cmd, m5::stl::size(cmd), txLast, 0, true /* return with CRC*/);
-}
-
-bool UnitMFRC522::writeDevice(const UID& uid, const uint8_t addr, const uint8_t* buf, const uint8_t len,
-                              const bool safety)
-{
-    if (uid.supportsNFC()) {
-        return writeDevicePage(uid, addr, buf, len, safety);
-    }
-    return writeDeviceBlock(uid, addr, buf, len, safety);
-}
-
-bool UnitMFRC522::writeDeviceBlock(const UID& uid, const uint8_t block, const uint8_t* buf, const uint8_t len,
-                                   const bool safety)
-{
-    if (safety && (is_sector_trailer_block(block) || block < get_first_user_block(uid.type) ||
-                   block > get_last_user_block(uid.type))) {
-        M5_LIB_LOGW("Write has been rejected due to safety %u", block);
-        return false;
-    }
-    if (block >= uid.blocks) {
-        return false;
-    }
-    return write_block(block, buf, len);
-}
-
-bool UnitMFRC522::write_block(const uint8_t block, const uint8_t* buf, const uint8_t len)
-{
-    if (!buf || !len || len > 16) {
-        return false;
-    }
-
-    // Write in units of 16 bytes
-    std::array<uint8_t, 16> wbuf{};
-    std::memcpy(wbuf.data(), buf, len);
-
-    uint8_t cmd[2]{m5::stl::to_underlying(m5::nfc::a::Command::WRITE), block};
-    return mifare_classic_transceive(cmd, 2) && mifare_classic_transceive(wbuf.data(), wbuf.size());
-}
-
-bool UnitMFRC522::writeDevicePage(const UID& uid, const uint8_t page, const uint8_t* buf, const uint32_t len,
-                                  const bool safety)
-{
-    if (!buf || !len) {
-        return false;
-    }
-    if (safety && (page < get_first_user_block(uid.type) || page > get_last_user_block(uid.type))) {
-        M5_LIB_LOGW("Write has been rejected due to safety %u", page);
-        return false;
-    }
-
-    if (len <= 4) {
-        return write_page(page, buf, len);
-    }
-
-    int16_t pages = (len + 3) / 4;
-    if (page + pages > uid.blocks) {
-        M5_LIB_LOGE("Not enough page");
-        return false;
-    }
-
-    uint8_t current = page;
-    uint32_t remain = len;
-    while (pages--) {
-        auto clen = (remain > 4) ? 4 : remain;
-        if (!write_page(current, buf, clen)) {
-            return false;
-        }
-        ++current;
-        buf += clen;
-        remain -= clen;
-    }
-    return true;
-}
-
-bool UnitMFRC522::write_page(const uint8_t page, const uint8_t* buf, const uint8_t len)
-{
-    if (!buf || len > 4) {
-        return false;
-    }
-    uint8_t cmd[6]{m5::stl::to_underlying(m5::nfc::a::Command::WRITE_UL), page};
-    std::memcpy(cmd + 2, buf, len);
-    return mifare_classic_transceive(cmd, m5::stl::size(cmd));
 }
 
 // MIFARE
@@ -1019,35 +801,14 @@ bool UnitMFRC522::mifareClassicWriteValue(const UID& uid, const uint8_t block, c
 }
 
 // NFC
-
-bool UnitMFRC522::ntagGetVersion(uint8_t info[10])
-{
-    uint8_t cmd[3]{m5::stl::to_underlying(m5::nfc::a::Command::GET_VERSION)};
-    uint16_t crc{};
-
-    if (!info) {
-        return false;
-    }
-
-    if (!calculate_crc(crc, cmd, 1)) {
-        return false;
-    }
-    cmd[1] = crc & 0xFF;
-    cmd[2] = (crc >> 8) & 0xFF;
-
-    uint8_t validBits{};
-    uint16_t rlen{10};
-    return picc_transceive(info, rlen, cmd, m5::stl::size(cmd), validBits, 0, true);
-}
-
 bool UnitMFRC522::nfcWriteChangeToNTAGFormat(const UID& uid)
 {
-    if (uid.type == Type::MIFARE_UltraLight || uid.type == Type::MIFARE_UltraLightC) {
+    if (uid.type == Type::MIFARE_Ultralight || uid.type == Type::MIFARE_UltralightC) {
         if (ntag_check_format(uid)) {
             return true;  // Already NFC-A compatible
         }
         uint8_t buf[4] = {NFC_MAGIC_NO, NFC_VERSION};
-        buf[3]         = (uid.type == Type::MIFARE_UltraLight) ? 0x06 : 0x18;
+        buf[3]         = (uid.type == Type::MIFARE_Ultralight) ? 0x06 : 0x18;
         return write_page(3 /*OTP area*/, buf, 4);
     }
     if (uid.supportsNFC()) {
@@ -1131,29 +892,6 @@ bool UnitMFRC522::ntag_calclate_ndef_message_size(const UID& uid, uint32_t& sz, 
     return {};
 }
 
-bool UnitMFRC522::nfcReadDevice(const UID& uid, uint8_t* buf, uint32_t& len)
-{
-    uint8_t page   = get_first_user_block(uid.type);
-    uint8_t page16 = (len - 2) / 16;
-
-    if (!buf || len < page16 * 16 + 2 || !uid.supportsNFC()) {
-        return false;
-    }
-
-    len = 0;
-    while (page16--) {
-        uint8_t rlen{18};
-        if (!read_block(buf, rlen, page)) {
-            return false;
-        }
-        buf += 16;  // Overwrite prev CRC space
-        page += 4;
-        len += 16;
-    }
-    len += 2;  // last CRC
-    return true;
-}
-
 bool UnitMFRC522::nfcReadRequiredSize(const UID& uid, uint32_t& len)
 {
     len = 0;
@@ -1162,60 +900,6 @@ bool UnitMFRC522::nfcReadRequiredSize(const UID& uid, uint32_t& len)
         return true;
     }
     return false;
-}
-
-bool UnitMFRC522::nfcWriteDevice(const UID& uid, const uint8_t* buf, const uint32_t blen)
-{
-    if (!uid.supportsNFC()) {
-        return false;
-    }
-
-    uint8_t page{}, offset{};
-    page = get_first_user_block(uid.type);
-
-    // UltraLight/C
-    if (!uid.isNTAG()) {
-        return writeDevicePage(uid, page, buf, blen);
-    }
-
-    // NTAG 2xx
-    // There may be information at the begin of the user area that should not be deleted
-    // e.g. NTAG212, 213 LockCOntrol
-    uint32_t sz{};
-    if (!ntag_calclate_ndef_message_size(uid, sz)) {
-        return false;
-    }
-    page += sz / 4;
-    offset = sz & 0x03;
-
-    // M5_LIB_LOGW("Writable:%u:%u", page, offset);
-
-    if (offset == 0) {
-        return writeDevicePage(uid, page, buf, blen);
-    }
-
-    // Write new messages in a concatenated manner while maintaining existing messages
-    uint8_t rbuf[18]{};
-    uint8_t rlen{18};
-    if (!read_block(rbuf, rlen, page & ~0x03)) {
-        M5_LIB_LOGE("Failed to read");
-        return false;
-    }
-
-    uint8_t* ptr = (uint8_t*)malloc(16 + blen);
-    if (!ptr) {
-        return false;
-    }
-    std::memcpy(ptr, &rbuf[(page & 0x03) * 4], offset);
-    std::memcpy(ptr + offset, buf, blen);
-    uint32_t nlen = offset + blen;
-
-    // M5_DUMPI(ptr, nlen);
-
-    auto result = writeDevicePage(uid, page, ptr, nlen);
-    free(ptr);
-
-    return result;
 }
 
 //
@@ -1369,6 +1053,22 @@ bool UnitMFRC522::self_test()
     return firm && (*firm == buf);
 }
 
+bool UnitMFRC522::ntag_get_version(uint8_t info[10])
+{
+    uint8_t cmd[3]{m5::stl::to_underlying(m5::nfc::a::Command::GET_VERSION)};
+    uint16_t crc{};
+
+    if (!info || !calculate_crc(crc, cmd, 1)) {
+        return false;
+    }
+    cmd[1] = crc & 0xFF;
+    cmd[2] = (crc >> 8) & 0xFF;
+
+    uint8_t validBits{};
+    uint16_t rlen{10};
+    return picc_transceive(info, rlen, cmd, m5::stl::size(cmd), validBits, 0, true);
+}
+
 bool UnitMFRC522::ntag_check_format(const UID& uid)
 {
     if (uid.supportsNFC()) {
@@ -1378,6 +1078,7 @@ bool UnitMFRC522::ntag_check_format(const UID& uid)
     }
     return false;
 }
+
 bool UnitMFRC522::ntag_fast_read(uint8_t* rbuf, uint16_t& rlen, const uint8_t saddr, const uint8_t eaddr)
 {
     // M5_LIB_LOGW(">>>> S:%u E:%u rlen:%u", saddr, eaddr, rlen);
@@ -1390,7 +1091,197 @@ bool UnitMFRC522::ntag_fast_read(uint8_t* rbuf, uint16_t& rlen, const uint8_t sa
     }
     cmd[3] = crc & 0xFF;
     cmd[4] = (crc >> 8) & 0xFF;
-    return picc_transceive(rbuf, rlen, cmd, 5, validBits, 0, true);
+    return picc_transceive(rbuf, rlen, cmd, sizeof(cmd), validBits, 0, true);
+}
+
+//
+bool UnitMFRC522::set_register_bit(const uint8_t reg, const uint8_t bit)
+{
+    uint8_t v{};
+    return readRegister8(reg, v, 0) && writeRegister8(reg, v | bit);
+}
+
+bool UnitMFRC522::clear_register_bit(const uint8_t reg, const uint8_t bit)
+{
+    uint8_t v{};
+    return readRegister8(reg, v, 0) && writeRegister8(reg, v & ~bit);
+}
+
+// Read values from register with alignment
+// Update buf[0] with first data if align is not zero
+bool UnitMFRC522::read_register_with_align(const uint8_t reg, uint8_t* rwbuf, const uint8_t len, const uint8_t align)
+{
+    uint8_t lead = rwbuf[0];
+    if (readRegister(reg, rwbuf, len, 0)) {
+        if (align) {
+            uint8_t mask = 0xFF << align;
+            rwbuf[0]     = (lead & ~mask) | (rwbuf[0] & mask);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool UnitMFRC522::write_pcd_command(const mfrc522::Command cmd)
+{
+    return writeRegister8(COM_IRQ_REG, 0x7F) &&
+           writeRegister8(mfrc522::command::COMMAND_REG, m5::stl::to_underlying(cmd) & 0x0F);
+    //    return writeRegister8(mfrc522::command::COMMAND_REG, m5::stl::to_underlying(cmd) & 0x0F);
+}
+
+bool UnitMFRC522::reset_baud_rates()
+{
+    return writeRegister8(TX_MODE_REG, 0x00) &&  // TxSpped 106kBd
+           writeRegister8(RX_MODE_REG, 0x00) &&  // RxSpeed 106kBd
+           writeRegister8(MOD_WIDTH_REG, 0x26);  //
+}
+
+bool UnitMFRC522::flush_fifo_buffer()
+{
+    return writeRegister8(FIFO_LEVEL_REG, 0x80);
+}
+
+bool UnitMFRC522::wait_comm_irq(const uint8_t irq, const uint32_t duration)
+{
+    uint8_t v{};
+    auto timeout_at = m5::utility::millis() + duration;
+    do {
+        if (readRegister8(COM_IRQ_REG, v, 0)) {
+            if (v & irq) {
+                return true;
+            }
+            if (v & 0x01) {  // occurs timeout or error
+                return false;
+            }
+        }
+        std::this_thread::yield();
+    } while (m5::utility::millis() <= timeout_at);
+    return false;
+}
+
+bool UnitMFRC522::wait_div_irq(const uint8_t irq, const uint32_t duration)
+{
+    uint8_t v{};
+    auto timeout_at = m5::utility::millis() + duration;
+    do {
+        readRegister8(DIV_IRQ_REG, v, 0);
+        if (v & irq) {
+            return true;
+        }
+        std::this_thread::yield();
+    } while (m5::utility::millis() <= timeout_at);
+    return false;
+}
+
+bool UnitMFRC522::picc_send(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast,
+                            const uint8_t rxAlign)
+{
+    if (!buf || !len) {
+        return false;
+    }
+    // bitframeing value RxAlign [6:4] TxLastBits [2:0]
+    uint8_t bfvalue = ((rxAlign & 0x07) << 4) | (txLast & 0x07);
+
+    // Execute transceive command
+    if (!write_pcd_command(mfrc522::Command::Idle) ||  // Force stop of running commands
+        !writeRegister8(COM_IRQ_REG, 0x7F) ||          // Clear interrupt request bits
+        !flush_fifo_buffer() ||                        // Flush FIFO
+        !writeRegister8(BIT_FRAMING_REG, bfvalue) ||   // Adjustments for bit-oriented frames
+        !writeRegister(FIFO_DATA_REG, buf, len) ||     // Write data to FIFO with adjustment (Not started)
+        !write_pcd_command(cmd) ||                     // Execute command
+        !set_register_bit(BIT_FRAMING_REG, 0x80)       // StartSend:7 Start the transmission
+    ) {
+        M5_LIB_LOGE("Failed to send");
+        return false;
+    }
+    return true;
+}
+
+bool UnitMFRC522::picc_transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len,
+                                  uint8_t& validBits, const uint8_t rxAlign, const bool crc, uint8_t* error)
+{
+    if (!rbuf || !rlen || !buf || !len) {
+        return false;
+    }
+    if (error) {
+        *error = 0;
+    }
+
+    M5_LIB_LOGV("txLast:%u rxAlign:%u", validBits, rxAlign);
+    if (!picc_send(mfrc522::Command::Transceive, buf, len, validBits, rxAlign)) {
+        return false;
+    }
+
+    // Wait for command completion (timeout 36ms)
+    if (!wait_comm_irq(RxIRq | IdleIRq, 36)) {
+        M5_LIB_LOGD("Timeout");
+        if (error) {
+            *error = ERROR_BIT_TIMEOUT;
+        }
+        return false;
+    }
+
+    uint8_t err{};
+    if (!readRegister8(ERROR_REG, err, 0)) {
+        return false;
+    }
+    if (error) {
+        *error = err;
+    }
+
+    // Check error
+    if (!has_collision(err) && (err & (ERROR_BIT_OVERFLOW | ERROR_BIT_PARITY | ERROR_BIT_PROTOCOL))) {
+        M5_LIB_LOGE("ERROR %02X", err);
+        return false;
+    }
+
+    // Read FIFO
+    uint8_t fifo_len{};
+    uint8_t valid{};
+    if (!readRegister8(FIFO_LEVEL_REG, fifo_len, 0)) {
+        return false;
+    }
+    M5_LIB_LOGV("- Recv:%u", fifo_len);
+    if (fifo_len > rlen) {
+        M5_LIB_LOGE("Not enough rlen %zu : %u", rlen, fifo_len);
+        return false;
+    }
+    if (!read_register_with_align(FIFO_DATA_REG, rbuf, fifo_len, rxAlign) ||
+        // indicates the number of valid bits in the last received byte if this value is 000b, the whole byte is
+        // valid
+        !readRegister8(CONTROL_REG, valid, 0)) {
+        return false;
+    }
+    valid &= 0x07;
+    validBits = valid;  // It's indicates the number of valid bits in the last received
+
+    // Check collision
+    if (has_collision(err)) {
+        return false;
+    }
+
+    // CRC
+    if (crc) {
+        if (fifo_len == 1 && valid == 4) {
+            M5_LIB_LOGE("NG MIFARE Classic NAK %02X", rbuf[0]);
+            return false;
+        }
+        if (fifo_len < 2 || valid) {
+            M5_LIB_LOGE("Not in a condition to calculate CRC %u/%u", fifo_len, valid);
+            return false;
+        }
+
+        uint16_t crc16{};
+        uint16_t rcrc16 = ((uint16_t)rbuf[fifo_len - 1] << 8) | rbuf[fifo_len - 2];
+        if (!calculate_crc(crc16, rbuf, fifo_len - 2) || crc16 != rcrc16) {
+            M5_LIB_LOGE("CRC ERROR C:%04X R:%04X", crc16, rcrc16);
+            return false;
+        }
+    }
+
+    rlen = fifo_len;
+    M5_LIB_LOGV("OK:rxLast:%u", validBits);
+    return true;
 }
 
 }  // namespace unit

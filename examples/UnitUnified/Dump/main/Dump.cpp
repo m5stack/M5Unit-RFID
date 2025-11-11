@@ -5,7 +5,7 @@
  */
 /*
   Example using M5UnitUnified for UnitRFID2
-  Dump to serial
+  Dump NFC device
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -14,15 +14,19 @@
 #include <M5Utility.h>
 #include <vector>
 
+using namespace m5::nfc::a;
+using namespace m5::nfc::a::mifare;
+using namespace m5::nfc::a::mifare::classic;
+
 namespace {
 auto& lcd = M5.Display;
 m5::unit::UnitUnified Units;
 m5::unit::UnitRFID2 unit;
 m5::unit::nfc::NFCLayerA nfc_a{unit};
-
+// KeyA that can authenticate all blocks
+// If it's a different key value, change it
+constexpr Key keyA = DEFAULT_KEY;  // Default as 0xFFFFFFFFFFFF
 }  // namespace
-
-using namespace m5::nfc::a;
 
 void setup()
 {
@@ -69,13 +73,16 @@ void loop()
         lcd.fillRect(0, lcd.fontHeight(), lcd.width(), lcd.height() - lcd.fontHeight());
         std::vector<UID> devices;
         if (nfc_a.detect(devices)) {
-            lcd.setCursor(0, lcd.fontHeight());
             // If multiple occurrences are detected, only the first one detected
             auto& uid = devices.front();
-            nfc_a.activate(uid);
-            M5.Log.printf("==== Dump %s %s ====\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
-            nfc_a.dump();
-            nfc_a.deactivate();
+            if (nfc_a.activate(uid)) {
+                M5.Log.printf("==== Dump %s %s %u/%u====\n", uid.uidAsString().c_str(), uid.typeAsString().c_str(),
+                              uid.userAreaSize(), uid.totalSize());
+                nfc_a.dump(keyA);  // Need key if MIFARE classic, Ignore key if not MIFARE classic
+                nfc_a.deactivate();
+            } else {
+                M5_LOGE("Failed to activate %s", uid.uidAsString().c_str());
+            }
         } else {
             M5.Log.printf("No devices\n");
         }
