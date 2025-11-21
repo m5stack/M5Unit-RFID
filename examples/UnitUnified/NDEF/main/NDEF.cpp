@@ -171,8 +171,8 @@ void setup()
         lcd.setFont(&fonts::Font2);
     }
     lcd.setCursor(0, 0);
-    lcd.printf("Please put the device and click/hold BtnA/Touch");
-    M5.Log.printf("Please put the device and click/hold BtnA/Touch\n");
+    lcd.printf("Please put the PICC and click/hold BtnA/Touch");
+    M5.Log.printf("Please put the PICC and click/hold BtnA/Touch\n");
 }
 
 void loop()
@@ -214,8 +214,8 @@ void loop()
                 M5.Log.printf("Please remove the PICC from the reader\n");
 
                 lcd.setCursor(0, 0);
-                lcd.printf("Please put the device and click/hold BtnA/Touch");
-                M5.Log.printf("Please put the device and click/hold BtnA/Touch\n");
+                lcd.printf("Please put the PICC and click/hold BtnA/Touch");
+                M5.Log.printf("Please put the PICC and click/hold BtnA/Touch\n");
             }
         }
     }
