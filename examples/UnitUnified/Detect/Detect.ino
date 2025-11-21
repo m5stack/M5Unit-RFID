@@ -5,6 +5,6 @@
  */
 /*
   Example using M5UnitUnified for UnitRFID2
-  Dump NFC-A PICC
+  Detect NFC-A PICC
 */
-#include "main/Dump.cpp"
+#include "main/Detect.cpp"

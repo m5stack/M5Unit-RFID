@@ -46,6 +46,8 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
 
     virtual bool mifare_classic_authenticate(const bool auth_a, const m5::nfc::a::UID& uid, const uint8_t block,
                                              const m5::nfc::a::mifare::classic::Key& key) override;
+    virtual bool mifare_classic_value_block(const m5::nfc::a::Command cmd, const uint8_t block,
+                                            const uint32_t arg = 0) override;
 
     virtual bool ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage,
                                 const uint8_t epage) override;  // FAST_READ
@@ -78,8 +80,7 @@ bool AdapterMFRC522::select(m5::nfc::a::UID& uid)
 
 bool AdapterMFRC522::activate(const m5::nfc::a::UID& uid)
 {
-    uint16_t atqa{};
-    return _u.wakeup(atqa) && _u.select(uid);
+    return _u.select(uid);
 }
 
 bool AdapterMFRC522::deactivate()
@@ -118,6 +119,11 @@ bool AdapterMFRC522::mifare_classic_authenticate(const bool auth_a, const UID& u
     return auth_a ? _u.mifareClassicAuthenticateA(uid, block, key) : _u.mifareClassicAuthenticateB(uid, block, key);
 }
 
+bool AdapterMFRC522::mifare_classic_value_block(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg)
+{
+    return _u.mifareClassicValueBlock(cmd, block, arg);
+}
+
 bool AdapterMFRC522::ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage)
 {
     return _u.ntagReadPage(rx, rx_len, spage, epage);
@@ -131,11 +137,12 @@ std::unique_ptr<NFCLayerA::Adapter> make_mfrc522_adapter(UnitMFRC522& u)
 }
 }  // namespace
 
-NFCLayerA::NFCLayerA(UnitMFRC522& u) : _impl(make_mfrc522_adapter(u))
+NFCLayerA::NFCLayerA(UnitMFRC522& u) : _impl(make_mfrc522_adapter(u)), _ndef{*this}
 {
 }
 
-NFCLayerA::NFCLayerA(UnitWS1850S& u) : _impl(make_mfrc522_adapter(static_cast<UnitMFRC522&>(u)))
+NFCLayerA::NFCLayerA(UnitWS1850S& u) : _impl(make_mfrc522_adapter(static_cast<UnitMFRC522&>(u))), _ndef{*this}
+
 {
 }
 

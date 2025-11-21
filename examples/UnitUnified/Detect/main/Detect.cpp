@@ -1,11 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
+ * SPDX-FileCopyrightText: 2025 M5Stack Technology CO LTD
  *
  * SPDX-License-Identifier: MIT
  */
 /*
   Example using M5UnitUnified for UnitRFID2
-  Detect NFC-A devices
+  Detect NFC-A PICC
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -60,23 +60,22 @@ void setup()
 void loop()
 {
     M5.update();
-    auto touch = M5.Touch.getDetail();
     Units.update();
+    auto touch = M5.Touch.getDetail();
 
-    std::vector<UID> devices;
-    if (nfc_a.detect(devices)) {
+    std::vector<UID> uids;
+    if (nfc_a.detect(uids)) {
         M5.Speaker.tone(3000, 10);
         lcd.fillScreen(0);
         lcd.setCursor(0, 0);
-        lcd.printf("Devices: %zu\n", devices.size());
-        M5.Log.printf("Devices: %zu\n", devices.size());
+        lcd.printf("%zu PICC\n", uids.size());
+        M5.Log.printf("%zu PICC\n", uids.size());
         uint32_t idx{};
-        for (auto&& u : devices) {
+        for (auto&& u : uids) {
             M5.Log.printf("UID:%s %s %u/%u\n", u.uidAsString().c_str(), u.typeAsString().c_str(), u.userAreaSize(),
                           u.totalSize());
             lcd.printf("[%2u]:UID:<%s> %s\n", idx, u.uidAsString().c_str(), u.typeAsString().c_str());
             ++idx;
         }
-        nfc_a.deactivate();
     }
 }

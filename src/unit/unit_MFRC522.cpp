@@ -511,7 +511,7 @@ bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::UID& uid,
             } else {
                 // PICC to IDLE... so need reactivate
                 uint16_t discard{};
-                completed = request(discard) && select(uid);
+                completed = wakeup(discard) && select(uid);
             }
         }
     }
@@ -655,251 +655,31 @@ bool UnitMFRC522::mifareClassicStopCrypto1()
     return clear_register_bit(STATUS2_REG, 0x08);
 }
 
-bool UnitMFRC522::mifareClassicEnableValueBlock(const UID& uid, const uint8_t block, const Key& keyA, const Key& keyB,
-                                                const bool readOnly)
-
+bool UnitMFRC522::mifareClassicValueBlock(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg)
 {
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0) {
+    if (cmd != m5::nfc::a::Command::DECREMENT && cmd != m5::nfc::a::Command::INCREMENT &&
+        cmd != m5::nfc::a::Command::RESTORE && cmd != m5::nfc::a::Command::TRANSFER) {
         return false;
     }
 
-    uint8_t permission = readOnly ? 0x01 : 0x06;
-    uint8_t buf[18]{};
-    uint8_t len{18};
-    uint8_t permissions[4]{};
-    uint8_t st_block = get_sector_trailer_block(block);
-    uint8_t poff     = get_permission_offset(block);
+    M5_LIB_LOGD("ValuBlock:%02X %u %u", cmd, block, arg);
 
-    // Read sector trailer block
-    if (!read_block(buf, len, st_block)) {
+    if (!mifare_classic_transceive(cmd, block)) {
+        M5_LIB_LOGE("Failed to command %02X %u %u", cmd, block, arg);
         return false;
     }
-    // M5_LIB_LOGW("R) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
-    if (!decode_access_bits(permissions, buf + 6)) {
-        return false;
-    }
-    // Already value block?
-    if (permissions[poff] == permission) {
-        return true;  // OK
-    }
-    // Update sector trailer
-    permissions[poff] = permission;
-    permissions[3]    = 0x03;  // 011: never/keyB /keyA|B/keyB never/keyB
-    if (!encode_access_bits(buf + 6, permissions)) {
-        return false;
-    }
-    std::memcpy(buf, keyA.data(), 6);
-    std::memcpy(buf + 10, keyB.data(), 6);
-    return write_block(st_block, buf, 16);
-}
-
-bool UnitMFRC522::mifareClassicDisableValueBlock(const UID& uid, const uint8_t block, const Key& keyA, const Key& keyB,
-                                                 const uint8_t permission)
-{
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0 ||
-        is_value_block_permission(permission) || (permission & 0xF8)) {
-        return false;
-    }
-
-    uint8_t buf[18]{};
-    uint8_t len{18};
-    uint8_t permissions[4]{};
-    uint8_t st_block = get_sector_trailer_block(block);
-    uint8_t poff     = get_permission_offset(block);
-
-    // Read sector trailer block
-    if (!read_block(buf, len, st_block)) {
-        return false;
-    }
-    // M5_LIB_LOGE("R) %02X", result ? 0 : m5::stl::to_underlying(result.error()));
-    if (!decode_access_bits(permissions, buf + 6)) {
-        return false;
-    }
-    // Update sector trailer
-    permissions[poff] = permission;
-#if 0
-        if (!is_value_block_permission(permissions[0]) && !is_value_block_permission(permissions[1]) &&
-            !is_value_block_permission(permissions[2])) {
-            // Are all blocks not value block?
-            permissions[3] = 0x01; // 001: never/keyA keyA/keyA keyA/keyA
-        }
-#endif
-    if (!encode_access_bits(buf + 6, permissions)) {
-        return false;
-    }
-    std::memcpy(buf, keyA.data(), 6);
-    std::memcpy(buf + 10, keyB.data(), 6);
-    return write_block(st_block, buf, 16);  // update sector tailer
-}
-
-bool UnitMFRC522::mifareClassicIncrement(const UID& uid, const uint8_t block, const uint32_t delta)
-{
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0) {
-        return false;
-    }
-    return mifare_classic_transceive(m5::nfc::a::Command::INCREMENT, block) &&
-           mifare_classic_transceive((const uint8_t*)&delta, 4, true);
-}
-
-bool UnitMFRC522::mifareClassicDecrement(const UID& uid, const uint8_t block, const uint32_t delta)
-{
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0) {
-        return false;
-    }
-    return mifare_classic_transceive(m5::nfc::a::Command::DECREMENT, block) &&
-           mifare_classic_transceive((const uint8_t*)&delta, 4, true);
-}
-
-bool UnitMFRC522::mifareClassicRestore(const UID& uid, const uint8_t block)
-{
-    if (uid.isMifareClassic()) {
-        uint8_t dummy[4]{};
-        return mifare_classic_transceive(m5::nfc::a::Command::RESTORE, block) &&
-               mifare_classic_transceive(dummy, 4, true);
-    }
-    return false;
-}
-
-bool UnitMFRC522::mifareClassicTransfer(const UID& uid, const uint8_t block)
-{
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0) {
-        return false;
-    }
-    return mifare_classic_transceive(m5::nfc::a::Command::TRANSFER, block);
-}
-
-bool UnitMFRC522::mifareClassicReadValue(const UID& uid, int32_t& value, const uint8_t block)
-{
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0) {
-        return false;
-    }
-
-    uint8_t buf[18]{};
-    uint8_t len{18};
-
-    value = 0;
-    if (!read_block(buf, len, block)) {
-        return false;
-    }
-    uint8_t addr{};
-    if (!decode_value_block(value, addr, buf)) {
-        M5_LIB_LOGW("Block %u is NOT value block format data", block);
-        return false;
-    }
-    return true;
-}
-
-bool UnitMFRC522::mifareClassicWriteValue(const UID& uid, const uint8_t block, const int32_t value)
-{
-    if (!uid.isMifareClassic() || is_sector_trailer_block(block) || block == 0) {
-        return false;
-    }
-
-    uint8_t buf[16]{};
-    encode_value_block(buf, value, block);
-    return write_block(block, buf, 16);
-}
-
-// NFC
-bool UnitMFRC522::nfcWriteChangeToNTAGFormat(const UID& uid)
-{
-    if (uid.type == Type::MIFARE_Ultralight || uid.type == Type::MIFARE_UltralightC) {
-        if (ntag_check_format(uid)) {
-            return true;  // Already NFC-A compatible
-        }
-        uint8_t buf[4] = {NFC_MAGIC_NO, NFC_VERSION};
-        buf[3]         = (uid.type == Type::MIFARE_Ultralight) ? 0x06 : 0x18;
-        return write_page(3 /*OTP area*/, buf, 4);
-    }
-    if (uid.supportsNFC()) {
+    if (cmd == m5::nfc::a::Command::TRANSFER) {
         return true;
     }
-    M5_LIB_LOGE("Can not change to NFC format. %u", uid.type);
-    return false;
-}
 
-/*
-  targetBit Bit group  of the tag included in the size calculation
-  0x01:Null, 0x02:LockControl 0x04:NDEFMessage, ....
-  e.g. 0x06 means LockControl and MemoryControl
-  Proprietary and Terminator can not  be excluded
- */
-bool UnitMFRC522::ntag_calclate_ndef_message_size(const UID& uid, uint32_t& sz, const uint8_t targetTagBit)
-{
-    using m5::nfc::ndef::is_terminator_tag;
-    using m5::nfc::ndef::is_valid_tag;
-    using m5::nfc::ndef::Tag;
+    m5::utility::delayMicroseconds(82);  // Wait for command <-> Send (At least 82 us)
 
-    uint8_t page     = get_first_user_block(uid.type);
-    uint8_t max_page = get_last_user_block(uid.type) / 4 * 4;
-    uint32_t required{}, idx{};
-    uint16_t payload_len{};
-    bool done{};
-
-    sz = 0;
-
-    while (page <= max_page) {
-        uint8_t rbuf[18]{};
-        uint8_t rlen{18};
-        // M5_LIB_LOGE("R:%u/%u", page, max_page);
-        if (!read_block(rbuf, rlen, page)) {
-            return false;
-        }
-
-        idx &= 0x0F;
-        while (!done && idx < 16) {
-            auto t = rbuf[idx++];
-            // M5_LIB_LOGE(" Tag[%02X]", t);
-            //  Not tag, or other than targets
-            if (!is_valid_tag(t) || (t < 0x04 && !(targetTagBit & (1U << t)))) {
-                done = true;
-                break;
-            }
-            ++required;
-
-            // Terminator?
-            if (is_terminator_tag(t)) {
-                done = true;
-                break;
-            }
-
-            // Any message
-            payload_len = rbuf[idx++];
-            ++required;
-            if (payload_len == 0xFF) {  // 3 bytes format
-                payload_len = ((uint16_t)rbuf[idx++]) << 8;
-                payload_len |= ((uint16_t)rbuf[idx++]);
-                required += 2;
-            }
-            required += payload_len;
-            // M5_LIB_LOGW("  PL:%u", payload_len);
-
-            if (payload_len >= (16 - idx)) {
-                idx += payload_len;
-                page += idx / 16 * 4 - 4;  // skip to next message, (*1) add 4 after break
-                break;
-            }
-            idx += payload_len;
-        }
-        if (done) {
-            break;
-        }
-        page += 4;  // Try read next 16 bytes [*1]
-    }
-
-    sz = required;
-    // M5_LIB_LOGW("NDEFSZ:%u", sz);
-    return {};
-}
-
-bool UnitMFRC522::nfcReadRequiredSize(const UID& uid, uint32_t& len)
-{
-    len = 0;
-    if (ntag_calclate_ndef_message_size(uid, len, 0x0F /* all tag */)) {
-        len = (len + 15) / 16 * 16 + 2 /*CRC*/;
-        return true;
-    }
-    return false;
+    uint8_t arg8[4]{};
+    arg8[0] = arg & 0xFF;
+    arg8[1] = arg >> 8;
+    arg8[2] = arg >> 16;
+    arg8[3] = arg >> 24;
+    return mifare_classic_transceive(arg8, sizeof(arg8), true);
 }
 
 //

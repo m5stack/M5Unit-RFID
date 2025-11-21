@@ -211,7 +211,6 @@ public:
     bool calculateSoftwareCRC(uint16_t& result, const uint8_t* buf, const uint8_t len);
     ///@}
 
-    // ----------------------------------------------------------------
     ///@name NFC-A
     ///@{
     /*!
@@ -329,97 +328,12 @@ public:
     bool mifareClassicStopCrypto1();
 
     /*!
-      @brief Change the specified block to value block
-      @param uid Device UID
+      @brief Operation for the value block
+      @param cmd Command
       @param block Block address
-      @param keyA Authentication key A
-      @param keyB Authentication key B
-      @param readOnly read only value block if true
-      @return True if successful
-      @pre Requires the sector to which the block belongs authentication
-      @note Writes to sector trailer, so keyAB of the target sector is required
-      @warning Sector trailer access bits are changed to 011 (need auth B for R/W)
-      @warning 0 or sector trailer as block address is prohibited
-    */
-    bool mifareClassicEnableValueBlock(const m5::nfc::a::UID& uid, const uint8_t block,
-                                       const m5::nfc::a::mifare::classic::Key& keyA,
-                                       const m5::nfc::a::mifare::classic::Key& keyB, const bool readOnly = false);
-    /*!
-      @brief Change the specified block to normal block
-      @param uid Device UID
-      @param block Block address
-      @param keyA Authentication key A
-      @param keyB Authentication key B
-      @param permission Permission values to be migrated
-      @return True if successful
-      @pre Requires the sector to which the block belongs authentication
-      Writes to sector trailer, so keyAB of the target sector is required.
-      @warning 0 or sector trailer as block address is prohibited
-    */
-    bool mifareClassicDisableValueBlock(const m5::nfc::a::UID& uid, const uint8_t block,
-                                        const m5::nfc::a::mifare::classic::Key& keyA,
-                                        const m5::nfc::a::mifare::classic::Key& keyB, const uint8_t permission = 0x00);
-    /*!
-      @brief Increments the contents of a block and stores the result in the internal Transfer Buffer
-      @param uid Device UID
-      @param block Block address
-      @param delta incremental value
-      @return True if successful
-      @note Note that the value of the block itself has not yet changed after execution
-      @warning Only value block is executable
-      @pre Requires the sector to which the block belongs authentication
-      @post Applied to the actual block by mifareTransfer
-    */
-    bool mifareClassicIncrement(const m5::nfc::a::UID& uid, const uint8_t block, const uint32_t delta);
-    /*!
-      @brief Decrements the contents of a block and stores the result in the internal Transfer Buffer
-      @param uid Device UID
-      @param block Block address
-      @param delta decremental value
-      @return True if successful
-      @note Note that the value of the block itself has not yet changed after execution
-      @warning Only value block is executable
-      @pre Requires the sector to which the block belongs authentication
-      @post Applied to the actual block by mifareTransfer
-    */
-    bool mifareClassicDecrement(const m5::nfc::a::UID& uid, const uint8_t block, const uint32_t delta);
-    /*!
-      @brief Writes the contents of the internal Transfer Buffer to a value block
-      @param uid Device UID
-      @param block Block address
-      @return True if successful
-      @pre Requires the sector to which the block belongs authentication
+      @param arg Arrgument for command if needs
      */
-    bool mifareClassicTransfer(const m5::nfc::a::UID& uid, const uint8_t block);
-    /*!
-      @brief Moves the contents of a block into the internal Transfer Buffer
-      @param uid Device UID
-      @param block Block address
-      @return True if successful
-      @warning Only value block is executable
-      @pre Requires the sector to which the block belongs authentication
-     */
-    bool mifareClassicRestore(const m5::nfc::a::UID& uid, const uint8_t block);
-    /*!
-      @brief Read the value assuming the specified block is the value block
-      @param uid Device UID
-      @param[out] value value
-      @param block Block address
-      @return True if successful
-      @pre Requires block authentication if needed
-    */
-    bool mifareClassicReadValue(const m5::nfc::a::UID& uid, int32_t& value, const uint8_t block);
-    /*!
-      @brief Writes as a specified value block
-      @param uid Device UID
-      @param block Block address
-      @param value value
-      @return True if successful
-      @pre Requires block authentication if needed
-     */
-    bool mifareClassicWriteValue(const m5::nfc::a::UID& uid, const uint8_t block, const int32_t value);
-    ///@}
-
+    bool mifareClassicValueBlock(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg = 0);
     ///@}
 
     ///@name NTAG
@@ -435,82 +349,6 @@ public:
      */
     bool ntagReadPage(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage);
     ///@}
-
-    //////////////////////
-    /*!
-      @brief Write change to NFC-A Type-2 format
-      @return True if NTAG or NTAG format Light/C
-    */
-    bool nfcWriteChangeToNTAGFormat(const m5::nfc::a::UID& uid);
-
-    /*!
-      @brief Read and calculation of required size
-      @param uid Device UID
-      @patam[out] len Required length
-      @return True if successful
-     */
-    bool nfcReadRequiredSize(const m5::nfc::a::UID& uid, uint32_t& len);
-    /*!
-      @brief Read the NFC NDEF message
-      @param uid Device UID
-      @param buf[out] Buffer in NDEF Message or NDEF Record format
-      @param blen[in,out] in: Buffer length out:Read length
-      @return True if successful or NTAG device
-     */
-
-
-    
-#if 0
-
-    
-#if 0
-    /*!
-      @brief Read data from the page for NTAG21x
-      @param uid Device UID
-      @param block block address or page address
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @return True if successful
-      @note Using FAST_READ command
-     */
-    bool readDevicePage(const m5::nfc::a::UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
-#endif
-    ///@}
-
-    ///@name NTAG
-    /*!
-      @brief Write change to NFC-A Type-2 format
-      @return True if NTAG or NTAG format Light/C
-    */
-    bool nfcWriteChangeToNTAGFormat(const m5::nfc::a::UID& uid);
-
-    /*!
-      @brief Read and calculation of required size
-      @param uid Device UID
-      @patam[out] len Required length
-      @return True if successful
-     */
-    bool nfcReadRequiredSize(const m5::nfc::a::UID& uid, uint32_t& len);
-    /*!
-      @brief Read the NFC NDEF message
-      @param uid Device UID
-      @param buf[out] Buffer in NDEF Message or NDEF Record format
-      @param blen[in,out] in: Buffer length out:Read length
-      @return True if successful or NTAG device
-     */
-    bool nfcReadDevice(const m5::nfc::a::UID& uid, uint8_t* buf, uint32_t& len);
-    /*!
-      @brief Write the NFC NDEF message
-      @param uid Device UID
-      @param buf Buffer in NDEF Message or NDEF Record format
-      @param blen Buffer length
-      @return True if successful or NTAG device
-      @warning Already existing data will be overwritten
-      @warning When making additions or changes to already existing data, read and edit first
-     */
-    bool nfcWriteDevice(const m5::nfc::a::UID& uid, const uint8_t* buf, const uint32_t blen);
-    ///@}
-#endif
 
 protected:
     // register operation

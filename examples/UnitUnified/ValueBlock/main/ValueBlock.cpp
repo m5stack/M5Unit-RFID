@@ -5,16 +5,18 @@
  */
 /*
   Example using M5UnitUnified for UnitRFID2
-  Value block example (Only Classic)
+  Value block example (Only MIFARE Classic)
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
+#include <M5UnitUnifiedNFC.h>
 #include <M5Utility.h>
 #include <vector>
 
 using namespace m5::nfc::a;
 using namespace m5::nfc::a::mifare;
+using namespace m5::nfc::a::mifare::classic;
 
 namespace {
 auto& lcd = M5.Display;
@@ -22,115 +24,257 @@ m5::unit::UnitUnified Units;
 m5::unit::UnitRFID2 unit;
 m5::unit::nfc::NFCLayerA nfc_a{unit};
 
-// Set block to normal block and also set the trailer sector block to the default value
-void restore_sector_trailer(const UID& uid, const uint8_t block)
-{
-#if 0
-    if (!uid.isClassic()) {
-        return;
-    }
+// KeyA,B that can authenticate all blocks
+// If it's a different key value, change it
+constexpr Key keyA = DEFAULT_KEY;  // Default as 0xFFFFFFFFFFFF
+constexpr Key keyB = DEFAULT_KEY;  // Default as 0xFFFFFFFFFFFF
 
-    uint8_t st_block = m5::rfid::mifare::classic::get_sector_trailer_block(block);
-    if (unit.mifareAuthenticateB(uid, st_block) || unit.mifareAuthenticateA(uid, st_block)) {
-        uint8_t buf[18]{};
-        uint8_t permissions[4] = {0, 0, 0, 1 /*sector trailer*/};
-        if (m5::rfid::mifare::classic::encode_access_bits(buf + 6, permissions)) {
-            std::memcpy(buf, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
-            std::memcpy(buf + 10, UnitRFID2::DEFAULT_CLASSIC_KEY.data(), 6);
-            if (unit.writeDevice(uid, st_block, buf, 16, false)) {
-                M5.Log.printf("block:%u sector trailer:%u to [001]\n", block, st_block);
+void print_value_block(const Key& key)
+{
+    uint32_t count{};
+    uint8_t st_block{};
+    for (uint_fast16_t block = 0; block < nfc_a.activatedPICC().blocks; ++block) {
+        uint8_t stb = get_sector_trailer_block(block);
+        if (stb != st_block) {
+            st_block = stb;
+            // M5_LOGI("AUTH: %u", st_block);
+            if (!nfc_a.mifareClassicAuthenticateA(st_block, key)) {
+                M5_LOGE("Failed to AUTH %u/%u", block, st_block);
+                return;
+            }
+        }
+        bool vb{};
+        if (!nfc_a.mifareClassicIsValueBlock(vb, block)) {
+            M5_LOGE("Failed %u", block);
+            return;
+        }
+        if (vb) {
+            int32_t value{};
+            if (nfc_a.mifareClassicReadValueBlock(value, block)) {
+                ++count;
+                M5.Log.printf("[%3u]:%" PRId32 "\n", block, value);
+            } else {
+                M5_LOGE("Failed %u", block);
                 return;
             }
         }
     }
-    M5_LOGE("Failed");
-#endif
+    M5.Log.printf("%u value blocks\n", count);
 }
 
-void value_block(const UID& uid, const uint8_t block)
+void print_access_conditions(const Key& akey, const Key& key)
 {
-    // Write permission to the sector trailer is required to change to the value block
-    uint8_t st_block = m5::rfid::mifare::classic::get_sector_trailer_block(block);
-    if (!unit.mifareAuthenticateB(uid, st_block) || !unit.mifareAuthenticateA(uid, st_block)) {
-        M5_LOGE("Auth error");
-        return;
+    uint8_t st_block{};
+    for (uint_fast16_t block = 0; block < nfc_a.activatedPICC().blocks; ++block) {
+        uint8_t stb = get_sector_trailer_block(block);
+        if (stb != st_block) {
+            st_block = stb;
+            // M5_LOGI("AUTH: %u", st_block);
+            if (!nfc_a.mifareClassicAuthenticateA(st_block, key)) {
+                M5_LOGE("Failed to AUTH %u/%u", block, st_block);
+                return;
+            }
+        }
+        uint8_t ab{};
+        if (!nfc_a.mifareClassicReadAccessCondition(ab, block)) {
+            M5_LOGE("Failed %u", block);
+            return;
+        }
+        M5.Log.printf("[%3u]:%02X\n", block, ab);
     }
-
-    M5.Log.printf("Before[%u] ----\n", block);
-    unit.dumpDevice(uid, block);
-
-    ////////////////////////////////
-    // Writable value block
-    // To value block
-    auto result = unit.mifareWriteValue(uid, block, 12345678);  // initial value
-    result =
-        result ? unit.mifareEnableValueBlock(uid, block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY)
-               : result;
-    if (!result) {
-        M5_LOGE("Failed to enable value block %02X", result.error());
-        return;
-    }
-    M5.Log.printf("To value block ----\n");
-    unit.dumpDevice(uid, block);
-
-    // Key B authentication is required for value block increment operations
-    if (!unit.mifareAuthenticateB(uid, block)) {
-        M5_LOGE("Auth error B");
-        return;
-    }
-
-    // Increment/decrement (bNote that it will not be applied to the device unless it is transferred)
-    result = result ? unit.mifareIncrement(uid, block, 987654321) : result;  // 12345678 -> 999999999
-    result = result ? unit.mifareTransfer(uid, block) : result;              // apply
-    result = result ? unit.mifareDecrement(uid, block, 9999) : result;       // 999999999 -> 999990000
-    result = result ? unit.mifareTransfer(uid, block) : result;              // apply
-    if (!result) {
-        M5_LOGE("Failed to value block operation %02X", result.error());
-        return;
-    }
-    M5.Log.printf("Inc/Dec ----\n");
-    unit.dumpDevice(uid, block);
 }
 
-void value_block_readonly(const UID& uid, const uint8_t block)
+void non_rechargeable_value_block(const uint8_t block, const Key& akey, const Key& bkey)
 {
-    if (!uid.isClassic()) {
+    auto& uid = nfc_a.activatedPICC();
+    if (!uid.isUserBlock(block) || !uid.isUserBlock(block - 1)) {
+        M5_LOGE("block and block - 1 must be user block %u %u", block, block - 1);
         return;
     }
 
-    // Write permission to the sector trailer is required to change to the value block
-    uint8_t st_block = m5::rfid::mifare::classic::get_sector_trailer_block(block);
-    M5_LOGI("block:%u sector trailer block:%u", block, st_block);
-    if (!unit.mifareAuthenticateB(uid, st_block) || !unit.mifareAuthenticateA(uid, st_block)) {
-        // if (!unit.authenticateA(uid, st_block) || !unit.authenticateB(uid, st_block)) {
-        M5_LOGE("Auth error");
+    if (!nfc_a.mifareClassicAuthenticateA(block, akey)) {
+        M5_LOGE("Failed to AUTH A %u", block);
         return;
     }
 
-    ////////////////////////////////
-    // Readnly value block (Decrementing is allowed)
-    // raedonly value block does not allow write operation, so write the initial value first.
-    auto result = unit.mifareWriteValue(uid, block, 1234);  // initial value
-    result =
-        result ? unit.mifareEnableValueBlock(uid, block, UnitRFID2::DEFAULT_CLASSIC_KEY, UnitRFID2::DEFAULT_CLASSIC_KEY,
-                                             true)
-               : result;  // Using default keyAB
-    if (!result) {
-        M5_LOGE("Failed to enable value block %02X", result.error());
+    // Change read/write block
+    if (!nfc_a.mifareClassicWriteAccessCondition(block, READ_WRITE_BLOCK, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition %u", block);
         return;
     }
-    M5.Log.printf("To value block ----\n");
-    unit.dumpDevice(uid, block);
 
-    // Decrement
-    result = result ? unit.mifareDecrement(uid, block, 1234 * 2) : result;  // 1234 -> -1234
-    result = result ? unit.mifareTransfer(uid, block) : result;             // apply
-    if (!result) {
-        M5_LOGE("Failed to value block operation %02X", result.error());
+    // Write value
+    if (!nfc_a.mifareClassicWriteValueBlock(block, 1234567)) {
+        M5_LOGE("Failed to WriteValue %u", block);
         return;
     }
-    M5.Log.printf("Dec ----\n");
-    unit.dumpDevice(uid, block);
+
+    // After writing the value, change it to the value block (Non rechargeable)
+    if (!nfc_a.mifareClassicWriteAccessCondition(block, VALUE_BLOCK_NON_RECHARGEABLE, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition %u", block);
+        return;
+    }
+    M5.Log.printf("==== Initial value\n");
+    nfc_a.dump(block);
+
+    // Decrement and transfer value
+    if (!nfc_a.mifareClassicDecrementValueBlock(block, 4567u)) {
+        M5_LOGE("Failed to decrement %u", block);
+        return;
+    }
+    M5.Log.printf("==== Decrement done\n");
+    nfc_a.dump(block);
+
+    // Incremental operations cannot be performed because charging is not possible
+    if (nfc_a.mifareClassicIncrementValueBlock(block, 9876543)) {
+        M5_LOGE("Oops!?!?");
+        return;
+    } else {
+        // Passing through this block is normal
+        M5.Log.printf("Incremental operations cannot be performed because charging is not possible\n");
+        // The Increment command failed, causing a HALT, so need reactivate and auth
+        if (!nfc_a.reactivate()) {
+            M5_LOGE("Failed to reactivate");
+            return;
+        }
+        if (!nfc_a.mifareClassicAuthenticateA(block, akey)) {
+            M5_LOGE("Failed to AUTH %u", block);
+            return;
+        }
+        M5.Log.printf("==== Can NOT increment\n");
+        nfc_a.dump(block);
+    }
+
+    // Copy value block
+    if (!nfc_a.mifareClassicRestoreValueBlock(block)) {
+        M5_LOGE("Failed to restore %u", block);
+        return;
+    }
+    if (!nfc_a.mifareClassicTransferValueBlock(block - 1)) {
+        M5_LOGE("Failed to transfer %u", block);
+        return;
+    }
+    M5.Log.printf("==== Copy from %u to %u\n", block, block - 1);
+    nfc_a.dump(block);
+
+    // Change read/write block and clear
+    if (!nfc_a.mifareClassicWriteAccessCondition(block, READ_WRITE_BLOCK, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition%u", block);
+        return;
+    }
+    uint8_t c[1]{};
+    if (!nfc_a.write16(block, c, sizeof(c)) || !nfc_a.write16(block - 1, c, sizeof(c))) {
+        M5_LOGE("Failed to Write %u/%u", block, block - 1);
+        return;
+    }
+
+    M5.Log.printf("==== To be normal block\n");
+    nfc_a.dump(block);
+}
+
+void rechargeable_value_block(const uint8_t block, const Key& akey, const Key& bkey)
+{
+    auto& uid = nfc_a.activatedPICC();
+    if (!uid.isUserBlock(block) || !uid.isUserBlock(block - 1)) {
+        M5_LOGE("block and block - 1 must be user block %u %u", block, block - 1);
+        return;
+    }
+
+    // Auth A
+    uint8_t stb = get_sector_trailer_block(block);
+    if (!nfc_a.mifareClassicAuthenticateA(stb, akey)) {
+        M5_LOGE("Failed to AUTH A %u/%u", block, stb);
+        return;
+    }
+
+    // KeyB authentication is required for Increment operations
+    // Additionally, KeyB must be read-only
+    // Some cards may function even if the sector trailer access bit is 001, but strictly speaking, 110 or similar is
+    // preferable
+    // Change Sector trailer access bits
+    //       RkeyA  WkeyA    RAb       WAb     ***RkeyB***   WkeyB
+    // 011 | never | key B | key A|B | key B | ***never*** | key B |
+    if (!nfc_a.mifareClassicWriteAccessCondition(stb, 0x03 /*011*/, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition %u", stb);
+        return;
+    }
+
+    // Auth B
+    if (!nfc_a.mifareClassicAuthenticateB(block, bkey)) {
+        M5_LOGE("Failed to AUTH A %u/%u", block, stb);
+        return;
+    }
+
+    // Change read/write block
+    if (!nfc_a.mifareClassicWriteAccessCondition(block, READ_WRITE_BLOCK, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition %u", block);
+        return;
+    }
+    // Write value
+    if (!nfc_a.mifareClassicWriteValueBlock(block, 1234567)) {
+        M5_LOGE("Failed to WriteValue %u", block);
+        return;
+    }
+
+    // After writing the value, change it to the value block (rechargeable)
+    if (!nfc_a.mifareClassicWriteAccessCondition(block, VALUE_BLOCK_RECHARGEABLE, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition %u", block);
+        return;
+    }
+    M5.Log.printf("==== Initial value\n");
+    nfc_a.dump(block);
+
+    // Decrement and transfer value
+    if (!nfc_a.mifareClassicDecrementValueBlock(block, 4567u)) {
+        M5_LOGE("Failed to decrement %u", block);
+        return;
+    }
+    M5.Log.printf("==== Decrement done\n");
+    nfc_a.dump(block);
+
+    // Increment and transfer value
+    if (!nfc_a.mifareClassicIncrementValueBlock(block, 99u)) {
+        M5_LOGE("Failed to increment %u", block);
+        return;
+    }
+    M5.Log.printf("==== Increment done\n");
+    nfc_a.dump(block);
+
+    // Copy value block
+    if (!nfc_a.mifareClassicRestoreValueBlock(block)) {
+        M5_LOGE("Failed to restore %u", block);
+        return;
+    }
+    if (!nfc_a.mifareClassicTransferValueBlock(block - 1)) {
+        M5_LOGE("Failed to transfer %u", block);
+        return;
+    }
+    M5.Log.printf("==== Copy from %u to %u\n", block, block - 1);
+    nfc_a.dump(block);
+
+    // Change read/write block and clear
+    if (!nfc_a.mifareClassicWriteAccessCondition(block, READ_WRITE_BLOCK, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition%u", block);
+        return;
+    }
+    uint8_t c[1]{};
+    if (!nfc_a.write16(block, c, sizeof(c)) || !nfc_a.write16(block - 1, c, sizeof(c))) {
+        M5_LOGE("Failed to Write %u/%u", block, block - 1);
+        return;
+    }
+
+    // Restore access bits
+    if (!nfc_a.mifareClassicWriteAccessCondition(stb, 0x01 /*001*/, akey, bkey)) {
+        M5_LOGE("Failed to WriteAccessCondition %u", stb);
+        return;
+    }
+    if (!nfc_a.mifareClassicAuthenticateA(stb, akey)) {
+        M5_LOGE("Failed to AUTH A %u/%u", block, stb);
+        return;
+    }
+
+    M5.Log.printf("==== To be normal block\n");
+    nfc_a.dump(block);
 }
 
 }  // namespace
@@ -142,6 +286,7 @@ void setup()
     auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
     auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
     M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
+    Wire.end();
     Wire.begin(pin_num_sda, pin_num_scl, 100 * 1000U);
 
     if (!Units.add(unit, Wire) || !Units.begin()) {
@@ -163,88 +308,49 @@ void setup()
     } else {
         lcd.setFont(&fonts::Font2);
     }
-    lcd.clear(0);
-    lcd.setCursor(8, 0);
-    lcd.printf("Please put the devices\n and click A");
-    M5.Log.printf("Please put the devices\n and click A");
+    lcd.setCursor(0, 0);
+    lcd.printf("Please put the PICC and click/hold BtnA/Touch");
+    M5.Log.printf("Please put the PICC and click/hold BtnA/Touch\n");
 }
 
 void loop()
 {
-    static constexpr bool read_only{false};
-
     M5.update();
     Units.update();
     auto touch = M5.Touch.getDetail();
 
-    // Value block operatrion (IDLE)
-    if (M5.BtnA.wasClicked() || touch.wasClicked()) {
-        // Detect new devices?
-        if (unit.detectIdleDevice()) {
-            UID uid{};
-            if (unit.activateDevice(uid)) {
-                if (uid.isClassic()) {
-                    M5.Log.printf("ValueBlock");
-                    M5.Speaker.tone(1000, 20);
-                    M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
+    bool clicked = M5.BtnA.wasClicked() || touch.wasClicked();  // For decrement
+    bool held    = M5.BtnA.wasHold() || touch.wasHold();        // For increment
 
-                    uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
-                    if (read_only) {
-                        value_block_readonly(uid, block);
-                    } else {
-                        value_block(uid, block);
+    if (clicked || held) {
+        std::vector<UID> uids;
+        if (nfc_a.detect(uids)) {
+            //  If multiple occurrences are detected, only the first one detected
+            auto& uid = uids.front();
+            if (nfc_a.reactivate(uid)) {
+                M5.Log.printf("UID:%s %s %u/%u\n", uid.uidAsString().c_str(), uid.typeAsString().c_str(),
+                              uid.userAreaSize(), uid.totalSize());
+                if (uid.isMifareClassic()) {
+                    if (clicked) {
+                        M5.Speaker.tone(2000, 30);
+                        lcd.fillScreen(TFT_BLUE);
+                        M5.Log.print("Non rechargeable\n");
+                        non_rechargeable_value_block(uid.blocks - 2, keyA, keyB);
+                    } else if (held) {
+                        M5.Speaker.tone(4000, 30);
+                        lcd.fillScreen(TFT_YELLOW);
+                        M5.Log.print("Rechargeable\n");
+                        rechargeable_value_block(uid.blocks - 2, keyA, keyB);
                     }
-
-                    unit.deactivateDevice();
+                    M5.Log.printf("Please remove the PICC from the reader\n");
                 } else {
-                    M5_LOGE("Classic only");
+                    M5.Log.printf("Not support the value block\n");
                 }
+                nfc_a.deactivate();
+                lcd.setCursor(0, 0);
+                lcd.printf("Please put the PICC and click/hold BtnA/Touch");
+                M5.Log.printf("Please put the PICC and click/hold BtnA/Touch\n");
             }
         }
     }
-    // Restore sector traler (IDLE)
-    else if (M5.BtnA.isHolding() || touch.isHolding()) {
-        // Detect new devices?
-        while (unit.detectIdleDevice()) {
-            UID uid{};
-            if (unit.activateDevice(uid)) {
-                if (uid.isClassic()) {
-                    M5.Log.printf("Restore\n");
-                    M5.Speaker.tone(2000, 20);
-                    M5.Log.printf("UID:%s %s\n", uid.uidAsString().c_str(), uid.typeAsString().c_str());
-
-                    uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
-                    restore_sector_trailer(uid, block);
-                    if (unit.mifareAuthenticateA(uid, block)) {
-                        unit.dumpDevice(uid, block);
-                    }
-
-                    unit.deactivateDevice();
-                } else {
-                    M5_LOGE("Classic only");
-                }
-            }
-        }
-    }
-#if 0
-    // Dump (IDLE/HLT)
-    if (unit.detectIdleDevice()) {
-        UID uid{};
-        if (unit.activateDevice(uid)) {
-            if (uid.isClassic()) {
-                M5_LOGI("Dump");
-                M5.Speaker.tone(3000, 20);
-                M5_LOGI("UID:%s %s", uid.uidAsString().c_str(), uid.typeAsString().c_str());
-                uint8_t block = uid.type == Type::MIFARE_Classic_4K ? 128 : 44;
-                if (unit.mifareAuthenticateA(uid, block)) {
-                    M5.Speaker.tone(1000, 20);
-                    unit.dumpDevice(uid, block);
-                    unit.deactivateDevice();
-                }
-            } else {
-                M5_LOGE("Classic only");
-            }
-        }
-    }
-#endif
 }
