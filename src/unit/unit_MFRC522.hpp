@@ -11,7 +11,12 @@
 #define M5_UNIT_RFID_UNIT_MFRC522_HPP
 
 #include <M5UnitComponent.hpp>
-#include <nfc/nfc.hpp>  // M5Unit-NFC
+// M5Unit-NFC
+#include <nfc/nfc.hpp>
+#include <nfc/a/nfca.hpp>
+// #include <nfc/a/mifare.hpp>
+// #include <nfc/a/mifare_classic_crypto1.hpp>
+//
 
 namespace m5 {
 namespace unit {
@@ -105,8 +110,9 @@ public:
 
     explicit UnitMFRC522(const uint8_t addr = DEFAULT_ADDRESS) : Component(addr)
     {
-        auto ccfg  = component_config();
-        ccfg.clock = 100 * 1000U;
+        auto ccfg = component_config();
+        // ccfg.clock = 100 * 1000U;
+        ccfg.clock = 400 * 1000U;
         component_config(ccfg);
     }
     virtual ~UnitMFRC522()
@@ -129,6 +135,26 @@ public:
         _cfg = cfg;
     }
     ///@}
+
+    /*!
+      @brief Gets the current operating mode
+      @note Only NFC-A
+    */
+    inline m5::nfc::NFC NFCMode() const
+    {
+        return m5::nfc::NFC::A;
+    }
+    /*!
+      @brief Configure NFC mode
+      @param mode NFC mode
+      @return True if successful
+      @warning Only NFC-A
+     */
+    inline bool configureNFCMode(const m5::nfc::NFC mode)
+    {
+        // Nop
+        return mode == m5::nfc::NFC::A;
+    }
 
     /*!
       @brief Software reset
@@ -251,17 +277,17 @@ public:
     /*!
       @brief Select PICC with anti-collision
       @param[out] completed Completed select?
-      @param[out]  uid Selected UID
+      @param[out]  picc Selected PICC
       @param lv Cascade level (1-3)
       @return True if successful
      */
-    bool selectWithAnticollision(bool& completed, m5::nfc::a::UID& uid, const uint8_t lv);
+    bool selectWithAnticollision(bool& completed, m5::nfc::a::PICC& picc, const uint8_t lv);
     /*!
-      @brief Select specific UID
-      @param  uid  UID
+      @brief Select specific PICC
+      @param  picc PICC
       @return True if successful
      */
-    bool select(const m5::nfc::a::UID& uid);
+    bool select(const m5::nfc::a::PICC& picc);
 
     /*!
       @brief Read the 1 block / 4 page (16 bytes)
@@ -296,29 +322,29 @@ public:
     ///@{
     /*!
       @brief Authentication using keyA of the specified block
-      @param uid UID
+      @param picc PICC
       @param block Block address
       @param key MIFARE classic key
       @return True if successful
      */
     inline bool mifareClassicAuthenticateA(
-        const m5::nfc::a::UID& uid, const uint8_t block,
+        const m5::nfc::a::PICC& picc, const uint8_t block,
         const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_KEY)
     {
-        return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_A, uid, block, key);
+        return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_A, picc, block, key);
     }
     /*!
       @brief Authentication using keyB of the specified block
-      @param uid UID
+      @param picc PICC
       @param block Block address
       @param key MIFARE classic key
       @return True if successful
      */
     inline bool mifareClassicAuthenticateB(
-        const m5::nfc::a::UID& uid, const uint8_t block,
+        const m5::nfc::a::PICC& picc, const uint8_t block,
         const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_KEY)
     {
-        return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_B, uid, block, key);
+        return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_B, picc, block, key);
     }
 
     /*!
@@ -380,16 +406,16 @@ protected:
     bool anti_collision(const uint8_t cascadeLevel, uint8_t* buf);
 
     // MIFARE classic
-    bool mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::UID& uid, const uint8_t block,
+    bool mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::PICC& picc, const uint8_t block,
                                      const m5::nfc::a::mifare::classic::Key& key);
     bool mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block);
     bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
 
     // NTAG
     bool ntag_get_version(uint8_t info[10]);
-    bool ntag_check_format(const m5::nfc::a::UID& uid);
+    bool ntag_check_format(const m5::nfc::a::PICC& picc);
     bool ntag_fast_read(uint8_t* rbuf, uint16_t& rlen, const uint8_t saddr, const uint8_t eaddr);
-    bool ntag_calclate_ndef_message_size(const m5::nfc::a::UID& uid, uint32_t& sz, const uint8_t targetTagBit = 0x06);
+    bool ntag_calclate_ndef_message_size(const m5::nfc::a::PICC& picc, uint32_t& sz, const uint8_t targetTagBit = 0x06);
 
     // crc
     inline bool calculate_crc(uint16_t& result, const uint8_t* buf, const uint8_t len)

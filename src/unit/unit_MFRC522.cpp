@@ -450,7 +450,7 @@ bool UnitMFRC522::anti_collision(const uint8_t lv, uint8_t buf[9])
     return !collision;
 }
 
-bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::UID& uid, const uint8_t lv)
+bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::PICC& picc, const uint8_t lv)
 {
     uint8_t buf[9]{};
     uint8_t* rbuf{};
@@ -492,35 +492,53 @@ bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::UID& uid,
     }
 
     // Copy valid uid block
-    std::memcpy(uid.uid + (lv - 1) * 3, buf + 2 + (buf[2] == CASCADE_TAG), 4 - (buf[2] == CASCADE_TAG));
+    std::memcpy(picc.uid + (lv - 1) * 3, buf + 2 + (buf[2] == CASCADE_TAG), 4 - (buf[2] == CASCADE_TAG));
 
     // Completed?
     const uint8_t sak = rbuf[0];
-    if (is_sak_completed(sak)) {
+    if (is_sak_completed_14443_4(sak)) {
+        picc.size = 1 + lv * 3;
+        picc.sak  = sak;
+        picc.type =
+            Type::ISO_14443_4;  // WARNING: This is a preliminary diagnosis; a more accurate diagnosis is required
+        picc.blocks = get_number_of_blocks(picc.type);
+        completed   = true;
+        return true;
+    } else if (is_sak_completed(sak)) {
+        picc.size = 1 + lv * 3;
+        picc.sak  = sak;
+        picc.type =
+            sak_to_type(sak);  // WARNING: This is a preliminary diagnosis; a more accurate diagnosis is required
+        picc.blocks = get_number_of_blocks(picc.type);
+        completed   = true;
+
+#if 0
         completed = true;
-        uid.size  = 1 + lv * 3;
-        uid.sak   = sak;
-        uid.type = sak_to_type(sak);  // WARNING: This is a preliminary diagnosis; a more accurate diagnosis is required
-        uid.blocks = get_number_of_blocks(uid.type);
+        picc.size = 1 + lv * 3;
+        picc.sak  = sak;
+        picc.type =
+            sak_to_type(sak);  // WARNING: This is a preliminary diagnosis; a more accurate diagnosis is required
+        picc.blocks = get_number_of_blocks(picc.type);
         // More check for type
-        if (uid.type == Type::MIFARE_Ultralight) {
+        if (picc.type == Type::MIFARE_Ultralight) {
             uint8_t ver[10]{};
             if (ntag_get_version(ver)) {
-                uid.type   = version_to_type(ver);
-                uid.blocks = get_number_of_blocks(uid.type);
+                picc.type   = version_to_type(ver);
+                picc.blocks = get_number_of_blocks(picc.type);
             } else {
                 // PICC to IDLE... so need reactivate
                 uint16_t discard{};
                 completed = wakeup(discard) && select(uid);
             }
         }
+#endif
     }
     return completed || has_sak_dependent_bit(sak);  // completed or continue
 }
 
-bool UnitMFRC522::select(const UID& uid)
+bool UnitMFRC522::select(const PICC& picc)
 {
-    if (!uid.valid()) {
+    if (!picc.valid()) {
         return false;
     }
 
@@ -531,14 +549,14 @@ bool UnitMFRC522::select(const UID& uid)
     do {
         select_frame[0] = 0x91 + lv * 2;
         // Build frame
-        if (uid.size > lv * 3 + 1) {
+        if (picc.size > lv * 3 + 1) {
             select_frame[2] = 0x88;
         } else {
-            select_frame[2] = uid.uid[offset++];
+            select_frame[2] = picc.uid[offset++];
         }
-        select_frame[3] = uid.uid[offset++];
-        select_frame[4] = uid.uid[offset++];
-        select_frame[5] = uid.uid[offset++];
+        select_frame[3] = picc.uid[offset++];
+        select_frame[4] = picc.uid[offset++];
+        select_frame[5] = picc.uid[offset++];
         select_frame[6] = calculate_bcc8(select_frame + 2, 4);
         uint16_t crc{};
         if (!calculate_crc(crc, select_frame, 7)) {
@@ -683,18 +701,18 @@ bool UnitMFRC522::mifareClassicValueBlock(const m5::nfc::a::Command cmd, const u
 }
 
 //
-bool UnitMFRC522::mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::UID& uid,
+bool UnitMFRC522::mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::PICC& picc,
                                               const uint8_t block, const m5::nfc::a::mifare::classic::Key& key)
 {
     if ((cmd != m5::nfc::a::Command::AUTH_WITH_KEY_A && cmd != m5::nfc::a::Command::AUTH_WITH_KEY_B) ||
-        !uid.isMifareClassic()) {
+        !picc.isMifareClassic()) {
         return false;
     }
 
     // MFRC522 10.3.1.9 MFAuthent
     uint8_t buf[12]{m5::stl::to_underlying(cmd), block};
     std::memcpy(buf + 2, key.data(), key.size());
-    uid.tail4(buf + 8);
+    picc.tail4(buf + 8);
     if (!picc_send(mfrc522::Command::MFAuthent, buf, m5::stl::size(buf))) {
         return false;
     }
@@ -849,9 +867,9 @@ bool UnitMFRC522::ntag_get_version(uint8_t info[10])
     return picc_transceive(info, rlen, cmd, m5::stl::size(cmd), validBits, 0, true);
 }
 
-bool UnitMFRC522::ntag_check_format(const UID& uid)
+bool UnitMFRC522::ntag_check_format(const PICC& picc)
 {
-    if (uid.supportsNFC()) {
+    if (picc.supportsNFC()) {
         uint8_t rbuf[18]{};
         uint8_t rlen{18};
         return read_block(rbuf, rlen, 0) && rbuf[12] == NFC_MAGIC_NO && rbuf[13] == NFC_VERSION;

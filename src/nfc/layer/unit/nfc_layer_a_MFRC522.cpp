@@ -7,7 +7,8 @@
   @file nfc_layer_a_MFRC522.cpp
   @brief MFRC522 adapter for common layer
 */
-#include <nfc/layer/nfc_layer_a.hpp>
+#include <nfc/layer/a/nfc_layer_a.hpp>
+#include <nfc/layer/ndef_layer.hpp>
 #include "unit/unit_MFRC522.hpp"
 #include "unit/unit_WS1850S.hpp"
 #include <M5Utility.hpp>
@@ -19,7 +20,6 @@ using namespace m5::nfc::a::mifare;
 using namespace m5::nfc::a::mifare::classic;
 
 namespace m5 {
-namespace unit {
 namespace nfc {
 
 //
@@ -33,27 +33,42 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
         return m5::unit::mfrc522::MAX_FIFO_DEPTH;
     }
 
+    virtual bool transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+                            const uint32_t timeout_ms) override;
+
     virtual bool request(uint16_t& atqa) override;
     virtual bool wakeup(uint16_t& atqa) override;
 
-    virtual bool select(m5::nfc::a::UID& uid) override;
-    virtual bool activate(const m5::nfc::a::UID& uid) override;
-    virtual bool deactivate() override;
+    virtual bool select(m5::nfc::a::PICC& picc) override;
+    virtual bool activate(const m5::nfc::a::PICC& picc) override;
+    virtual bool deactivate(const bool iso14443_4) override;
 
+    virtual bool nfca_request_ats(m5::nfc::a::ATS& ats) override;
     virtual bool nfca_read_block(uint8_t rx[16], const uint8_t addr) override;         // READ
     virtual bool nfca_write_block(const uint8_t addr, const uint8_t tx[16]) override;  // WRITE_BLOCK
     virtual bool nfca_write_page(const uint8_t addr, const uint8_t tx[4]) override;    // WRITE_PAGE
 
-    virtual bool mifare_classic_authenticate(const bool auth_a, const m5::nfc::a::UID& uid, const uint8_t block,
+    virtual bool mifare_classic_authenticate(const bool auth_a, const m5::nfc::a::PICC& picc, const uint8_t block,
                                              const m5::nfc::a::mifare::classic::Key& key) override;
     virtual bool mifare_classic_value_block(const m5::nfc::a::Command cmd, const uint8_t block,
                                             const uint32_t arg = 0) override;
+
+    virtual bool mifare_ultralightC_authenticate1(uint8_t ek[8]) override;
+    virtual bool mifare_ultralightC_authenticate2(uint8_t rx_ek[8], const uint8_t tx_ek[16]) override;
+    virtual bool mifare_get_version_L3(uint8_t ver[8]) override;
+    virtual bool mifare_get_version_L4(uint8_t ver[8]) override;
 
     virtual bool ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage,
                                 const uint8_t epage) override;  // FAST_READ
 
     UnitMFRC522& _u;
 };
+
+bool AdapterMFRC522::transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+                                const uint32_t timeout_ms)
+{
+    return false;
+}
 
 bool AdapterMFRC522::request(uint16_t& atqa)
 {
@@ -65,27 +80,32 @@ bool AdapterMFRC522::wakeup(uint16_t& atqa)
     return _u.wakeup(atqa);
 }
 
-bool AdapterMFRC522::select(m5::nfc::a::UID& uid)
+bool AdapterMFRC522::select(m5::nfc::a::PICC& picc)
 {
     uint8_t lv{1};  // Cascade level 1-3
     bool completed{};
-    uid.clear();
+    picc = PICC{};
     do {
-        if (!_u.selectWithAnticollision(completed, uid, lv)) {
+        if (!_u.selectWithAnticollision(completed, picc, lv)) {
             return false;
         }
     } while (!completed && lv++ < 4);
     return completed;
 }
 
-bool AdapterMFRC522::activate(const m5::nfc::a::UID& uid)
+bool AdapterMFRC522::activate(const m5::nfc::a::PICC& picc)
 {
-    return _u.select(uid);
+    return _u.select(picc);
 }
 
-bool AdapterMFRC522::deactivate()
+bool AdapterMFRC522::deactivate(const bool iso14443_4)
 {
     return _u.hlt() && _u.mifareClassicStopCrypto1();
+}
+
+bool AdapterMFRC522::nfca_request_ats(m5::nfc::a::ATS& ats)
+{
+    return false;
 }
 
 bool AdapterMFRC522::nfca_read_block(uint8_t rx[16], const uint8_t addr)
@@ -114,14 +134,35 @@ bool AdapterMFRC522::nfca_write_page(const uint8_t addr, const uint8_t tx[4])
     return _u.writePage(addr, tx);
 }
 
-bool AdapterMFRC522::mifare_classic_authenticate(const bool auth_a, const UID& uid, const uint8_t block, const Key& key)
+bool AdapterMFRC522::mifare_classic_authenticate(const bool auth_a, const PICC& picc, const uint8_t block,
+                                                 const Key& key)
 {
-    return auth_a ? _u.mifareClassicAuthenticateA(uid, block, key) : _u.mifareClassicAuthenticateB(uid, block, key);
+    return auth_a ? _u.mifareClassicAuthenticateA(picc, block, key) : _u.mifareClassicAuthenticateB(picc, block, key);
 }
 
 bool AdapterMFRC522::mifare_classic_value_block(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg)
 {
     return _u.mifareClassicValueBlock(cmd, block, arg);
+}
+
+bool AdapterMFRC522::mifare_ultralightC_authenticate1(uint8_t ek[8])
+{
+    return false;
+}
+
+bool AdapterMFRC522::mifare_ultralightC_authenticate2(uint8_t rx_ek[8], const uint8_t tx_ek[16])
+{
+    return false;
+}
+
+bool AdapterMFRC522::mifare_get_version_L3(uint8_t ver[8])
+{
+    return false;
+}
+
+bool AdapterMFRC522::mifare_get_version_L4(uint8_t ver[8])
+{
+    return false;
 }
 
 bool AdapterMFRC522::ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage)
@@ -137,15 +178,14 @@ std::unique_ptr<NFCLayerA::Adapter> make_mfrc522_adapter(UnitMFRC522& u)
 }
 }  // namespace
 
-NFCLayerA::NFCLayerA(UnitMFRC522& u) : _impl(make_mfrc522_adapter(u)), _ndef{*this}
+NFCLayerA::NFCLayerA(UnitMFRC522& u) : _ndef{*this}, _isoDEP{*this}, _impl(make_mfrc522_adapter(u))
 {
 }
 
-NFCLayerA::NFCLayerA(UnitWS1850S& u) : _impl(make_mfrc522_adapter(static_cast<UnitMFRC522&>(u))), _ndef{*this}
-
+NFCLayerA::NFCLayerA(UnitWS1850S& u)
+    : _ndef{*this}, _isoDEP{*this}, _impl(make_mfrc522_adapter(static_cast<UnitMFRC522&>(u)))
 {
 }
 
 }  // namespace nfc
-}  // namespace unit
 }  // namespace m5
