@@ -598,50 +598,6 @@ bool UnitMFRC522::writeBlock(const uint8_t block, const uint8_t tx[16])
     return mifare_classic_transceive(cmd, 2, TIMEOUT_WRITE1) && mifare_classic_transceive(tx, 16, TIMEOUT_WRITE2);
 }
 
-bool UnitMFRC522::writePage(const uint8_t page, const uint8_t tx[4])
-{
-    if (!tx) {
-        return false;
-    }
-    uint8_t cmd[6]{m5::stl::to_underlying(m5::nfc::a::Command::WRITE_PAGE), page};
-    std::memcpy(cmd + 2, tx, 4);
-    return mifare_classic_transceive(cmd, m5::stl::size(cmd), TIMEOUT_WRITE1);
-}
-
-bool UnitMFRC522::ntagReadPage(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage)
-{
-    if (!rx || !rx_len) {
-        return false;
-    }
-
-    uint8_t cmd[5]{m5::stl::to_underlying(m5::nfc::a::Command::FAST_READ), spage, epage};
-    uint8_t validBits{};
-    uint16_t crc{};
-    if (!calculate_crc(crc, cmd, 3)) {
-        return false;
-    }
-    cmd[3] = crc & 0xFF;
-    cmd[4] = (crc >> 8) & 0xFF;
-
-    const uint8_t pages = epage - spage + 1;
-    uint32_t timeout    = (pages == 1)   ? TIMEOUT_FAST_READ
-                          : (pages < 4)  ? TIMEOUT_FAST_READ_4PAGE
-                          : (pages < 12) ? TIMEOUT_FAST_READ_12PAGE
-                          : (pages < 32) ? TIMEOUT_FAST_READ_32PAGE
-                                         : TIMEOUT_FAST_READ_32PAGE * 2;
-
-    uint8_t tmp[rx_len + 2 /*CRC*/]{};
-    uint16_t rlen = sizeof(tmp);
-    if (transceive(tmp, rlen, cmd, sizeof(cmd), timeout, validBits, 0, true) && rlen == rx_len + 2) {
-        memcpy(rx, tmp, std::min<uint16_t>(rx_len, rlen));
-        return true;
-    }
-
-    M5_LIB_LOGE("ERROR:%u", rlen);
-
-    return false;
-}
-
 bool UnitMFRC522::hlt()
 {
     uint8_t buf[4]{}, txLast{};
@@ -849,58 +805,6 @@ bool UnitMFRC522::self_test()
     return firm && (*firm == buf);
 }
 
-bool UnitMFRC522::ntag_get_version(uint8_t info[10])
-{
-    uint8_t cmd[3]{m5::stl::to_underlying(m5::nfc::a::Command::GET_VERSION)};
-    uint16_t crc{};
-
-    if (!info || !calculate_crc(crc, cmd, 1)) {
-        return false;
-    }
-    cmd[1] = crc & 0xFF;
-    cmd[2] = (crc >> 8) & 0xFF;
-
-    uint8_t validBits{};
-    uint16_t rlen{10};
-    return transceive(info, rlen, cmd, m5::stl::size(cmd), TIMEOUT_GET_VERSION, validBits, 0, true);
-}
-
-bool UnitMFRC522::ntag_check_format(const PICC& picc)
-{
-    if (picc.supportsNFC()) {
-        uint8_t rbuf[18]{};
-        uint8_t rlen{18};
-        return read_block(rbuf, rlen, 0) && rbuf[12] == NFC_MAGIC_NO && rbuf[13] == NFC_VERSION;
-    }
-    return false;
-}
-
-bool UnitMFRC522::ntag_fast_read(uint8_t* rbuf, uint16_t& rlen, const uint8_t saddr, const uint8_t eaddr)
-{
-    // M5_LIB_LOGW(">>>> S:%u E:%u rlen:%u", saddr, eaddr, rlen);
-    if (saddr > eaddr) {
-        return false;
-    }
-
-    uint8_t cmd[5]{m5::stl::to_underlying(m5::nfc::a::Command::FAST_READ), saddr, eaddr};
-    uint8_t validBits{};
-    uint16_t crc{};
-    if (!calculate_crc(crc, cmd, 3)) {
-        return false;
-    }
-    cmd[3] = crc & 0xFF;
-    cmd[4] = (crc >> 8) & 0xFF;
-
-    const uint8_t pages = eaddr - saddr + 1;
-    uint32_t timeout    = (pages == 1)   ? TIMEOUT_FAST_READ
-                          : (pages < 4)  ? TIMEOUT_FAST_READ_4PAGE
-                          : (pages < 12) ? TIMEOUT_FAST_READ_12PAGE
-                          : (pages < 32) ? TIMEOUT_FAST_READ_32PAGE
-                                         : TIMEOUT_FAST_READ_32PAGE * 2;
-
-    return transceive(rbuf, rlen, cmd, sizeof(cmd), timeout, validBits, 0, true);
-}
-
 //
 bool UnitMFRC522::modify_bit_register8(const uint8_t reg, const uint8_t set_mask, const uint8_t clear_mask)
 {
@@ -1103,8 +1007,8 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, 
     // CRC
     if (crc) {
         if (fifo_len == 1 && valid == 4) {
-            M5_LIB_LOGD("NG MIFARE NAK %02X", rbuf[0]);
-            return false;
+            M5_LIB_LOGV("MIFARE NAK %02X", rbuf[0]);
+            return rbuf[0] == MIFARE_ACK;
         }
         if (fifo_len < 2 || valid) {
             M5_LIB_LOGD("Not in a condition to calculate CRC %u/%u", fifo_len, valid);

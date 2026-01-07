@@ -107,8 +107,7 @@ public:
 
     explicit UnitMFRC522(const uint8_t addr = DEFAULT_ADDRESS) : Component(addr)
     {
-        auto ccfg = component_config();
-        // ccfg.clock = 100 * 1000U;
+        auto ccfg  = component_config();
         ccfg.clock = 400 * 1000U;
         component_config(ccfg);
     }
@@ -203,7 +202,6 @@ public:
     bool writeReceiverGain(const mfrc522::ReceiverGain gain);
     ///@}
 
-    ///@note Timer settings
     ///@name TPrescaler
     ///@{
     //! @brief Read the TPrescale
@@ -293,24 +291,10 @@ public:
      */
     bool writeBlock(const uint8_t block, const uint8_t tx[16]);
     /*!
-      @brief Write the 1 page
-      @param page Page address
-      @param tx Send buffer (at least 4 bytes)
-      @return True if successful
-     */
-    bool writePage(const uint8_t page, const uint8_t tx[4]);
-
-    /*!
       @brief Hlt for PICC
       @return True if successful
      */
     bool hlt();
-
-    /*!
-      @brief Hlt for PICC(ISO14443-4) DESELECT
-      @return True if successful
-     */
-    bool deselect();
     ///@}
 
     ///@name MIFARE classic
@@ -357,20 +341,6 @@ public:
     bool mifareClassicValueBlock(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg = 0);
     ///@}
 
-    ///@name NTAG
-    ///@{
-    /*!
-      @brief Read between specified pages
-      @param rx Receiver buffer
-      @param[in/out] rx_len in:Size of receive buffer out:actual read size
-      @param spage Start reading page
-      @param epage End reading page
-      @return True if successful
-      @warning Only PICC supporting the FAST_READ command
-     */
-    bool ntagReadPage(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage);
-    ///@}
-
 protected:
     // register operation
     bool modify_bit_register8(const uint8_t reg, const uint8_t set_mask, const uint8_t clear_mask);
@@ -411,12 +381,6 @@ protected:
     bool mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t timeout_ms);
     bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const uint32_t timeout_ms,
                                    const bool usingtimeout = false);
-
-    // NTAG
-    bool ntag_get_version(uint8_t info[10]);
-    bool ntag_check_format(const m5::nfc::a::PICC& picc);
-    bool ntag_fast_read(uint8_t* rbuf, uint16_t& rlen, const uint8_t saddr, const uint8_t eaddr);
-    bool ntag_calclate_ndef_message_size(const m5::nfc::a::PICC& picc, uint32_t& sz, const uint8_t targetTagBit = 0x06);
 
     // crc
     inline bool calculate_crc(uint16_t& result, const uint8_t* buf, const uint8_t len)
