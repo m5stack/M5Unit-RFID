@@ -35,15 +35,18 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
 
     virtual bool transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
                             const uint32_t timeout_ms) override;
+    //    virtual bool mifare_transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+    //                                   const uint32_t timeout_ms) override;
+    //    virtual bool mifare_transmit(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+    //                                 const uint32_t timeout_ms, const bool waitTXE) override;
 
     virtual bool request(uint16_t& atqa) override;
     virtual bool wakeup(uint16_t& atqa) override;
 
     virtual bool select(m5::nfc::a::PICC& picc) override;
     virtual bool activate(const m5::nfc::a::PICC& picc) override;
-    virtual bool deactivate(const bool iso14443_4) override;
+    virtual bool hlt() override;
 
-    virtual bool nfca_request_ats(m5::nfc::a::ATS& ats) override;
     virtual bool nfca_read_block(uint8_t rx[16], const uint8_t addr) override;         // READ
     virtual bool nfca_write_block(const uint8_t addr, const uint8_t tx[16]) override;  // WRITE_BLOCK
     virtual bool nfca_write_page(const uint8_t addr, const uint8_t tx[4]) override;    // WRITE_PAGE
@@ -52,11 +55,6 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
                                              const m5::nfc::a::mifare::classic::Key& key) override;
     virtual bool mifare_classic_value_block(const m5::nfc::a::Command cmd, const uint8_t block,
                                             const uint32_t arg = 0) override;
-
-    virtual bool mifare_ultralightC_authenticate1(uint8_t ek[8]) override;
-    virtual bool mifare_ultralightC_authenticate2(uint8_t rx_ek[8], const uint8_t tx_ek[16]) override;
-    virtual bool mifare_get_version_L3(uint8_t ver[8]) override;
-    virtual bool mifare_get_version_L4(uint8_t ver[8]) override;
 
     virtual bool ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage,
                                 const uint8_t epage) override;  // FAST_READ
@@ -67,8 +65,19 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
 bool AdapterMFRC522::transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
                                 const uint32_t timeout_ms)
 {
-    return false;
+    return _u.nfcaTransceive(rx, rx_len, tx, tx_len, timeout_ms);
 }
+
+#if 0
+bool AdapterMFRC522::mifare_transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+                                       const uint32_t timeout_ms){
+
+
+    
+    
+
+}
+#endif
 
 bool AdapterMFRC522::request(uint16_t& atqa)
 {
@@ -84,7 +93,6 @@ bool AdapterMFRC522::select(m5::nfc::a::PICC& picc)
 {
     uint8_t lv{1};  // Cascade level 1-3
     bool completed{};
-    picc = PICC{};
     do {
         if (!_u.selectWithAnticollision(completed, picc, lv)) {
             return false;
@@ -98,14 +106,9 @@ bool AdapterMFRC522::activate(const m5::nfc::a::PICC& picc)
     return _u.select(picc);
 }
 
-bool AdapterMFRC522::deactivate(const bool iso14443_4)
+bool AdapterMFRC522::hlt()
 {
     return _u.hlt() && _u.mifareClassicStopCrypto1();
-}
-
-bool AdapterMFRC522::nfca_request_ats(m5::nfc::a::ATS& ats)
-{
-    return false;
 }
 
 bool AdapterMFRC522::nfca_read_block(uint8_t rx[16], const uint8_t addr)
@@ -143,26 +146,6 @@ bool AdapterMFRC522::mifare_classic_authenticate(const bool auth_a, const PICC& 
 bool AdapterMFRC522::mifare_classic_value_block(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg)
 {
     return _u.mifareClassicValueBlock(cmd, block, arg);
-}
-
-bool AdapterMFRC522::mifare_ultralightC_authenticate1(uint8_t ek[8])
-{
-    return false;
-}
-
-bool AdapterMFRC522::mifare_ultralightC_authenticate2(uint8_t rx_ek[8], const uint8_t tx_ek[16])
-{
-    return false;
-}
-
-bool AdapterMFRC522::mifare_get_version_L3(uint8_t ver[8])
-{
-    return false;
-}
-
-bool AdapterMFRC522::mifare_get_version_L4(uint8_t ver[8])
-{
-    return false;
 }
 
 bool AdapterMFRC522::ntag_read_page(uint8_t* rx, uint16_t& rx_len, const uint8_t spage, const uint8_t epage)

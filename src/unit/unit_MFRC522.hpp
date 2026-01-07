@@ -14,9 +14,6 @@
 // M5Unit-NFC
 #include <nfc/nfc.hpp>
 #include <nfc/a/nfca.hpp>
-// #include <nfc/a/mifare.hpp>
-// #include <nfc/a/mifare_classic_crypto1.hpp>
-//
 
 namespace m5 {
 namespace unit {
@@ -207,16 +204,12 @@ public:
     ///@}
 
     ///@note Timer settings
-    ///@name TPrescale
+    ///@name TPrescaler
     ///@{
     //! @brief Read the TPrescale
-    bool readTPrescale(uint16_t& tprescale);
-    //! @brief Read the TPrescale
-    bool readTPrescale(float& tprescale);
+    bool readTPrescaler(uint16_t& tprescale);
     //! @brief Write the TPrescale
-    bool writeTPrescale(const uint16_t tprescale);
-    //! @brief Write the TPrescale
-    bool writeTPrescale(const float tprescale);
+    bool writeTPrescaler(const uint16_t tprescale);
     ///@}
 
     ///@name CRC
@@ -248,12 +241,8 @@ public:
       @param timeout_ms Timeout(ms)
       @return True if successful
      */
-    inline bool nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
-                               const uint32_t timeout_ms)
-    {
-        uint8_t vbits{};
-        return picc_transceive(rx, rx_len, tx, tx_len, vbits);
-    }
+    bool nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+                        const uint32_t timeout_ms);
 
     /*!
       @brief Request for idle PICC
@@ -316,6 +305,12 @@ public:
       @return True if successful
      */
     bool hlt();
+
+    /*!
+      @brief Hlt for PICC(ISO14443-4) DESELECT
+      @return True if successful
+     */
+    bool deselect();
     ///@}
 
     ///@name MIFARE classic
@@ -378,8 +373,13 @@ public:
 
 protected:
     // register operation
-    bool set_register_bit(const uint8_t reg, const uint8_t bit);
-    bool clear_register_bit(const uint8_t reg, const uint8_t bit);
+    bool modify_bit_register8(const uint8_t reg, const uint8_t set_mask, const uint8_t clear_mask);
+    bool set_bit_register8(const uint8_t reg, const uint8_t bits);
+    bool clear_bit_register8(const uint8_t reg, const uint8_t bits);
+    inline bool change_bit_register8(const uint8_t reg, const uint8_t bits, const uint8_t mask)
+    {
+        return modify_bit_register8(reg, mask & bits, mask);
+    }
     bool read_register_with_align(const uint8_t reg, uint8_t* buf, const uint8_t len, const uint8_t align);
     bool write_pcd_command(const mfrc522::Command cmd);
 
@@ -388,11 +388,11 @@ protected:
     bool wait_comm_irq(const uint8_t irq, const uint32_t duration);
     bool wait_div_irq(const uint8_t irq, const uint32_t duration);
 
-    // PICC
-    bool picc_send(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast = 0,
-                   const uint8_t rxAlign = 0);
-    bool picc_transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len, uint8_t& validBits,
-                         const uint8_t rxAlign = 0, const bool crc = false, uint8_t* err = nullptr);
+    // transceive
+    bool transmit_command(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast = 0,
+                          const uint8_t rxAlign = 0);
+    bool transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len, const uint32_t timeout_ms,
+                    uint8_t& validBits, const uint8_t rxAlign = 0, const bool crc = false, uint8_t* err = nullptr);
 
     bool picc_haltA();
 
@@ -408,8 +408,9 @@ protected:
     // MIFARE classic
     bool mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::PICC& picc, const uint8_t block,
                                      const m5::nfc::a::mifare::classic::Key& key);
-    bool mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block);
-    bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
+    bool mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t timeout_ms);
+    bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const uint32_t timeout_ms,
+                                   const bool usingtimeout = false);
 
     // NTAG
     bool ntag_get_version(uint8_t info[10]);
@@ -428,6 +429,7 @@ protected:
 
 protected:
     config_t _cfg{};
+    uint16_t _tprescaler{};
 };
 
 ///@cond
