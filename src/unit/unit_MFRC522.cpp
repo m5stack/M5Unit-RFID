@@ -107,12 +107,6 @@ constexpr uint8_t TX_CONTROL_TX12REF{0x03};  // Tx1RFEn | Tx2RFEn
 constexpr uint8_t CASCADE_TAG{0x88};
 
 constexpr uint8_t MIFARE_ACK{0x0A};
-/*
-0x00 transfer valid and invalid operation
-0x01 transfer valid and parity or CRC error
-0x00 transfer invalid and invalid operation
-0x05 transfer invalid and parity or CRC error
-:beg */
 
 inline bool has_collision(const uint8_t err)
 {
@@ -155,7 +149,6 @@ namespace unit {
 const char UnitMFRC522::name[] = "UnitMFRC522";
 const types::uid_t UnitMFRC522::uid{"UnitMFRC522"_mmh3};
 const types::attr_t UnitMFRC522::attr{attribute::AccessI2C};
-// const UnitMFRC522::MifareKey UnitMFRC522::DEFAULT_CLASSIC_KEY{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 bool UnitMFRC522::begin()
 {
     if (!softReset()) {
@@ -178,13 +171,29 @@ bool UnitMFRC522::begin()
         return false;
     }
 
-    //    uint8_t v{};
-    //    readRegister8(TX_MODE_REG, v, 0);
-    //    M5_LIB_LOGE(">>>>> TX_MODE %02X", v);
-
     // Mode and anttena
-    return readTPrescaler(_tprescaler) && writeRegister8(MODE_REG, _cfg.mode_reg) &&
-           writeReceiverGain(_cfg.receiver_gain) && (_cfg.enable_antenna ? turnOnAntenna() : true);
+    auto ret = readTPrescaler(_tprescaler) && writeRegister8(MODE_REG, _cfg.mode_reg) &&
+               writeReceiverGain(_cfg.receiver_gain) && (_cfg.enable_antenna ? turnOnAntenna() : true);
+
+#if 0
+    uint8_t tx_control{}, demod_reg{}, rf_cfg{}, rx_thresh{};
+    readRegister8(TX_CONTROL_REG, tx_control, 0);
+    readRegister8(DEMOD_REG, demod_reg, 0);
+    readRegister8(RFC_FG_REG, rf_cfg, 0);
+    readRegister8(RX_THRESHOLD_REG, rx_thresh, 0);
+    M5_LIB_LOGE("TxCtrl=%02X Demod=%02X RfCfg=%02X RxTh=%02X", tx_control, demod_reg, rf_cfg, rx_thresh);
+
+    uint8_t rx_sel{}, mod_width{};
+    readRegister8(RX_SEL_REG, rx_sel, 0);  // Include RxWait
+    readRegister8(MOD_WIDTH_REG, mod_width, 0);
+    M5_LIB_LOGE("RxSel=%02X ModWidth=%02X", rx_sel, mod_width);
+
+    uint8_t mf_rx{};
+    readRegister8(MF_RX_REG, mf_rx, 0);
+    M5_LIB_LOGE("MfRx=%02X (ParityDisable=%d)", mf_rx, (mf_rx >> 4) & 1);
+#endif
+
+    return ret;
 }
 
 void UnitMFRC522::update(const bool /* force */)
@@ -214,13 +223,12 @@ bool UnitMFRC522::nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
     uint8_t discard{};
     uint8_t tmp[rx_len_org + 2 /*CRC*/]{};
     uint16_t rx_tmp = sizeof(tmp);
+    // uint8_t error{};
 
-    if (transceive(tmp, rx_tmp, frame, sizeof(frame), timeout_ms, discard, 0, true) && rx_tmp) {
-        rx_len = std::min<uint16_t>(rx_len_org, rx_tmp);
-        memcpy(rx, tmp, rx_len);
-        return true;
-    }
-    return false;
+    auto ret = transceive(tmp, rx_tmp, frame, sizeof(frame), timeout_ms, discard, 0, true);
+    rx_len   = std::min<uint16_t>(rx_len_org, rx_tmp);
+    memcpy(rx, tmp, rx_len);
+    return ret && rx_len;
 }
 
 bool UnitMFRC522::softReset(const bool blocking)
@@ -518,6 +526,11 @@ bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::PICC& pic
         picc.sak  = sak;
         picc.type =
             sak_to_type(sak);  // WARNING: This is a preliminary diagnosis; a more accurate diagnosis is required
+        // Only the Plus X SL2 can be confirmed with sak
+        if (picc.type == Type::MIFARE_Plus_2K || picc.type == Type::MIFARE_Plus_4K) {
+            picc.sub_type_plus  = SubTypePlus::X;
+            picc.security_level = 2;
+        }
         picc.blocks = get_number_of_blocks(picc.type);
         completed   = true;
     }
@@ -940,11 +953,14 @@ bool UnitMFRC522::transmit_command(const mfrc522::Command cmd, const uint8_t* bu
     return true;
 }
 
-bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len,
+bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf, const uint16_t len,
                              const uint32_t timeout_ms, uint8_t& validBits, const uint8_t rxAlign, const bool crc,
                              uint8_t* error)
 {
-    if (!rbuf || !rlen || !buf || !len) {
+    auto rx_len_org = rx_len;
+    rx_len          = 0;
+
+    if (!rbuf || !rx_len_org || !buf || !len) {
         return false;
     }
     if (error) {
@@ -958,6 +974,13 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, 
 
     // Wait for command completion
     if (!wait_comm_irq(RxIRq | IdleIRq, timeout_ms)) {
+#if 0
+        uint8_t com_irq{}, err_reg{}, fifo_level{};
+        readRegister8(COM_IRQ_REG, com_irq, 0);
+        readRegister8(ERROR_REG, err_reg, 0);
+        readRegister8(FIFO_LEVEL_REG, fifo_level, 0);
+        M5_LIB_LOGE("Timeout: COM_IRQ=%02X ERR=%02X FIFO=%u", com_irq, err_reg, fifo_level);
+#endif
         M5_LIB_LOGD("Timeout");
         if (error) {
             *error = ERROR_BIT_TIMEOUT;
@@ -985,9 +1008,10 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, 
     if (!readRegister8(FIFO_LEVEL_REG, fifo_len, 0)) {
         return false;
     }
+
     M5_LIB_LOGV("- Recv:%u", fifo_len);
-    if (fifo_len > rlen) {
-        M5_LIB_LOGD("Not enough rlen %zu : %u", rlen, fifo_len);
+    if (fifo_len > rx_len_org) {
+        M5_LIB_LOGD("Not enough %u/%u", fifo_len, rx_len_org);
         return false;
     }
     if (!read_register_with_align(FIFO_DATA_REG, rbuf, fifo_len, rxAlign) ||
@@ -999,6 +1023,8 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, 
     valid &= 0x07;
     validBits = valid;  // It's indicates the number of valid bits in the last received
 
+    rx_len = fifo_len;
+
     // Check collision
     if (has_collision(err)) {
         return false;
@@ -1006,23 +1032,24 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, 
 
     // CRC
     if (crc) {
-        if (fifo_len == 1 && valid == 4) {
-            M5_LIB_LOGV("MIFARE NAK %02X", rbuf[0]);
+        if (fifo_len == 1 && valid == 4) {  // 4bit ACK
+            if (rbuf[0] != MIFARE_ACK) {
+                M5_LIB_LOGE("MIFARE ACK %02X", rbuf[0]);
+            }
             return rbuf[0] == MIFARE_ACK;
         }
         if (fifo_len < 2 || valid) {
-            M5_LIB_LOGD("Not in a condition to calculate CRC %u/%u", fifo_len, valid);
+            M5_LIB_LOGE("Not in a condition to calculate CRC %u/%u", fifo_len, valid);
             return false;
         }
         uint16_t crc16{};
         uint16_t rcrc16 = ((uint16_t)rbuf[fifo_len - 1] << 8) | rbuf[fifo_len - 2];
         if (!calculate_crc(crc16, rbuf, fifo_len - 2) || crc16 != rcrc16) {
-            M5_LIB_LOGD("CRC ERROR C:%04X R:%04X", crc16, rcrc16);
+            M5_LIB_LOGE("CRC ERROR C:%04X R:%04X", crc16, rcrc16);
             return false;
         }
     }
 
-    rlen = fifo_len;
     M5_LIB_LOGV("OK:rxLast:%u", validBits);
     return true;
 }

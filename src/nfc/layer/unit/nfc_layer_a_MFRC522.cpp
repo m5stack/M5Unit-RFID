@@ -28,7 +28,7 @@ struct AdapterMFRC522 final : NFCLayerA::Adapter {
     {
     }
 
-    inline virtual uint16_t max_fifo_depth() override
+    inline virtual uint16_t max_fifo_depth() const override
     {
         return m5::unit::mfrc522::MAX_FIFO_DEPTH;
     }
@@ -63,17 +63,6 @@ bool AdapterMFRC522::transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx
 {
     return _u.nfcaTransceive(rx, rx_len, tx, tx_len, timeout_ms);
 }
-
-#if 0
-bool AdapterMFRC522::mifare_transceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
-                                       const uint32_t timeout_ms){
-
-
-    
-    
-
-}
-#endif
 
 bool AdapterMFRC522::request(uint16_t& atqa)
 {
