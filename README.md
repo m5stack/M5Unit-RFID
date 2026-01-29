@@ -9,6 +9,56 @@ M5UnitUnfied has a unified API and can control multiple units via PaHub, etc.
 
 RFID2 is a radio frequency identification unit. Built-in WS1850S chip, working frequency is 13.56MHz. Supports reading card, writing card, recognition, recording, and encoding RF card Multiple functions such as authorization and authorization. Use magnetic field induction technology to realize non-contact two-way information interaction, read and verify the information of proximity cards. It can be used in access control systems, check-in systems, warehouse goods entry and storage, and community vehicle entry and exit registration needs Application scenarios for information verification.
 
+
+## PICC Support
+
+Raw R/W includes FileSystem via ISO-DEP when applicable.  
+Support may be expanded in future updates to cover PICCs not listed here.
+
+### NFC-A
+
+| PICC Type | NFC Forum Tag (NDEF) | Detect | Identify | Raw R/W | Notes |
+|---|---|---|---|---|---|
+| MIFARE Classic Mini | None | Yes | Yes | Yes | Auth required |
+| MIFARE Classic 1K | None | Yes | Yes | Yes | Auth required |
+| MIFARE Classic 2K | None | Yes | Yes | Yes | Auth required |
+| MIFARE Classic 4K | None | Yes | Yes | Yes | Auth required |
+| MIFARE Ultralight | Type2 | Yes | Yes | Yes |  |
+| MIFARE Ultralight EV1 MF0UL11 | Type2 | Yes | Yes | Yes |  |
+| MIFARE Ultralight EV1 MF0UL21 | Type2 | Yes | Yes | Yes |  |
+| MIFARE Ultralight Nano | Type2 | Yes | Yes | Yes |  |
+| MIFARE Ultralight C | Type2 | Yes | Yes | Yes |  |
+| NTAG 203 | Type2 | Yes | Yes | Yes |  |
+| NTAG 210u | Type2 | Yes | Yes | Yes |  |
+| NTAG 210 | Type2 | Yes | Yes | Yes |  |
+| NTAG 212 | Type2 | Yes | Yes | Yes |  |
+| NTAG 213 | Type2 | Yes | Yes | Yes |  |
+| NTAG 215 | Type2 | Yes | Yes | Yes |  |
+| NTAG 216 | Type2 | Yes | Yes | Yes |  |
+| ST25TA512B | Type4 | Yes | Yes | Yes | ISO-DEP |
+| ST25TA02K | Type4 | Yes | Yes | Yes | ISO-DEP |
+| ST25TA16K | Type4 | Yes | Yes | Yes | ISO-DEP |
+| ST25TA64K | Type4 | Yes | Yes | Yes | ISO-DEP |
+| MIFARE Plus 2K (S/X/EV1/EV2) | None | Yes | Yes | Yes | SL0/SL1(\*1)|
+| MIFARE Plus 4K (S/X/EV1/EV2) | None | Yes | Yes | Yes | SL0/SL1(\*1)|
+| MIFARE Plus SE 1K | None | Yes | Yes | Yes | SL0/SL1/SL3|
+| MIFARE DESFire 2K (EV1/EV2/EV3) | Type4 | Yes | Yes | Yes | ISO-DEP |
+| MIFARE DESFire 4K (EV1/EV2/EV3) | Type4 | Yes | Yes | Yes | ISO-DEP |
+| MIFARE DESFire 8K (EV1/EV2/EV3) | Type4 | Yes | Yes | Yes | ISO-DEP |
+| MIFARE DESFire Light | Type4 | Yes | Yes | Yes | NDEF is not supported yet |
+
+- \*1 MIFARE Plus SL3 operation has issues.
+
+
+## Emulation
+
+Emulation is not supported on Unit-RFID.
+
+## Known Issues
+
+- MIFARE Plus SL3 operation has issues.
+
+
 ## Related Link
 
 - [Unit RFID2 & Datasheet](https://docs.m5stack.com/en/unit/rfid2)
