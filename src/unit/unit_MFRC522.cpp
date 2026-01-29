@@ -233,7 +233,7 @@ bool UnitMFRC522::nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
     }
 
     if (rx_len_org > cap) {
-        M5_LIB_LOGW("too large rx_len %u", rx_org_len);
+        M5_LIB_LOGW("too large rx_len %u", rx_len_org);
         return false;
     }
 
