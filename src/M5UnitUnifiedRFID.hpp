@@ -19,7 +19,7 @@
 
 /*!
   @namespace m5
-  @brief Top level namespace of M5stack
+  @brief Top level namespace of M5Stack
  */
 namespace m5 {
 
@@ -29,7 +29,9 @@ namespace m5 {
  */
 namespace unit {
 
-using UnitRFID  = m5::unit::UnitMFRC522;
+//! @brief Alias for UnitMFRC522
+using UnitRFID = m5::unit::UnitMFRC522;
+//! @brief Alias for UnitWS1850S
 using UnitRFID2 = m5::unit::UnitWS1850S;
 
 }  // namespace unit

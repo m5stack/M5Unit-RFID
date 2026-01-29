@@ -46,7 +46,7 @@ enum class Command : uint8_t {
 
 /*!
   @enum ReceiverGain
-  @brief The receiver’s signal voltage gain facor
+  @brief The receiver’s signal voltage gain factor
  */
 enum class ReceiverGain : uint8_t {
     dB18,  //!< 18 decibel
@@ -64,8 +64,8 @@ enum class ReceiverGain : uint8_t {
   @brief API error code
  */
 enum class Error : uint8_t {
-    OCCUR_COLLISION,           //!< Ccollision occurs
-    UID_NOT_COLMPLETED,        //!< UID is not yet complete
+    OCCUR_COLLISION,           //!< Collision occurs
+    UID_NOT_COMPLETED,         //!< UID is not yet complete
     ARGUMENT = 0x80,           //!< Error caused by arguments (0x80)
     COMMUNICATION,             //!< Error in communication (0x81)
     REGISTER,                  //!< Error by error register value (0x82)
@@ -101,31 +101,46 @@ public:
         bool enable_antenna{true};
         //! The receiver’s signal voltage gain factor
         mfrc522::ReceiverGain receiver_gain{mfrc522::ReceiverGain::dB48};
-        //! Using sotware CRC
+        //! Using software CRC
         bool software_crc{false};
     };
 
+    /*!
+      @brief Constructor
+      @param addr I2C address
+     */
     explicit UnitMFRC522(const uint8_t addr = DEFAULT_ADDRESS) : Component(addr)
     {
         auto ccfg  = component_config();
         ccfg.clock = 400 * 1000U;
         component_config(ccfg);
     }
+    /*!
+      @brief Destructor
+     */
     virtual ~UnitMFRC522()
     {
     }
 
+    /*!
+      @brief Begin the unit
+      @return True if successful
+     */
     virtual bool begin() override;
+    /*!
+      @brief Update internal state
+      @param force Force update if true
+     */
     virtual void update(const bool force = false) override;
 
     ///@name Settings for begin
     ///@{
-    /*! @brief Gets the configration */
+    /*! @brief Gets the configuration */
     inline config_t config()
     {
         return _cfg;
     }
-    //! @brief Set the configration
+    //! @brief Set the configuration
     inline void config(const config_t& cfg)
     {
         _cfg = cfg;
@@ -336,7 +351,7 @@ public:
       @brief Operation for the value block
       @param cmd Command
       @param block Block address
-      @param arg Arrgument for command if needs
+      @param arg Argument for command if needs
      */
     bool mifareClassicValueBlock(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg = 0);
     ///@}
@@ -366,7 +381,7 @@ protected:
 
     bool picc_haltA();
 
-    // Read/Wrte
+    // Read/Write
     bool read_block(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
     bool write_block(const uint8_t block, const uint8_t* buf, const uint8_t len);
     bool write_page(const uint8_t page, const uint8_t* buf, const uint8_t len);
