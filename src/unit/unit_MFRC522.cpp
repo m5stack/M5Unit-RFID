@@ -205,12 +205,13 @@ bool UnitMFRC522::nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
                                  const uint32_t timeout_ms)
 {
     const uint16_t rx_len_org = rx_len;
+    const uint16_t cap        = MAX_FIFO_DEPTH - 2 /*CRC*/;
     rx_len                    = 0;
 
+#if 0
     if (!rx || !rx_len_org || !tx || !tx_len) {
         return false;
     }
-
     uint8_t frame[tx_len + 2 /*CRC*/]{};
     uint16_t crc{};
     if (!calculate_crc(crc, tx, tx_len)) {
@@ -226,7 +227,33 @@ bool UnitMFRC522::nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
     // uint8_t error{};
 
     auto ret = transceive(tmp, rx_tmp, frame, sizeof(frame), timeout_ms, discard, 0, true);
-    rx_len   = std::min<uint16_t>(rx_len_org, rx_tmp);
+#else
+    if (!rx || !rx_len_org || !tx || !tx_len || tx_len > cap) {
+        return false;
+    }
+
+    if (rx_len_org > cap) {
+        M5_LIB_LOGW("too large rx_len %u", rx_org_len);
+        return false;
+    }
+
+    uint8_t frame[MAX_FIFO_DEPTH]{};
+    uint16_t crc{};
+    if (!calculate_crc(crc, tx, tx_len)) {
+        return false;
+    }
+    memcpy(frame, tx, tx_len);
+    frame[tx_len]     = crc & 0xFF;
+    frame[tx_len + 1] = crc >> 8;
+
+    uint8_t discard{};
+    uint8_t tmp[MAX_FIFO_DEPTH]{};
+    uint16_t rx_tmp = rx_len_org + 2 /* CRC*/;
+
+    auto ret = transceive(tmp, rx_tmp, frame, tx_len + 2 /*CRC*/, timeout_ms, discard, 0, true);
+#endif
+
+    rx_len = std::min<uint16_t>(rx_len_org, rx_tmp);
     memcpy(rx, tmp, rx_len);
     return ret && rx_len;
 }
@@ -504,7 +531,9 @@ bool UnitMFRC522::selectWithAnticollision(bool& completed, m5::nfc::a::PICC& pic
     }
 
     // Check SAK CRC
-    if (!calculate_crc(crc, rbuf, 1) || crc != *(uint16_t*)(rbuf + 1)) {
+    uint16_t sak_crc{};
+    memcpy(&sak_crc, rbuf + 1, sizeof(sak_crc));
+    if (!calculate_crc(crc, rbuf, 1) || crc != sak_crc) {
         return false;
     }
 
@@ -920,8 +949,7 @@ bool UnitMFRC522::wait_div_irq(const uint8_t irq, const uint32_t timeout_ms)
     uint8_t v{};
     auto timeout_at = m5::utility::millis() + timeout_ms;
     do {
-        readRegister8(DIV_IRQ_REG, v, 0);
-        if (v & irq) {
+        if (readRegister8(DIV_IRQ_REG, v, 0) && (v & irq)) {
             return true;
         }
         std::this_thread::yield();

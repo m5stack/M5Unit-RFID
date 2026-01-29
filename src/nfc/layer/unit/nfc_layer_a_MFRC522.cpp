@@ -99,17 +99,6 @@ bool AdapterMFRC522::hlt()
 bool AdapterMFRC522::nfca_read_block(uint8_t rx[16], const uint8_t addr)
 {
     return _u.readBlock(rx, addr);
-
-#if 0    
-    uint8_t tmp[rx_len + 2 /* CRC */]{};
-    uint16_t tmp_len = rx_len + 2;
-    if (_u.readBlock(tmp, tmp_len, addr) && tmp_len > 2) {
-        memcpy(rx, tmp, std::min<uint16_t>(rx_len, tmp_len - 2));
-        rx_len = tmp_len - 2;  // CRC
-        return true;
-    }
-    return false;
-#endif
 }
 
 bool AdapterMFRC522::nfca_write_block(const uint8_t addr, const uint8_t tx[16])

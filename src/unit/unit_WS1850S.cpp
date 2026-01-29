@@ -46,7 +46,7 @@ bool UnitWS1850S::begin()
  */
 bool UnitWS1850S::self_test()
 {
-    M5_LIB_LOGE("DON'TT support it");
+    M5_LIB_LOGE("DON'T support it");
     // Is AutoTestReg of the WS1850S read-only register???
     return false;
 }
