@@ -11,15 +11,20 @@
 #define M5_UNIT_RFID_UNIT_MFRC522_HPP
 
 #include <M5UnitComponent.hpp>
-#include "rfid/rfid.hpp"
-#include "rfid/mifare.hpp"
-#include <m5_utility/stl/expected.hpp>
-#include <array>
+// M5Unit-NFC
+#include <nfc/nfc.hpp>
+#include <nfc/a/nfca.hpp>
 
 namespace m5 {
 namespace unit {
 
+namespace nfc {
+struct AdapterMFRC522;  // For layer
+}
+
 namespace mfrc522 {
+
+constexpr uint16_t MAX_FIFO_DEPTH{64};  //!< Maximum FIFO depth
 
 /*!
   @enum Command
@@ -41,7 +46,7 @@ enum class Command : uint8_t {
 
 /*!
   @enum ReceiverGain
-  @brief The receiver’s signal voltage gain facor
+  @brief The receiver’s signal voltage gain factor
  */
 enum class ReceiverGain : uint8_t {
     dB18,  //!< 18 decibel
@@ -59,17 +64,18 @@ enum class ReceiverGain : uint8_t {
   @brief API error code
  */
 enum class Error : uint8_t {
-    OCCUR_COLLISION,     //!< Ccollision occurs
-    UID_NOT_COLMPLETED,  //!< UID is not yet complete
-    ARGUMENT = 0x80,     //!< Error caused by arguments (0x80)
-    COMMUNICATION,       //!< Error in communication (0x81)
-    REGISTER,            //!< Error by error register value (0x82)
-    TIMEOUT,             //!< Timeout occurs (0x83)
-    MIFARE_NACK,         //!< MIFARE NACK detection (0x84)
-    CRC,                 //!< CRC error (0x85)
-    AUTH,                //!< Authentication error(0x86)
-    INTERNAL = 0xFE,     //!< Internal error
-    UNKNOWN  = 0xFF      //!< Misc
+    OCCUR_COLLISION,           //!< Collision occurs
+    UID_NOT_COMPLETED,         //!< UID is not yet complete
+    ARGUMENT = 0x80,           //!< Error caused by arguments (0x80)
+    COMMUNICATION,             //!< Error in communication (0x81)
+    REGISTER,                  //!< Error by error register value (0x82)
+    TIMEOUT,                   //!< Timeout occurs (0x83)
+    MIFARE_NACK,               //!< MIFARE NACK detection (0x84)
+    CRC,                       //!< CRC error (0x85)
+    AUTH,                      //!< Authentication error(0x86)
+    CANNOT_RESOLVE_COLLISION,  //!< Collision resolution failed (0x87)
+    INTERNAL = 0xFE,           //!< Internal error
+    UNKNOWN  = 0xFF            //!< Misc
 };
 
 }  // namespace mfrc522
@@ -85,26 +91,6 @@ class UnitMFRC522 : public Component {
 
 public:
     /*!
-      @brief API return value
-      @note The user can treat it as if it were a bool type
-    */
-    using result_t = m5::stl::expected<void, mfrc522::Error>;
-
-    /*!
-      @typedef MifareKey
-      @brief MIFARE key
-    */
-    using MifareKey = m5::rfid::mifare::Key;
-    /*!
-      @typedef UID
-      @brief Device UID
-     */
-    using UID = m5::rfid::UID;
-
-    //! @brief KEY of factory default
-    static const MifareKey DEFAULT_CLASSIC_KEY;
-
-    /*!
       @struct config_t
       @brief Settings for begin
      */
@@ -115,36 +101,71 @@ public:
         bool enable_antenna{true};
         //! The receiver’s signal voltage gain factor
         mfrc522::ReceiverGain receiver_gain{mfrc522::ReceiverGain::dB48};
-        //! Using sotware CRC
+        //! Using software CRC
         bool software_crc{false};
     };
 
+    /*!
+      @brief Constructor
+      @param addr I2C address
+     */
     explicit UnitMFRC522(const uint8_t addr = DEFAULT_ADDRESS) : Component(addr)
     {
         auto ccfg  = component_config();
-        ccfg.clock = 100 * 1000U;
+        ccfg.clock = 400 * 1000U;
         component_config(ccfg);
     }
+    /*!
+      @brief Destructor
+     */
     virtual ~UnitMFRC522()
     {
     }
 
+    /*!
+      @brief Begin the unit
+      @return True if successful
+     */
     virtual bool begin() override;
+    /*!
+      @brief Update internal state
+      @param force Force update if true
+     */
     virtual void update(const bool force = false) override;
 
     ///@name Settings for begin
     ///@{
-    /*! @brief Gets the configration */
+    /*! @brief Gets the configuration */
     inline config_t config()
     {
         return _cfg;
     }
-    //! @brief Set the configration
+    //! @brief Set the configuration
     inline void config(const config_t& cfg)
     {
         _cfg = cfg;
     }
     ///@}
+
+    /*!
+      @brief Gets the current operating mode
+      @note Only NFC-A
+    */
+    inline m5::nfc::NFC NFCMode() const
+    {
+        return m5::nfc::NFC::A;
+    }
+    /*!
+      @brief Configure NFC mode
+      @param mode NFC mode
+      @return True if successful
+      @warning Only NFC-A
+     */
+    inline bool configureNFCMode(const m5::nfc::NFC mode)
+    {
+        // Nop
+        return mode == m5::nfc::NFC::A;
+    }
 
     /*!
       @brief Software reset
@@ -196,17 +217,12 @@ public:
     bool writeReceiverGain(const mfrc522::ReceiverGain gain);
     ///@}
 
-    ///@note Timer settings
-    ///@name TPrescale
+    ///@name TPrescaler
     ///@{
     //! @brief Read the TPrescale
-    bool readTPrescale(uint16_t& tprescale);
-    //! @brief Read the TPrescale
-    bool readTPrescale(float& tprescale);
+    bool readTPrescaler(uint16_t& tprescale);
     //! @brief Write the TPrescale
-    bool writeTPrescale(const uint16_t tprescale);
-    //! @brief Write the TPrescale
-    bool writeTPrescale(const float tprescale);
+    bool writeTPrescaler(const uint16_t tprescale);
     ///@}
 
     ///@name CRC
@@ -227,294 +243,128 @@ public:
     bool calculateSoftwareCRC(uint16_t& result, const uint8_t* buf, const uint8_t len);
     ///@}
 
-    ///@name PICC
-    /*!
-      @brief Detect IDLE device
-      @return True if successful
-      @note Send REQA command
-      @note Device status changes from IDLE to READY
-     */
-    result_t detectIdleDevice();
-    /*!
-      @brief Detect IDLE and HALT device
-      @return True if successful
-      @note Send WUPA command
-      @note Device status changes from IDLE to READY
-      @note Device status changes from HALT to READY*
-     */
-    result_t detectDevice();
-    /*!
-      @brief Activate device
-      @param[out] uid UID of the activated device
-      @return True if successful
-      @note Resolve collisions and send SEL command
-      @note Device status changes from READY to ACTIVE
-      @note Device status changes from READY* to ACTIVE*
-      @note ISO14443-4 processing can be performed on devices in ACTIVE state
-      @warning Whenever an operation on an activated device is no longer required, it must be deactivated
-    */
-    result_t activateDevice(UID& uid);
-    /*!
-      @brief Deactivate device
-      @param uid Target UID
-      @return True if successful
-      @note Send HLTA command and stop crypt1
-      @note Device status changes from ACTIVE to HALT
-      @note Device status changes from ACTIVE* to HALT
-    */
-    result_t deactivateDevice();
-    ///@}
-
-    ///@name Read/Write
+    ///@name NFC-A
     ///@{
     /*!
-      @brief Read data from the block for MIFARE,NTAG
-      @param uid Device UID
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @param addr block address or page address
+      @brief Transceive
+      @param rx Receive buffer
+      @param[in/out] rx_len in:Size of receive buffer out:actual read size
+      @param tx Send buffer
+      @param tx_len Size of send buffer
+      @param timeout_ms Timeout(ms)
       @return True if successful
-      @note Since the data is read in 16-byte units, care should be taken with devices that have a page structure
-      @note Therefore, for devices with page configuration, specify an addr that is a multiple of 4
-      @warning buf at least 18 bytes (16 bytes data + CRC16 2 bytes)
-      @pre Requires block authentication if needed
      */
-    result_t readDevice(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
+    bool nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
+                        const uint32_t timeout_ms);
 
     /*!
-      @brief Write data to the block
-      @param uid Device UID
-      @param addr block address or page address
-      @param buf buffer
-      @param len Length of the buffer (-16)
-      @param safety Fail to write to our of the user memory area if true (safety measure)
+      @brief Request for idle PICC
+      @param[out atqa ATQA
       @return True if successful
-      @noteg Sector structure: If the buffer is less than 16 bytes, 0x00 is padded and written
-      @note Page structure: If the buffer is less than 4 bytes, 0x00 is padded and written
-      @pre Requires block authentication if needed
-    */
-    result_t writeDevice(const UID& uid, const uint8_t addr, const uint8_t* buf, const uint8_t len,
-                         const bool safety = true);
-
-    /*!
-      @brief Write data to the block for sector structure device
-      @param uid Device UID
-      @param block block address
-      @param buf buffer
-      @param len Length of the buffer (-16)
-      @param safety Fail to write to our of the user memory area if true (safety measure)
-      @return True if successful
-      @note If the buffer is less than 16 bytes, 0x00 is padded and written
-      @pre Requires block authentication if needed
-    */
-    result_t writeDeviceBlock(const UID& uid, const uint8_t block, const uint8_t* buf, const uint8_t len,
-                              const bool safety = true);
-    /*!
-      @brief Write data to the page for page structure device
-      @param uid Device UID
-      @param page Page address
-      @param buf buffer
-      @param len Length of the buffer
-      @param safety Fail to write to our of the user memory area if true (safety measure)
-      @return True if successful
-      @note If the buffer is less than 4 bytes, 0x00 is padded and written
-      @note If the buffer is greater than 4 bytes, overwrite next pages until maximum user memory area
-      @note Using WRITE_UL command
-    */
-    result_t writeDevicePage(const UID& uid, const uint8_t page, const uint8_t* buf, const uint32_t len,
-                             const bool safety = true);
-
-#if 0
-    /*!
-      @brief Read data from the page for NTAG21x
-      @param uid Device UID
-      @param block block address or page address
-      @param[out] rbuf The buffer to store
-      @param[in,out]  rlen in:Length of the rbuf out:Number of bytes stored
-      @return True if successful
-      @note Using FAST_READ command
      */
-    result_t readDevicePage(const UID& uid, uint8_t* rbuf, uint8_t& rlen, const uint8_t page);
-#endif
+    inline bool request(uint16_t& atqa)
+    {
+        return request_wakeup(atqa, true);
+    }
+    /*!
+      @brief Wakeup for idle/halt PICC
+      @param[out] atqa ATQA
+      @return True if successful
+     */
+    inline bool wakeup(uint16_t& atqa)
+    {
+        return request_wakeup(atqa, false);
+    }
+
+    /*!
+      @brief Select PICC with anti-collision
+      @param[out] completed Completed select?
+      @param[out]  picc Selected PICC
+      @param lv Cascade level (1-3)
+      @return True if successful
+     */
+    bool selectWithAnticollision(bool& completed, m5::nfc::a::PICC& picc, const uint8_t lv);
+    /*!
+      @brief Select specific PICC
+      @param  picc PICC
+      @return True if successful
+     */
+    bool select(const m5::nfc::a::PICC& picc);
+
+    /*!
+      @brief Read the 1 block / 4 page (16 bytes)
+      @param rx Receiver buffer (at least 16 bytes)
+      @param block Block address
+      @return True if successful
+     */
+    bool readBlock(uint8_t rx[16], const uint8_t block);
+    /*!
+      @brief Write the 1 block
+      @param block Block address
+      @param tx Send buffer (at least 16 bytes)
+      @return True if successful
+     */
+    bool writeBlock(const uint8_t block, const uint8_t tx[16]);
+    /*!
+      @brief Hlt for PICC
+      @return True if successful
+     */
+    bool hlt();
     ///@}
 
-    ///@warning Executable only on MIFARE classic devices
     ///@name MIFARE classic
     ///@{
     /*!
-      @brief Authentication by KeyA
-      @param uid Device UID
+      @brief Authentication using keyA of the specified block
+      @param picc PICC
       @param block Block address
-      @param key Authentication key
+      @param key MIFARE classic key
       @return True if successful
-      @note The scope of certification is the entire sector to which the block belongs
      */
-    inline result_t mifareAuthenticateA(const UID& uid, const uint8_t block, const MifareKey& key = DEFAULT_CLASSIC_KEY)
+    inline bool mifareClassicAuthenticateA(
+        const m5::nfc::a::PICC& picc, const uint8_t block,
+        const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_KEY)
     {
-        return mifare_authenticate(m5::rfid::Command::AUTH_WITH_KEY_A, uid, block, key);
+        return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_A, picc, block, key);
     }
     /*!
-      @brief Authentication by KeyB
-      @copydetails authenticateA
-    */
-    inline result_t mifareAuthenticateB(const UID& uid, const uint8_t block, const MifareKey& key = DEFAULT_CLASSIC_KEY)
+      @brief Authentication using keyB of the specified block
+      @param picc PICC
+      @param block Block address
+      @param key MIFARE classic key
+      @return True if successful
+     */
+    inline bool mifareClassicAuthenticateB(
+        const m5::nfc::a::PICC& picc, const uint8_t block,
+        const m5::nfc::a::mifare::classic::Key& key = m5::nfc::a::mifare::classic::DEFAULT_KEY)
     {
-        return mifare_authenticate(m5::rfid::Command::AUTH_WITH_KEY_B, uid, block, key);
+        return mifare_classic_authenticate(m5::nfc::a::Command::AUTH_WITH_KEY_B, picc, block, key);
     }
-    /*!
-      @brief  Exit from authenticated state
-      @return True if successful
-     */
-    bool mifareStopCrypto1();
 
     /*!
-      @brief Change the specified block to value block
-      @param uid Device UID
-      @param block Block address
-      @param keyA Authentication key A
-      @param keyB Authentication key B
-      @param readOnly read only value block if true
+      @brief  Exit from authenticated state for MIFARE classic
       @return True if successful
-      @pre Requires the sector to which the block belongs authentication
-      @note Writes to sector trailer, so keyAB of the target sector is required
-      @warning Sector trailer access bits are changed to 011 (need auth B for R/W)
-      @warning 0 or sector trailer as block address is prohibited
-    */
-    result_t mifareEnableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
-                                    const bool readOnly = false);
-    /*!
-      @brief Change the specified block to normal block
-      @param uid Device UID
-      @param block Block address
-      @param keyA Authentication key A
-      @param keyB Authentication key B
-      @param permission Permission values to be migrated
-      @return True if successful
-      @pre Requires the sector to which the block belongs authentication
-      Writes to sector trailer, so keyAB of the target sector is required.
-      @warning 0 or sector trailer as block address is prohibited
-    */
-    result_t mifareDisableValueBlock(const UID& uid, const uint8_t block, const MifareKey& keyA, const MifareKey& keyB,
-                                     const uint8_t permission = 0x00);
-    /*!
-      @brief Increments the contents of a block and stores the result in the internal Transfer Buffer
-      @param uid Device UID
-      @param block Block address
-      @param delta incremental value
-      @return True if successful
-      @note Note that the value of the block itself has not yet changed after execution
-      @warning Only value block is executable
-      @pre Requires the sector to which the block belongs authentication
-      @post Applied to the actual block by mifareTransfer
-    */
-    result_t mifareIncrement(const UID& uid, const uint8_t block, const uint32_t delta);
-    /*!
-      @brief Decrements the contents of a block and stores the result in the internal Transfer Buffer
-      @param uid Device UID
-      @param block Block address
-      @param delta decremental value
-      @return True if successful
-      @note Note that the value of the block itself has not yet changed after execution
-      @warning Only value block is executable
-      @pre Requires the sector to which the block belongs authentication
-      @post Applied to the actual block by mifareTransfer
-    */
-    result_t mifareDecrement(const UID& uid, const uint8_t block, const uint32_t delta);
-    /*!
-      @brief Writes the contents of the internal Transfer Buffer to a value block
-      @param uid Device UID
-      @param block Block address
-      @return True if successful
-      @pre Requires the sector to which the block belongs authentication
      */
-    result_t mifareTransfer(const UID& uid, const uint8_t block);
-    /*!
-      @brief Moves the contents of a block into the internal Transfer Buffer
-      @param uid Device UID
-      @param block Block address
-      @return True if successful
-      @warning Only value block is executable
-      @pre Requires the sector to which the block belongs authentication
-     */
-    result_t mifareRestore(const UID& uid, const uint8_t block);
-    /*!
-      @brief Read the value assuming the specified block is the value block
-      @param uid Device UID
-      @param[out] value value
-      @param block Block address
-      @return True if successful
-      @pre Requires block authentication if needed
-    */
-    result_t mifareReadValue(const UID& uid, int32_t& value, const uint8_t block);
-    /*!
-      @brief Writes as a specified value block
-      @param uid Device UID
-      @param block Block address
-      @param value value
-      @return True if successful
-      @pre Requires block authentication if needed
-     */
-    result_t mifareWriteValue(const UID& uid, const uint8_t block, const int32_t value);
-    ///@}
-
-    ///@warning Executable only on page structure devices
-    ///@name NFC
-    /*!
-      @brief Write change to NFC-A Type-2 format
-      @return True if NTAG or NTAG format Light/C
-    */
-    result_t nfcWriteChangeToNTAGFormat(const UID& uid);
+    bool mifareClassicStopCrypto1();
 
     /*!
-      @brief Read and calculation of required size
-      @param uid Device UID
-      @patam[out] len Required length
-      @return True if successful
+      @brief Operation for the value block
+      @param cmd Command
+      @param block Block address
+      @param arg Argument for command if needs
      */
-    result_t nfcReadRequiredSize(const UID& uid, uint32_t& len);
-    /*!
-      @brief Read the NFC NDEF message
-      @param uid Device UID
-      @param buf[out] Buffer in NDEF Message or NDEF Record format
-      @param blen[in,out] in: Buffer length out:Read length
-      @return True if successful or NTAG device
-     */
-    result_t nfcReadDevice(const UID& uid, uint8_t* buf, uint32_t& len);
-    /*!
-      @brief Write the NFC NDEF message
-      @param uid Device UID
-      @param buf Buffer in NDEF Message or NDEF Record format
-      @param blen Buffer length
-      @return True if successful or NTAG device
-      @warning Already existing data will be overwritten
-      @warning When making additions or changes to already existing data, read and edit first
-     */
-    result_t nfcWriteDevice(const UID& uid, const uint8_t* buf, const uint32_t blen);
-    ///@}
-
-    ///@name Dump
-    /*!
-      @brief Dump to serial
-      @param uid Device UID
-      @param keyA Key used for authentication A for Classic
-      @return True if successful
-      @warning All blocks must be readable with the specified key if needed
-     */
-    result_t dumpDevice(const UID& uid, const MifareKey& keyA = DEFAULT_CLASSIC_KEY);
-    /*!
-      @brief Dump specific block/page to serial
-      @param uid Device UID
-      @param block block address(Classic) or page address
-      @return True if successful
-      @pre Requires block authentication if needed
-     */
-    result_t dumpDevice(const UID& uid, const uint8_t addr);
+    bool mifareClassicValueBlock(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg = 0);
     ///@}
 
 protected:
     // register operation
-    bool set_register_bit(const uint8_t reg, const uint8_t bit);
-    bool clear_register_bit(const uint8_t reg, const uint8_t bit);
+    bool modify_bit_register8(const uint8_t reg, const uint8_t set_mask, const uint8_t clear_mask);
+    bool set_bit_register8(const uint8_t reg, const uint8_t bits);
+    bool clear_bit_register8(const uint8_t reg, const uint8_t bits);
+    inline bool change_bit_register8(const uint8_t reg, const uint8_t bits, const uint8_t mask)
+    {
+        return modify_bit_register8(reg, mask & bits, mask);
+    }
     bool read_register_with_align(const uint8_t reg, uint8_t* buf, const uint8_t len, const uint8_t align);
     bool write_pcd_command(const mfrc522::Command cmd);
 
@@ -523,44 +373,29 @@ protected:
     bool wait_comm_irq(const uint8_t irq, const uint32_t duration);
     bool wait_div_irq(const uint8_t irq, const uint32_t duration);
 
-    // PICC
-    result_t picc_send(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast = 0,
-                       const uint8_t rxAlign = 0);
-    result_t picc_transceive(uint8_t* rbuf, uint8_t& rlen, const uint8_t* buf, const uint8_t len, uint8_t& validBits,
-                             const uint8_t rxAlign = 0, const bool crc = false);
+    // transceive
+    bool transmit_command(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast = 0,
+                          const uint8_t rxAlign = 0);
+    bool transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len, const uint32_t timeout_ms,
+                    uint8_t& validBits, const uint8_t rxAlign = 0, const bool crc = false, uint8_t* err = nullptr);
 
-    result_t picc_requestA(uint16_t& atqa);
-    result_t picc_wakeupA(uint16_t& atqa);
-    result_t picc_to_ready(const m5::rfid::Command piccCommand, uint16_t& atqa);
-    result_t picc_select(UID& uid, const uint8_t cascadeLevel);
-    result_t picc_anti_collision(const uint8_t cascadeLevel, uint8_t* buf);
-    result_t picc_haltA();
+    bool picc_haltA();
 
-    result_t activate(UID& uid);
-    result_t reactivate(UID& uid, const UID& prev);
+    // Read/Write
+    bool read_block(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
+    bool write_block(const uint8_t block, const uint8_t* buf, const uint8_t len);
+    bool write_page(const uint8_t page, const uint8_t* buf, const uint8_t len);
 
-    // Read/Wrte
-    result_t read_block(uint8_t* rbuf, uint8_t& rlen, const uint8_t addr);
-    result_t write_block(const uint8_t block, const uint8_t* buf, const uint8_t len);
-    result_t write_page(const uint8_t page, const uint8_t* buf, const uint8_t len);
+    // NFC-A
+    bool request_wakeup(uint16_t& atqa, const bool request);
+    bool anti_collision(const uint8_t cascadeLevel, uint8_t* buf);
 
-    // MIFARE
-    result_t mifare_authenticate(const m5::rfid::Command cmd, const UID& uid, const uint8_t block,
-                                 const MifareKey& key);
-    result_t mifare_transceive(const m5::rfid::Command cmd, const uint8_t block);
-    result_t mifare_transceive(const uint8_t* buf, const uint8_t len, const bool usingtimeout = false);
-
-    // NTAG
-    bool ntag_check_format(const UID& uid);
-    result_t ntag_get_version(uint8_t* rbuf, uint8_t& rlen);
-    result_t ntag_fast_read(uint8_t* rbuf, uint8_t& rlen, const uint8_t saddr, const uint8_t eaddr);
-    result_t ntag_calclate_ndef_message_size(const UID& uid, uint32_t& sz, const uint8_t targetTagBit = 0x06);
-
-    // dump
-    result_t dump_sector_structure(const UID& uid, const MifareKey& key);
-    result_t dump_sector(const uint8_t sector);
-    result_t dump_page_structure(const uint8_t maxPage);
-    result_t dump_page(const uint8_t page);
+    // MIFARE classic
+    bool mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::PICC& picc, const uint8_t block,
+                                     const m5::nfc::a::mifare::classic::Key& key);
+    bool mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t timeout_ms);
+    bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const uint32_t timeout_ms,
+                                   const bool usingtimeout = false);
 
     // crc
     inline bool calculate_crc(uint16_t& result, const uint8_t* buf, const uint8_t len)
@@ -573,6 +408,7 @@ protected:
 
 protected:
     config_t _cfg{};
+    uint16_t _tprescaler{};
 };
 
 ///@cond
@@ -598,8 +434,9 @@ constexpr uint8_t TX_MODE_REG{0x12};
 constexpr uint8_t RX_MODE_REG{0x13};
 constexpr uint8_t TX_CONTROL_REG{0x14};
 constexpr uint8_t TX_ASK_REG{0x15};
-constexpr uint8_t RX_SEL_REG{0x16};
-constexpr uint8_t RX_THRESHOULD_REG{0x18};
+constexpr uint8_t TX_SEL_REG{0x16};
+constexpr uint8_t RX_SEL_REG{0x17};
+constexpr uint8_t RX_THRESHOLD_REG{0x18};
 constexpr uint8_t DEMOD_REG{0x19};
 constexpr uint8_t MF_TX_REG{0x1C};
 constexpr uint8_t MF_RX_REG{0x1D};

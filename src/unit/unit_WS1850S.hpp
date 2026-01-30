@@ -24,13 +24,24 @@ class UnitWS1850S : public UnitMFRC522 {
     M5_UNIT_COMPONENT_HPP_BUILDER(UnitWS1850S, 0x28);
 
 public:
+    /*!
+      @brief Constructor
+      @param addr I2C address
+     */
     explicit UnitWS1850S(const uint8_t addr = DEFAULT_ADDRESS) : UnitMFRC522(addr)
     {
     }
+    /*!
+      @brief Destructor
+     */
     virtual ~UnitWS1850S()
     {
     }
 
+    /*!
+      @brief Begin the unit
+      @return True if successful
+     */
     virtual bool begin() override;
 
 protected:

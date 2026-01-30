@@ -13,16 +13,13 @@
 #ifndef M5_UNIT_UNIFIED_RFID_HPP
 #define M5_UNIT_UNIFIED_RFID_HPP
 
-#include "rfid/rfid.hpp"
-#include "rfid/mifare.hpp"
-#include "rfid/nfc/nfc.hpp"
-
+#include <M5UnitUnifiedNFC.hpp>  // depends on M5Unit-NFC
 #include "unit/unit_MFRC522.hpp"
 #include "unit/unit_WS1850S.hpp"
 
 /*!
   @namespace m5
-  @brief Top level namespace of M5stack
+  @brief Top level namespace of M5Stack
  */
 namespace m5 {
 
@@ -32,7 +29,9 @@ namespace m5 {
  */
 namespace unit {
 
-using UnitRFID  = m5::unit::UnitMFRC522;
+//! @brief Alias for UnitMFRC522
+using UnitRFID = m5::unit::UnitMFRC522;
+//! @brief Alias for UnitWS1850S
 using UnitRFID2 = m5::unit::UnitWS1850S;
 
 }  // namespace unit

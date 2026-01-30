@@ -50,11 +50,11 @@ jobs:
 
     strategy:
       fail-fast: false
-      #max-parallel: 1
+      max-parallel: 20
       
       matrix:
         example:
-          - DetectDevices
+          - Detect
           #- Dump
           #- ValueBlock
           #- ReadWrite
@@ -130,7 +130,7 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
-          - example: NFC
+          - example: NDEF
             board: Core
             framework: Arduino
             espressif32: latest
