@@ -652,13 +652,8 @@ bool UnitMFRC522::hlt()
     buf[2] = crc & 0xFF;
     buf[3] = (crc >> 8) & 0xFF;
 
-    if (transmit_command(mfrc522::Command::Transceive, buf, sizeof(buf), txLast)) {  // No recv data
-        if (wait_comm_irq(TimerIRq, TIMEOUT_HALT)) {
-            return true;
-        }
-        M5_LIB_LOGE("Timeout");
-    }
-    return false;
+    (void)transmit_command(mfrc522::Command::Transceive, buf, sizeof(buf), txLast);  // No recv data
+    return true;
 }
 
 // MIFARE
