@@ -219,9 +219,17 @@ public:
 
     ///@name TPrescaler
     ///@{
-    //! @brief Read the TPrescale
+    /*!
+      @brief Read the TPrescaler
+      @param[out] tprescale TPrescaler value
+      @return True if successful
+     */
     bool readTPrescaler(uint16_t& tprescale);
-    //! @brief Write the TPrescale
+    /*!
+      @brief Write the TPrescaler
+      @param tprescale TPrescaler value
+      @return True if successful
+     */
     bool writeTPrescaler(const uint16_t tprescale);
     ///@}
 
@@ -229,16 +237,18 @@ public:
     ///@{
     /*!
       @brief Calculate CRC by hardware
-      @param[out] CRC value
+      @param[out] result CRC value
       @param buf Buffer
       @param len The length of the buffer
+      @return True if successful
      */
     bool calculateCRC(uint16_t& result, const uint8_t* buf, const uint8_t len);
     /*!
       @brief Calculate CRC by software
-      @param[out] CRC value
+      @param[out] result CRC value
       @param buf Buffer
       @param len The length of the buffer
+      @return True if successful
      */
     bool calculateSoftwareCRC(uint16_t& result, const uint8_t* buf, const uint8_t len);
     ///@}
@@ -248,7 +258,7 @@ public:
     /*!
       @brief Transceive
       @param rx Receive buffer
-      @param[in/out] rx_len in:Size of receive buffer out:actual read size
+      @param[in,out] rx_len in:Size of receive buffer out:actual read size
       @param tx Send buffer
       @param tx_len Size of send buffer
       @param timeout_ms Timeout(ms)
@@ -259,7 +269,7 @@ public:
 
     /*!
       @brief Request for idle PICC
-      @param[out atqa ATQA
+      @param[out] atqa ATQA
       @return True if successful
      */
     inline bool request(uint16_t& atqa)
@@ -352,6 +362,7 @@ public:
       @param cmd Command
       @param block Block address
       @param arg Argument for command if needs
+      @return True if successful
      */
     bool mifareClassicValueBlock(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t arg = 0);
     ///@}
@@ -417,6 +428,7 @@ namespace command {
 // Command and status
 constexpr uint8_t COMMAND_REG{0x01};
 constexpr uint8_t COM_IEN_REG{0x02};
+constexpr uint8_t DIV_IEN_REG{0x03};
 constexpr uint8_t COM_IRQ_REG{0x04};
 constexpr uint8_t DIV_IRQ_REG{0x05};
 constexpr uint8_t ERROR_REG{0x06};

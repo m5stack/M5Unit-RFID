@@ -11,6 +11,8 @@
 #include <M5Utility.hpp>
 
 namespace {
+// VERSION_REG value read from actual WS1850S hardware.
+// Not documented in the WS1850S datasheet (MFRC522 returns 0x91 or 0x92).
 constexpr uint8_t ws1850s_firmware_version{0x15};
 
 }  // namespace
