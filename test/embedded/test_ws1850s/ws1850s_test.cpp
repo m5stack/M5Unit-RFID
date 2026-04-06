@@ -13,10 +13,7 @@
 #include <googletest/test_template.hpp>
 #include <unit/unit_WS1850S.hpp>
 #include <M5Utility.hpp>
-// #include <chrono>
-// #include <cmath>
-#include <random>
-// #include <array>
+#include <esp_random.h>
 #include <cstring>
 
 namespace {
@@ -26,64 +23,36 @@ using namespace m5::unit::googletest;
 using namespace m5::unit;
 using namespace m5::unit::mfrc522;
 using namespace m5::unit::mfrc522::command;
-using namespace m5::rfid;
-using namespace m5::rfid::mifare;
-using namespace m5::rfid::mifare::classic;
+using namespace m5::nfc::a;
+using namespace m5::nfc::a::mifare;
+using namespace m5::nfc::a::mifare::classic;
 
-class GlobalFixtureWS1850S : public GlobalFixture<100 * 1000U, 0> {
-public:
-    void SetUp() override
-    {
-        auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
-        auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
-
-        if (M5.getBoard() == m5::board_t::board_M5Dial) {
-            // Using inner WS1850S
-            pin_num_sda = M5.getPin(m5::pin_name_t::in_i2c_sda);
-            pin_num_scl = M5.getPin(m5::pin_name_t::in_i2c_scl);
-        }
-
-        TwoWire* w[2] = {&Wire, &Wire1};
-        if (i2cIsInit(0)) {
-            M5_LOGW("Already inititlized Wire. Terminate and restart");
-            w[0]->end();
-        }
-        w[0]->begin(pin_num_sda, pin_num_scl, 100 * 1000U);
-    }
-};
-
-// const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixture<100 * 1000U>());
-const ::testing::Environment* global_fixture = ::testing::AddGlobalTestEnvironment(new GlobalFixtureWS1850S());
-
-class TestWS1850S : public ComponentTestBase<UnitWS1850S, bool> {
+class TestWS1850S : public I2CComponentTestBase<UnitWS1850S> {
 protected:
     virtual UnitWS1850S* get_instance() override
     {
         return new m5::unit::UnitWS1850S();
     }
-    virtual bool is_using_hal() const override
+
+    virtual bool begin() override
     {
-        return GetParam();
-    };
+#if defined(USING_M5DIAL_BUILTIN_WS1850S)
+        // M5Dial builtin WS1850S on In_I2C (G12/G11, shared with RTC8563)
+        M5_LOGI("Using M5.In_I2C for builtin WS1850S");
+        return Units.add(*unit, M5.In_I2C) && Units.begin();
+#else
+        return I2CComponentTestBase<UnitWS1850S>::begin();
+#endif
+    }
 };
 
-// INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S, ::testing::Values(false, true));
-//   INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S, ::testing::Values(true));
-INSTANTIATE_TEST_SUITE_P(ParamValues, TestWS1850S, ::testing::Values(false));
-
-using namespace m5::unit::mfrc522;
-
-namespace {
-auto rng = std::default_random_engine{};
-}
-
-TEST_P(TestWS1850S, selfTest)
+TEST_F(TestWS1850S, selfTest)
 {
     SCOPED_TRACE(ustr);
     EXPECT_FALSE(unit->selfTest());  // WS1850S failed always
 }
 
-TEST_P(TestWS1850S, coporcessorCRC)
+TEST_F(TestWS1850S, coprocessorCRC)
 {
     const std::array<uint8_t, 8> tdata{
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
@@ -123,7 +92,7 @@ TEST_P(TestWS1850S, coporcessorCRC)
         EXPECT_TRUE(unit->calculateSoftwareCRC(crc_s, tdata.data(), tdata.size()));
         EXPECT_EQ(crc_h, crc_s);
 
-#if 0        
+#if 0
         m5::utility::CRC16 crc(e.init, e.poly, e.refIn, e.refOut, e.xorout);
         uint16_t crc_s = crc.range(tdata.data(), tdata.size());
         EXPECT_EQ(crc_h, crc_s);
@@ -131,7 +100,7 @@ TEST_P(TestWS1850S, coporcessorCRC)
     }
 }
 
-TEST_P(TestWS1850S, Antenna)
+TEST_F(TestWS1850S, Antenna)
 {
     SCOPED_TRACE(ustr);
 
@@ -179,7 +148,7 @@ TEST_P(TestWS1850S, Antenna)
     }
 }
 
-TEST_P(TestWS1850S, Tprescale)
+TEST_F(TestWS1850S, Tprescaler)
 {
     SCOPED_TRACE(ustr);
 
@@ -187,35 +156,18 @@ TEST_P(TestWS1850S, Tprescale)
     uint32_t cnt{32};
     while (cnt--) {
         uint16_t tps{};
-        tps = rng() & 0x0FFF;  // 12 bits
-        EXPECT_TRUE(unit->writeTPrescale(tps));
+        tps = esp_random() & 0x0FFF;  // 12 bits
+        SCOPED_TRACE(m5::utility::formatString("tps: %u", tps));
+        EXPECT_TRUE(unit->writeTPrescaler(tps));
 
         uint16_t v{};
-        EXPECT_TRUE(unit->readTPrescale(v));
+        EXPECT_TRUE(unit->readTPrescaler(v));
 
         EXPECT_EQ(tps, v);
     }
-
-    // float
-    // Internal calculation makes uint16_t, so random input values and reverse calculation often do not match
-    cnt = 32;
-    while (cnt--) {
-        uint16_t tps{};
-        tps = rng() & 0x0FFF;  // 12 bits
-        // M5_LOGI("TPS:%u/%04X", tps, tps);
-        EXPECT_TRUE(unit->writeTPrescale(tps));
-
-        // Therefore, test based on the raw values set
-        float v{}, v2{};
-        EXPECT_TRUE(unit->readTPrescale(v));
-        EXPECT_TRUE(unit->writeTPrescale(v));
-        EXPECT_TRUE(unit->readTPrescale(v2));
-
-        EXPECT_FLOAT_EQ(v, v2);
-    }
 }
 
-TEST_P(TestWS1850S, AccessBit)
+TEST_F(TestWS1850S, AccessBit)
 {
     SCOPED_TRACE(ustr);
 
@@ -238,8 +190,9 @@ TEST_P(TestWS1850S, AccessBit)
     }
 }
 
+#if 0
 // Condition : Classic1K and RFID2 must be in contact
-TEST_P(TestWS1850S, Detect)
+TEST_F(TestWS1850S, Detect)
 {
     SCOPED_TRACE(ustr);
 
@@ -269,3 +222,4 @@ TEST_P(TestWS1850S, Detect)
     // deactivate
     EXPECT_TRUE(unit->deactivateDevice());
 }
+#endif
