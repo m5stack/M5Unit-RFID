@@ -52,7 +52,7 @@ constexpr uint8_t ERROR_BIT_TIMEOUT{
 
 // ModeReg register bit [1:0] CRC preset
 constexpr uint16_t crc_init_table[] = {0x0000,
-                                       0xC6C6,  // Reverse of 0x6366
+                                       0xC6C6,  // Reverse of 0x6363
                                        0x8E65,  // Reverse of 0xA671
                                        0xFFFF};
 
@@ -120,12 +120,12 @@ inline bool has_timeout(const uint8_t err)
 
 uint16_t calculate_reload(const uint32_t timeout_ms, const uint16_t tprescaler)
 {
-    const uint32_t denominator = (2 * (uint32_t)tprescaler) + 1;
+    const uint32_t denominator = (2 * static_cast<uint32_t>(tprescaler)) + 1;
     const uint32_t reload      = (timeout_ms * 13560) / denominator;
     if (reload > 0xFFFF) {
         return 0xFFFF;
     }
-    return (uint16_t)reload;
+    return static_cast<uint16_t>(reload);
 }
 
 #if 0
@@ -151,6 +151,16 @@ const types::uid_t UnitMFRC522::uid{"UnitMFRC522"_mmh3};
 const types::attr_t UnitMFRC522::attr{attribute::AccessI2C};
 bool UnitMFRC522::begin()
 {
+    // SoftwareI2C (M5HAL Bus) is not supported due to I2C register polling latency
+    auto* a = adapter();
+    if (a && a->type() == Adapter::Type::I2C) {
+        auto* i2c = static_cast<AdapterI2C*>(a);
+        if (i2c->impl() && i2c->impl()->implType() == AdapterI2C::ImplType::Bus) {
+            M5_LIB_LOGW("SoftwareI2C is not supported for MFRC522/WS1850S. Use Wire or M5.Ex_I2C instead");
+            return false;
+        }
+    }
+
     if (!softReset()) {
         M5_LIB_LOGE("Failed to reset");
         return false;
@@ -167,11 +177,11 @@ bool UnitMFRC522::begin()
         //! writeRegister8(TRELOAD_REG_H, 0x00) || !writeRegister8(TRELOAD_REG_L, 40*5) || // 5ms
         // forces a 100% ASK modulation
         !writeRegister8(TX_ASK_REG, 0x40)) {
-        M5_LIB_LOGE("Failed to configuration");
+        M5_LIB_LOGE("Failed to configure");
         return false;
     }
 
-    // Mode and anttena
+    // Mode and antenna
     auto ret = readTPrescaler(_tprescaler) && writeRegister8(MODE_REG, _cfg.mode_reg) &&
                writeReceiverGain(_cfg.receiver_gain) && (_cfg.enable_antenna ? turnOnAntenna() : true);
 
@@ -424,7 +434,7 @@ bool UnitMFRC522::request_wakeup(uint16_t& atqa, const bool request)
     if (clear_bit_register8(COLL_REG, 0x80)) {
         auto result = transceive(rbuf, rlen, &cmd, 1, TIMEOUT_REQ_WUP, valid_bits, 0, false, &err);
         if (result && rlen == 2) {
-            atqa = ((uint16_t)rbuf[1] << 8) | (uint16_t)rbuf[0];
+            atqa = (static_cast<uint16_t>(rbuf[1]) << 8) | static_cast<uint16_t>(rbuf[0]);
             M5_LIB_LOGD("ATQA:%04X", atqa);
             return true;
         }
@@ -435,7 +445,7 @@ bool UnitMFRC522::request_wakeup(uint16_t& atqa, const bool request)
 bool UnitMFRC522::anti_collision(const uint8_t lv, uint8_t buf[9])
 {
     uint8_t sbytes{2}, sbits{}, cbytes{}, cbits{};
-    uint16_t rlen{5};
+    uint16_t rlen{};
     uint8_t* rbuf = buf + 2;
     bool collision{};
     uint32_t count{32};  // Max loop count
@@ -461,7 +471,7 @@ bool UnitMFRC522::anti_collision(const uint8_t lv, uint8_t buf[9])
         // m5::utility::log::dump(rbuf, rlen, false);
         // m5::utility::log::dump(rbuf, rlen + (sbits != 0), false);
         if (collision) {
-            M5_LIB_LOGD("Colliion");
+            M5_LIB_LOGD("Collision");
             uint8_t col{};
             if (!readRegister8(COLL_REG, col, 0)) {
                 return false;
@@ -469,7 +479,7 @@ bool UnitMFRC522::anti_collision(const uint8_t lv, uint8_t buf[9])
             if (col & 0x20) {
                 return false;
             }
-            uint8_t coll_offset = col & 0x1F;  // bit offset of collison
+            uint8_t coll_offset = col & 0x1F;  // bit offset of collision
             if (!coll_offset) {
                 coll_offset = 32;  // 1-32
             }
@@ -717,7 +727,7 @@ bool UnitMFRC522::mifare_classic_authenticate(const m5::nfc::a::Command cmd, con
 bool UnitMFRC522::mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block,
                                             const uint32_t timeout_ms)
 {
-    uint8_t buf[2]{m5::stl::to_underlying(cmd), block};
+    const uint8_t buf[2]{m5::stl::to_underlying(cmd), block};
     return mifare_classic_transceive(buf, 2, timeout_ms);
 }
 
@@ -758,7 +768,7 @@ bool UnitMFRC522::mifare_classic_transceive(const uint8_t* buf, const uint8_t le
 
 bool UnitMFRC522::self_test()
 {
-    // 16.1.1 Self teest
+    // 16.1.1 Self test
     // 1) Perform a soft reset.
     if (!softReset()) {
         M5_LIB_LOGE("Failed to reset");
@@ -775,7 +785,7 @@ bool UnitMFRC522::self_test()
 
     // 3) Enable the self test by writing 09h to the AutoTestReg register.
     if (!writeRegister8(AUTO_TEST_REG, 0x09)) {
-        M5_LIB_LOGE("Failed to autitest");
+        M5_LIB_LOGE("Failed to autotest");
         return false;
     }
 
@@ -1066,7 +1076,7 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf
             return false;
         }
         uint16_t crc16{};
-        uint16_t rcrc16 = ((uint16_t)rbuf[fifo_len - 1] << 8) | rbuf[fifo_len - 2];
+        uint16_t rcrc16 = (static_cast<uint16_t>(rbuf[fifo_len - 1]) << 8) | rbuf[fifo_len - 2];
         if (!calculate_crc(crc16, rbuf, fifo_len - 2) || crc16 != rcrc16) {
             M5_LIB_LOGE("CRC ERROR C:%04X R:%04X", crc16, rcrc16);
             return false;

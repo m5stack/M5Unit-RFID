@@ -3,11 +3,11 @@
 ## Overview
 
 Library for Unit-RFID using [M5UnitUnified](https://github.com/m5stack/M5UnitUnified).  
-M5UnitUnfied has a unified API and can control multiple units via PaHub, etc.
+M5UnitUnified has a unified API and can control multiple units via PaHub, etc.
 
 ### SKU:U031-B
 
-RFID2 is a radio frequency identification unit. Built-in WS1850S chip, working frequency is 13.56MHz. Supports reading card, writing card, recognition, recording, and encoding RF card Multiple functions such as authorization and authorization. Use magnetic field induction technology to realize non-contact two-way information interaction, read and verify the information of proximity cards. It can be used in access control systems, check-in systems, warehouse goods entry and storage, and community vehicle entry and exit registration needs Application scenarios for information verification.
+Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
 
 
 ## PICC Support
@@ -52,11 +52,17 @@ Support may be expanded in future updates to cover PICCs not listed here.
 
 ## Emulation
 
-Emulation is not supported on Unit-RFID.
+Emulation is **NOT** supported on Unit-RFID.
 
 ## Known Issues
 
 - MIFARE Plus SL3 operation has issues.
+
+### NessoN1 Connection
+GROVE port (port_b) on NessoN1 uses SoftwareI2C (M5HAL Bus), which causes I2C register polling latency too high for MFRC522/WS1850S RF timing requirements.  
+Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
+
+> **Note:** GROVE port support may be added in a future update if SoftwareI2C performance improves.
 
 
 ## Related Link
@@ -72,11 +78,32 @@ Emulation is not supported on Unit-RFID.
 
 ## License
 
-- [M5Unit-RFID -MIT](LICENSE)
+- [M5Unit-RFID - MIT](LICENSE)
 
 
 ## Examples
 See also [examples/UnitUnified](examples/UnitUnified)
+
+### For ArduinoIDE
+Each example contains the following block to select the unit:
+
+```cpp
+// For UnitNFC
+// #define USING_UNIT_NFC
+// For CapNFC
+// #define USING_HACKER_CAP
+// For UnitRFID2
+// #define USING_UNIT_RFID2
+```
+
+The examples are shared with [M5Unit-NFC](https://github.com/m5stack/M5Unit-NFC), which is why other unit definitions exist.  
+For this library, uncomment `USING_UNIT_RFID2`:
+
+```cpp
+// #define USING_UNIT_NFC
+// #define USING_HACKER_CAP
+#define USING_UNIT_RFID2
+```
 
 ## Doxygen document
 [GitHub Pages](https://m5stack.github.io/M5Unit-RFID/)
