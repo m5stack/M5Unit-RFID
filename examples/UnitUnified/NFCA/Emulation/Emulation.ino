@@ -8,12 +8,14 @@
   NFC-A Emulation mode
 */
 // *************************************************************
-// Choose one define symbol to match the unit you are using
+// Choose ONE define symbol to match the unit you are using
+// NOTE: Emulation is supported ONLY on UnitNFC (ST25R3916) and CapCC1101NFC (ST25R3916).
+//       UnitRFID2 (WS1850S) and M5Dial Builtin (WS1850S) do NOT support emulation.
 // *************************************************************
 #if !defined(USING_UNIT_NFC) && !defined(USING_CAP_CC1101)
-// For UnitNFC
+// For UnitNFC (ST25R3916, I2C)
 // #define USING_UNIT_NFC
-// For CapNFC
+// For CapCC1101NFC (ST25R3916, SPI)
 // #define USING_CAP_CC1101
 #endif
 #include "main/Emulation.cpp"
