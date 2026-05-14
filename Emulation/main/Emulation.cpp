@@ -12,20 +12,21 @@
 #include <M5UnitUnifiedNFC.h>
 #include <M5Utility.h>
 #include <Wire.h>
-#include <M5HAL.hpp>  // For NessoN1
 #include <vector>
 
 // *************************************************************
-// Choose one define symbol to match the unit you are using
+// Choose ONE define symbol to match the unit you are using
+// NOTE: Emulation is supported ONLY on UnitNFC (ST25R3916) and CapCC1101NFC (ST25R3916).
+//       UnitRFID2 (WS1850S) and M5Dial Builtin (WS1850S) do NOT support emulation.
 // *************************************************************
 #if !defined(USING_UNIT_NFC) && !defined(USING_CAP_CC1101)
-// For UnitNFC
+// For UnitNFC (ST25R3916, I2C)
 // #define USING_UNIT_NFC
-// For CapNFC
+// For CapCC1101NFC (ST25R3916, SPI)
 // #define USING_CAP_CC1101
 #endif
-#if defined(USING_UNIT_RFID2)
-#error UnitRFID2 does NOT support emulation
+#if defined(USING_UNIT_RFID2) || defined(USING_M5DIAL_BUILTIN_WS1850S)
+#error Emulation is NOT supported on UnitRFID2 / M5Dial Builtin (WS1850S). Use UnitNFC or CapCC1101NFC.
 #endif
 
 using namespace m5::nfc;
@@ -177,7 +178,7 @@ void setup()
     auto board = M5.getBoard();
     bool unit_ready{};
     // NessoN1: port_b (GROVE) uses SoftwareI2C (M5HAL Bus) which causes I2C register
-    //          polling latency too high for MFRC522/WS1850S RF timing requirements.
+    //          polling latency too high for ST25R3916 RF timing requirements.
     //          Use QWIIC (port_a) with Wire instead. (Requires QWIIC-GROVE conversion cable)
     if (board == m5::board_t::board_M5NanoC6) {
         M5_LOGI("Using M5.Ex_I2C");
