@@ -59,6 +59,7 @@ jobs:
 
         nfctype:
           - NFCA
+          - NFCB
 
         sketch:
           - Detect
@@ -100,7 +101,7 @@ jobs:
           - esp32
 
         include:
-          # Specific sketches
+          # Specific sketches (NFCA, USING_UNIT_RFID2, Core only)
           - sketch: Dump
             nfctype: NFCA
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
@@ -127,6 +128,24 @@ jobs:
             build-properties: "-DUSING_UNIT_RFID2"
           - sketch: NDEF
             nfctype: NFCA
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.2.5
+            board: m5stack_core
+            build-properties: "-DUSING_UNIT_RFID2"
+          # Detect on M5Dial with builtin WS1850S (NFCA, USING_M5DIAL_BUILTIN_WS1850S)
+          - sketch: Detect
+            nfctype: NFCA
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.2.5
+            board: m5stack_dial
+            build-properties: "-DUSING_M5DIAL_BUILTIN_WS1850S"
+          # JapanIDCard (NFCB, USING_UNIT_RFID2, Core only)
+          - sketch: JapanIDCard
+            nfctype: NFCB
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
