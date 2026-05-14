@@ -11,8 +11,8 @@
         "url": "https://github.com/m5stack/M5Unit-RFID.git"
     },
     "dependencies": {
-        "m5stack/M5UnitUnified": ">=0.4.4",
-        "m5stack/M5Unit-NFC": "*"
+        "m5stack/M5UnitUnified": ">=0.4.6",
+        "m5stack/M5Unit-NFC": ">=0.0.3"
     },
     "version": "0.0.1",
     "frameworks": [
