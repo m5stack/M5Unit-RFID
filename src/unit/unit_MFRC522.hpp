@@ -95,6 +95,8 @@ public:
       @brief Settings for begin
      */
     struct config_t {
+        //! Initial NFC mode applied at begin()
+        m5::nfc::NFC mode{m5::nfc::NFC::A};
         //! mode reg value. See also 9.3.2.2 ModeReg register
         uint8_t mode_reg{0x3D};
         //! Enable antenna on begin if true
@@ -159,9 +161,9 @@ public:
       @brief Configure NFC mode
       @param mode NFC mode
       @return True if successful
-      @warning Only NFC-A
+      @warning On pure MFRC522 only NFC-A is supported. Derived classes (e.g. UnitWS1850S) override this.
      */
-    inline bool configureNFCMode(const m5::nfc::NFC mode)
+    inline virtual bool configureNFCMode(const m5::nfc::NFC mode)
     {
         // Nop
         return mode == m5::nfc::NFC::A;
@@ -215,6 +217,65 @@ public:
       @return True if successful
      */
     bool writeReceiverGain(const mfrc522::ReceiverGain gain);
+    ///@}
+
+    ///@name GsN (N-driver conductance) / CWGsP / ModGsP (P-driver conductance)
+    ///@{
+    /*!
+      @brief Read the GsN register (N-driver conductance: CWGsN[7:4] / ModGsN[3:0])
+      @param[out] value Raw 8-bit value (high nibble = CWGsN, low nibble = ModGsN)
+      @return True if successful
+     */
+    bool readGsN(uint8_t& value);
+    /*!
+      @brief Write the GsN register
+      @param value Raw 8-bit value (high nibble = CWGsN, low nibble = ModGsN)
+      @return True if successful
+     */
+    bool writeGsN(const uint8_t value);
+    /*!
+      @brief Read the CWGsP register (P-driver conductance during no modulation)
+      @param[out] value 6-bit value (0x00-0x3F)
+      @return True if successful
+     */
+    bool readCWGsP(uint8_t& value);
+    /*!
+      @brief Write the CWGsP register
+      @param value 6-bit value (0x00-0x3F). Upper 2 bits are reserved.
+      @return True if successful, false if value > 0x3F or I2C error
+     */
+    bool writeCWGsP(const uint8_t value);
+    /*!
+      @brief Read the ModGsP register (P-driver conductance during modulation)
+      @param[out] value 6-bit value (0x00-0x3F)
+      @return True if successful
+     */
+    bool readModGsP(uint8_t& value);
+    /*!
+      @brief Write the ModGsP register
+      @param value 6-bit value (0x00-0x3F). Smaller = deeper ASK modulation.
+      @return True if successful, false if value > 0x3F or I2C error
+     */
+    bool writeModGsP(const uint8_t value);
+    ///@}
+
+    ///@name RxThreshold (receiver decision levels)
+    ///@{
+    /*!
+      @brief Read the RxThreshold register
+      @param[out] value 8-bit raw value (MinLevel[7:4] / CollLevel[2:0])
+      @return True if successful
+     */
+    bool readRxThreshold(uint8_t& value);
+    /*!
+      @brief Write the RxThreshold register
+      @param value 8-bit raw value. bit[3] is reserved (must be 0).
+      @return True if successful, false if reserved bit set or I2C error
+      @note On WS1850S silicon this write is silently ignored (verified by exhaustive
+        0x00-0xFF scan); the chip uses its internal fixed value (reset default 0x84).
+        Provided here for genuine MFRC522 silicon compatibility.
+     */
+    bool writeRxThreshold(const uint8_t value);
     ///@}
 
     ///@name TPrescaler

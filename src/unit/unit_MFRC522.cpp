@@ -128,19 +128,6 @@ uint16_t calculate_reload(const uint32_t timeout_ms, const uint16_t tprescaler)
     return static_cast<uint16_t>(reload);
 }
 
-#if 0
-inline float modulationWidth(const uint8_t tm)
-{
-    return tm + 1 / F_CLOCK;
-}
-
-inline uint8_t bits_to_NVB(const uint8_t bits)
-{
-    // High nibble:bytes Low nibble:fraction bits
-    return (bits >> 3) | (bits & 0x07);
-}
-#endif
-
 }  // namespace
 
 namespace m5 {
@@ -183,25 +170,8 @@ bool UnitMFRC522::begin()
 
     // Mode and antenna
     auto ret = readTPrescaler(_tprescaler) && writeRegister8(MODE_REG, _cfg.mode_reg) &&
-               writeReceiverGain(_cfg.receiver_gain) && (_cfg.enable_antenna ? turnOnAntenna() : true);
-
-#if 0
-    uint8_t tx_control{}, demod_reg{}, rf_cfg{}, rx_thresh{};
-    readRegister8(TX_CONTROL_REG, tx_control, 0);
-    readRegister8(DEMOD_REG, demod_reg, 0);
-    readRegister8(RFC_FG_REG, rf_cfg, 0);
-    readRegister8(RX_THRESHOLD_REG, rx_thresh, 0);
-    M5_LIB_LOGE("TxCtrl=%02X Demod=%02X RfCfg=%02X RxTh=%02X", tx_control, demod_reg, rf_cfg, rx_thresh);
-
-    uint8_t rx_sel{}, mod_width{};
-    readRegister8(RX_SEL_REG, rx_sel, 0);  // Include RxWait
-    readRegister8(MOD_WIDTH_REG, mod_width, 0);
-    M5_LIB_LOGE("RxSel=%02X ModWidth=%02X", rx_sel, mod_width);
-
-    uint8_t mf_rx{};
-    readRegister8(MF_RX_REG, mf_rx, 0);
-    M5_LIB_LOGE("MfRx=%02X (ParityDisable=%d)", mf_rx, (mf_rx >> 4) & 1);
-#endif
+               writeReceiverGain(_cfg.receiver_gain) && (_cfg.enable_antenna ? turnOnAntenna() : true) &&
+               configureNFCMode(_cfg.mode);
 
     return ret;
 }
@@ -218,26 +188,6 @@ bool UnitMFRC522::nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
     const uint16_t cap        = MAX_FIFO_DEPTH - 2 /*CRC*/;
     rx_len                    = 0;
 
-#if 0
-    if (!rx || !rx_len_org || !tx || !tx_len) {
-        return false;
-    }
-    uint8_t frame[tx_len + 2 /*CRC*/]{};
-    uint16_t crc{};
-    if (!calculate_crc(crc, tx, tx_len)) {
-        return false;
-    }
-    memcpy(frame, tx, tx_len);
-    frame[tx_len]     = crc & 0xFF;
-    frame[tx_len + 1] = crc >> 8;
-
-    uint8_t discard{};
-    uint8_t tmp[rx_len_org + 2 /*CRC*/]{};
-    uint16_t rx_tmp = sizeof(tmp);
-    // uint8_t error{};
-
-    auto ret = transceive(tmp, rx_tmp, frame, sizeof(frame), timeout_ms, discard, 0, true);
-#else
     if (!rx || !rx_len_org || !tx || !tx_len || tx_len > cap) {
         return false;
     }
@@ -261,7 +211,6 @@ bool UnitMFRC522::nfcaTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
     uint16_t rx_tmp = rx_len_org + 2 /* CRC*/;
 
     auto ret = transceive(tmp, rx_tmp, frame, tx_len + 2 /*CRC*/, timeout_ms, discard, 0, true);
-#endif
 
     rx_len = std::min<uint16_t>(rx_len_org, rx_tmp);
     memcpy(rx, tmp, rx_len);
@@ -368,6 +317,58 @@ bool UnitMFRC522::writeReceiverGain(const ReceiverGain gain)
         return writeRegister8(RFC_FG_REG, v);
     }
     return false;
+}
+
+bool UnitMFRC522::readGsN(uint8_t& value)
+{
+    return readRegister8(GSN_REG, value, 0);
+}
+
+bool UnitMFRC522::writeGsN(const uint8_t value)
+{
+    return writeRegister8(GSN_REG, value);
+}
+
+bool UnitMFRC522::readCWGsP(uint8_t& value)
+{
+    return readRegister8(CW_GSP_REG, value, 0);
+}
+
+bool UnitMFRC522::writeCWGsP(const uint8_t value)
+{
+    if (value > 0x3F) {
+        M5_LIB_LOGE("CWGsP must be 0x00-0x3F (got 0x%02X)", value);
+        return false;
+    }
+    return writeRegister8(CW_GSP_REG, value);
+}
+
+bool UnitMFRC522::readModGsP(uint8_t& value)
+{
+    return readRegister8(MOD_GSP_REG, value, 0);
+}
+
+bool UnitMFRC522::writeModGsP(const uint8_t value)
+{
+    if (value > 0x3F) {
+        M5_LIB_LOGE("ModGsP must be 0x00-0x3F (got 0x%02X)", value);
+        return false;
+    }
+    return writeRegister8(MOD_GSP_REG, value);
+}
+
+bool UnitMFRC522::readRxThreshold(uint8_t& value)
+{
+    return readRegister8(RX_THRESHOLD_REG, value, 0);
+}
+
+bool UnitMFRC522::writeRxThreshold(const uint8_t value)
+{
+    if (value & 0x08) {  // bit[3] reserved
+        M5_LIB_LOGE("RxThreshold reserved bit[3] must be 0 (got 0x%02X)", value);
+        return false;
+    }
+    return writeRegister8(RX_THRESHOLD_REG, value);
 }
 
 bool UnitMFRC522::calculateCRC(uint16_t& result, const uint8_t* buf, const uint8_t len)
@@ -1007,13 +1008,6 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf
 
     // Wait for command completion
     if (!wait_comm_irq(RxIRq | IdleIRq, timeout_ms)) {
-#if 0
-        uint8_t com_irq{}, err_reg{}, fifo_level{};
-        readRegister8(COM_IRQ_REG, com_irq, 0);
-        readRegister8(ERROR_REG, err_reg, 0);
-        readRegister8(FIFO_LEVEL_REG, fifo_level, 0);
-        M5_LIB_LOGE("Timeout: COM_IRQ=%02X ERR=%02X FIFO=%u", com_irq, err_reg, fifo_level);
-#endif
         M5_LIB_LOGD("Timeout");
         if (error) {
             *error = ERROR_BIT_TIMEOUT;
