@@ -55,6 +55,7 @@ jobs:
       matrix:
         example:
           - NFCA_Detect
+          - NFCB_Detect
 
         board:
           - Core
@@ -83,7 +84,7 @@ jobs:
           - latest
 
         include:
-          # Specific sketches
+          # NFCA Specific sketches (Core only)
           - example: NFCA_Dump
             board: Core
             framework: Arduino
@@ -97,6 +98,16 @@ jobs:
             framework: Arduino
             espressif32: latest
           - example: NFCA_NDEF
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          # NFCA Detect on M5Dial with builtin WS1850S
+          - example: NFCA_Detect
+            board: Dial_Builtin
+            framework: Arduino
+            espressif32: latest
+          # NFCB JapanIDCard (Core only)
+          - example: NFCB_JapanIDCard
             board: Core
             framework: Arduino
             espressif32: latest

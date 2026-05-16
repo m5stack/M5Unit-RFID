@@ -12,20 +12,21 @@
 #include <M5UnitUnifiedNFC.h>
 #include <M5Utility.h>
 #include <Wire.h>
-#include <M5HAL.hpp>  // For NessoN1
 #include <vector>
 
 // *************************************************************
-// Choose one define symbol to match the unit you are using
+// Choose ONE define symbol to match the unit you are using
+// NOTE: Emulation is supported ONLY on UnitNFC (ST25R3916) and CapCC1101NFC (ST25R3916).
+//       UnitRFID2 (WS1850S) and M5Dial Builtin (WS1850S) do NOT support emulation.
 // *************************************************************
-#if !defined(USING_UNIT_NFC) && !defined(USING_HACKER_CAP)
-// For UnitNFC
+#if !defined(USING_UNIT_NFC) && !defined(USING_CAP_CC1101)
+// For UnitNFC (ST25R3916, I2C)
 // #define USING_UNIT_NFC
-// For CapNFC
-// #define USING_HACKER_CAP
+// For CapCC1101NFC (ST25R3916, SPI)
+// #define USING_CAP_CC1101
 #endif
-#if defined(USING_UNIT_RFID2)
-#error UnitRFID2 does NOT support emulation
+#if defined(USING_UNIT_RFID2) || defined(USING_M5DIAL_BUILTIN_WS1850S)
+#error Emulation is NOT supported on UnitRFID2 / M5Dial Builtin (WS1850S). Use UnitNFC or CapCC1101NFC.
 #endif
 
 using namespace m5::nfc;
@@ -40,9 +41,9 @@ m5::unit::UnitUnified Units;
 #if defined(USING_UNIT_NFC)
 #pragma message "Choose UnitNFC"
 m5::unit::UnitNFC unit{};  // I2C
-#elif defined(USING_HACKER_CAP)
-#pragma message "Choose HackerCapNFC"
-m5::unit::HackerCapNFC unit{};  // HackerCap (SPI)
+#elif defined(USING_CAP_CC1101)
+#pragma message "Choose CapCC1101NFC"
+m5::unit::CapCC1101NFC unit{};  // CapCC1101 (SPI)
 #else
 #error Choose unit please!
 #endif
@@ -177,7 +178,7 @@ void setup()
     auto board = M5.getBoard();
     bool unit_ready{};
     // NessoN1: port_b (GROVE) uses SoftwareI2C (M5HAL Bus) which causes I2C register
-    //          polling latency too high for MFRC522/WS1850S RF timing requirements.
+    //          polling latency too high for ST25R3916 RF timing requirements.
     //          Use QWIIC (port_a) with Wire instead. (Requires QWIIC-GROVE conversion cable)
     if (board == m5::board_t::board_M5NanoC6) {
         M5_LOGI("Using M5.Ex_I2C");
@@ -197,7 +198,7 @@ void setup()
             m5::utility::delay(10000);
         }
     }
-#elif defined(USING_HACKER_CAP)
+#elif defined(USING_CAP_CC1101)
     if (!SPI.bus()) {
         auto spi_sclk = M5.getPin(m5::pin_name_t::sd_spi_sclk);
         auto spi_mosi = M5.getPin(m5::pin_name_t::sd_spi_mosi);

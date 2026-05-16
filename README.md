@@ -49,10 +49,20 @@ Support may be expanded in future updates to cover PICCs not listed here.
 
 - \*1 MIFARE Plus SL3 operation has issues.
 
+### NFC-B
+
+**Available on UnitRFID2 (WS1850S) only.** UnitRFID (MFRC522) does NOT support NFC-B.
+
+| PICC Type | NFC Forum Tag (NDEF) | Detect | Identify | Raw R/W | Notes |
+|---|---|---|---|---|---|
+| Unclassified | None | Yes | Partial | Yes | ISO-DEP transport only |
+
+> **Note:** NFC-B is **not supported on the M5Dial builtin WS1850S**. The builtin small loop antenna cannot generate sufficient RF field for Type B PICC activation (Type B uses 10% ASK + BPSK subcarrier which is more sensitive to field strength and SNR than Type A). NFC-B requires the external **UnitRFID2** (with larger antenna).
+
 
 ## Emulation
 
-Emulation is **NOT** supported on Unit-RFID.
+Emulation is **NOT** supported on UnitRFID and UnitRFID2.
 
 ## Known Issues
 
@@ -84,6 +94,9 @@ Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
 ## Examples
 See also [examples/UnitUnified](examples/UnitUnified)
 
+> **Note:** The examples in this library are imported from [M5Unit-NFC](https://github.com/m5stack/M5Unit-NFC) and shared between both libraries.
+> The same source file supports multiple units via `#define` switches.
+
 ### For ArduinoIDE
 Each example contains the following block to select the unit:
 
@@ -91,7 +104,7 @@ Each example contains the following block to select the unit:
 // For UnitNFC
 // #define USING_UNIT_NFC
 // For CapNFC
-// #define USING_HACKER_CAP
+// #define USING_CAP_CC1101
 // For UnitRFID2
 // #define USING_UNIT_RFID2
 ```
@@ -101,7 +114,7 @@ For this library, uncomment `USING_UNIT_RFID2`:
 
 ```cpp
 // #define USING_UNIT_NFC
-// #define USING_HACKER_CAP
+// #define USING_CAP_CC1101
 #define USING_UNIT_RFID2
 ```
 

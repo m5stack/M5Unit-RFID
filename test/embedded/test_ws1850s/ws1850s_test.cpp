@@ -41,6 +41,12 @@ protected:
         M5_LOGI("Using M5.In_I2C for builtin WS1850S");
         return Units.add(*unit, M5.In_I2C) && Units.begin();
 #else
+        // NessoN1: align with examples — use QWIIC (port_a) + Wire instead of the
+        // base class default (SoftwareI2C on port_b GROVE). Requires a QWIIC-GROVE
+        // conversion cable, identical wiring to examples/UnitUnified/NFC*/*.
+        if (M5.getBoard() == m5::board_t::board_ArduinoNessoN1) {
+            return begin_with_wire(Wire);
+        }
         return I2CComponentTestBase<UnitWS1850S>::begin();
 #endif
     }
@@ -148,6 +154,23 @@ TEST_F(TestWS1850S, Antenna)
     }
 }
 
+TEST_F(TestWS1850S, GsNRegister)
+{
+    SCOPED_TRACE(ustr);
+
+    // GsN: 8-bit register (CWGsN[7:4] / ModGsN[3:0]), all 256 values valid
+    for (uint16_t v = 0x00; v <= 0xFF; ++v) {
+        SCOPED_TRACE(m5::utility::formatString("GsN=0x%02X", v));
+        EXPECT_TRUE(unit->writeGsN(static_cast<uint8_t>(v)));
+        uint8_t r{};
+        EXPECT_TRUE(unit->readGsN(r));
+        EXPECT_EQ(r, static_cast<uint8_t>(v));
+    }
+
+    // Restore reset default
+    EXPECT_TRUE(unit->writeGsN(0x88));
+}
+
 TEST_F(TestWS1850S, Tprescaler)
 {
     SCOPED_TRACE(ustr);
@@ -223,3 +246,114 @@ TEST_F(TestWS1850S, Detect)
     EXPECT_TRUE(unit->deactivateDevice());
 }
 #endif
+
+TEST_F(TestWS1850S, NFCBMode)
+{
+    SCOPED_TRACE(ustr);
+    uint8_t v{};
+
+    // Switch to NFC-B
+    EXPECT_TRUE(unit->configureNFCMode(m5::nfc::NFC::B));
+
+    EXPECT_TRUE(unit->readRegister8(MODE_REG, v, 0));
+    EXPECT_EQ(v & 0x03, 0x03);  // CRCPreset=0b11 (CRC_B 0xFFFF preset)
+
+    EXPECT_TRUE(unit->readRegister8(TX_MODE_REG, v, 0));
+    EXPECT_EQ(v, 0x03);  // TxCRCEn=0, TxFraming=0b11
+
+    EXPECT_TRUE(unit->readRegister8(RX_MODE_REG, v, 0));
+    EXPECT_EQ(v, 0x03);  // RxCRCEn=0, RxFraming=0b11
+
+    EXPECT_TRUE(unit->readTypeBReg(v));
+    EXPECT_EQ(v, 0x10);  // EOFSOFWidth=1
+
+    // Back to NFC-A
+    EXPECT_TRUE(unit->configureNFCMode(m5::nfc::NFC::A));
+
+    EXPECT_TRUE(unit->readRegister8(MODE_REG, v, 0));
+    EXPECT_EQ(v & 0x03, 0x01);  // CRCPreset=0b01 (CRC_A 0x6363 preset)
+
+    EXPECT_TRUE(unit->readRegister8(TX_MODE_REG, v, 0));
+    EXPECT_EQ(v, 0x00);  // TxCRCEn=0 (SW CRC by M5Unit-NFC), TxFraming=00 (Type A)
+
+    EXPECT_TRUE(unit->readRegister8(RX_MODE_REG, v, 0));
+    EXPECT_EQ(v, 0x00);  // RxCRCEn=0, RxFraming=00 (Type A)
+
+    EXPECT_TRUE(unit->readRegister8(TX_ASK_REG, v, 0));
+    EXPECT_EQ(v, 0x40);  // Force100ASK=1 (required for ISO/IEC 14443-3 Type A)
+}
+
+TEST_F(TestWS1850S, NFCBRegisterRW)
+{
+    SCOPED_TRACE(ustr);
+
+    // CWGsP (6-bit, 0x00-0x3F)
+    for (uint8_t v = 0x00; v <= 0x3F; ++v) {
+        SCOPED_TRACE(m5::utility::formatString("CWGsP=0x%02X", v));
+        EXPECT_TRUE(unit->writeCWGsP(v));
+        uint8_t r{};
+        EXPECT_TRUE(unit->readCWGsP(r));
+        EXPECT_EQ(r & 0x3F, v);
+    }
+
+    // ModGsP (6-bit, 0x00-0x3F)
+    for (uint8_t v = 0x00; v <= 0x3F; ++v) {
+        SCOPED_TRACE(m5::utility::formatString("ModGsP=0x%02X", v));
+        EXPECT_TRUE(unit->writeModGsP(v));
+        uint8_t r{};
+        EXPECT_TRUE(unit->readModGsP(r));
+        EXPECT_EQ(r & 0x3F, v);
+    }
+
+    // RxThreshold round-trip is NOT testable on WS1850S: the chip silently ignores
+    // writes to 0x18 regardless of mode/antenna state (verified by 0x00-0xFF scan).
+    // The clamp test below still verifies bit[3] RFU validation in writeRxThreshold.
+
+    // TypeBReg (bit[5] is RFU per PN512 8.2.2.15). Skip values with bit[5] set.
+    constexpr uint8_t tb_table[] = {0x00, 0x10, 0x13, 0x40, 0x50, 0xC3};
+    for (auto v : tb_table) {
+        SCOPED_TRACE(m5::utility::formatString("TypeBReg=0x%02X", v));
+        EXPECT_TRUE(unit->writeTypeBReg(v));
+        uint8_t r{};
+        EXPECT_TRUE(unit->readTypeBReg(r));
+        EXPECT_EQ(r, v);
+    }
+}
+
+TEST_F(TestWS1850S, NFCBRegisterClamp)
+{
+    SCOPED_TRACE(ustr);
+
+    // Out-of-range values must return false
+    EXPECT_FALSE(unit->writeCWGsP(0x40));
+    EXPECT_FALSE(unit->writeCWGsP(0xFF));
+    EXPECT_FALSE(unit->writeModGsP(0x40));
+    EXPECT_FALSE(unit->writeModGsP(0xFF));
+    EXPECT_FALSE(unit->writeRxThreshold(0x08));  // bit[3] RFU
+    EXPECT_FALSE(unit->writeRxThreshold(0x88));
+    EXPECT_FALSE(unit->writeTypeBReg(0x20));  // bit[5] RFU (per PN512 datasheet)
+    EXPECT_FALSE(unit->writeTypeBReg(0xFF));
+}
+
+TEST_F(TestWS1850S, NFCBAskDepthTable)
+{
+    SCOPED_TRACE(ustr);
+
+    // depth -> expected ModGsP value (same as MOD_GSP_TABLE in unit_WS1850S.cpp)
+    constexpr uint8_t expected[16] = {
+        0x3F, 0x3A, 0x35, 0x30, 0x2C, 0x28, 0x24, 0x20, 0x1E, 0x1C, 0x1B, 0x1A, 0x18, 0x16, 0x14, 0x10,
+    };
+
+    for (uint8_t depth = 0; depth < 16; ++depth) {
+        SCOPED_TRACE(m5::utility::formatString("depth=%u", depth));
+        auto cfg           = unit->config();
+        cfg.nfcb_ask_depth = depth;
+        unit->config(cfg);
+
+        EXPECT_TRUE(unit->configureNFCMode(m5::nfc::NFC::B));
+
+        uint8_t v{};
+        EXPECT_TRUE(unit->readModGsP(v));
+        EXPECT_EQ(v & 0x3F, expected[depth]);
+    }
+}

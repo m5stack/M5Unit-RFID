@@ -5,7 +5,7 @@
  */
 /*
   Example using M5UnitUnified for M5Unit-NFC/RFID
-  Value block for MIFARE classic
+  Detect NFC-B PICC
   This example is shared with M5Unit-RFID
 */
 // *************************************************************
@@ -19,7 +19,7 @@
 // #define USING_CAP_CC1101
 // For UnitRFID2 (WS1850S external, I2C GROVE)
 // #define USING_UNIT_RFID2
-// For M5Dial Builtin WS1850S (internal I2C)
+// For M5Dial Builtin WS1850S (NOT SUPPORTED for NFC-B; use UnitRFID2)
 // #define USING_M5DIAL_BUILTIN_WS1850S
 #endif
-#include "main/ValueBlock.cpp"
+#include "main/Detect.cpp"
