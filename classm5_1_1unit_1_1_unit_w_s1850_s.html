@@ -27,7 +27,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">M5Unit-RFID<span id="projectnumber">&#160;0.0.1 git rev:d8076ed</span>
+   <div id="projectname">M5Unit-RFID<span id="projectnumber">&#160;0.0.2 git rev:1dc8f67</span>
    </div>
   </td>
  </tr>
@@ -97,8 +97,10 @@ $(function(){initNavTree('classm5_1_1unit_1_1_unit_w_s1850_s.html',''); initResi
 
 <div class="header">
   <div class="summary">
+<a href="#nested-classes">Classes</a> &#124;
 <a href="#pub-methods">Public Member Functions</a> &#124;
 <a href="#pro-methods">Protected Member Functions</a> &#124;
+<a href="#pro-attribs">Protected Attributes</a> &#124;
 <a href="classm5_1_1unit_1_1_unit_w_s1850_s-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">m5::unit::UnitWS1850S Class Reference</div></div>
 </div><!--header-->
@@ -118,6 +120,12 @@ Inheritance diagram for m5::unit::UnitWS1850S:</div>
   </map>
 </div></div>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html">config_t</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Settings for begin / configureNFCMode.  <a href="structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html#details">More...</a><br /></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a69b1be44eb0fff74982ccaec1c1e4f7f" id="r_a69b1be44eb0fff74982ccaec1c1e4f7f"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a69b1be44eb0fff74982ccaec1c1e4f7f">UnitWS1850S</a> (const uint8_t addr=DEFAULT_ADDRESS)</td></tr>
@@ -130,6 +138,32 @@ virtual&#160;</td><td class="memItemRight" valign="bottom"><b>~UnitWS1850S</b> (
 <tr class="memitem:a580ecce83cb754e88ddafeed59e4515b" id="r_a580ecce83cb754e88ddafeed59e4515b"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a580ecce83cb754e88ddafeed59e4515b">begin</a> () override</td></tr>
 <tr class="memdesc:a580ecce83cb754e88ddafeed59e4515b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Begin the unit.  <br /></td></tr>
 <tr class="separator:a580ecce83cb754e88ddafeed59e4515b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr><td colspan="2"><div class="groupHeader">Settings for begin / configureNFCMode</div></td></tr>
+<tr class="memitem:a79c760024a7f420cf3203f55c94936b9" id="r_a79c760024a7f420cf3203f55c94936b9"><td class="memItemLeft" align="right" valign="top"><a id="a79c760024a7f420cf3203f55c94936b9" name="a79c760024a7f420cf3203f55c94936b9"></a>
+<a class="el" href="structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html">config_t</a>&#160;</td><td class="memItemRight" valign="bottom"><b>config</b> () const</td></tr>
+<tr class="memdesc:a79c760024a7f420cf3203f55c94936b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the configuration. <br /></td></tr>
+<tr class="separator:a79c760024a7f420cf3203f55c94936b9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8fde6b9a53a1b977bc68ed057b330807" id="r_a8fde6b9a53a1b977bc68ed057b330807"><td class="memItemLeft" align="right" valign="top"><a id="a8fde6b9a53a1b977bc68ed057b330807" name="a8fde6b9a53a1b977bc68ed057b330807"></a>
+void&#160;</td><td class="memItemRight" valign="bottom"><b>config</b> (const <a class="el" href="structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html">config_t</a> &amp;cfg)</td></tr>
+<tr class="memdesc:a8fde6b9a53a1b977bc68ed057b330807"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the configuration. <br /></td></tr>
+<tr class="separator:a8fde6b9a53a1b977bc68ed057b330807"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr><td colspan="2"><div class="groupHeader">NFC mode</div></td></tr>
+<tr class="memitem:a8d83113690d4c819d42dd4b48b6c255d" id="r_a8d83113690d4c819d42dd4b48b6c255d"><td class="memItemLeft" align="right" valign="top">m5::nfc::NFC&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8d83113690d4c819d42dd4b48b6c255d">NFCMode</a> () const</td></tr>
+<tr class="memdesc:a8d83113690d4c819d42dd4b48b6c255d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the current operating mode.  <br /></td></tr>
+<tr class="separator:a8d83113690d4c819d42dd4b48b6c255d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad4125ddd121ec87541aab7ec4935972c" id="r_ad4125ddd121ec87541aab7ec4935972c"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad4125ddd121ec87541aab7ec4935972c">configureNFCMode</a> (const m5::nfc::NFC mode) override</td></tr>
+<tr class="memdesc:ad4125ddd121ec87541aab7ec4935972c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Configure NFC mode.  <br /></td></tr>
+<tr class="separator:ad4125ddd121ec87541aab7ec4935972c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr><td colspan="2"><div class="groupHeader">NFC-B (ISO/IEC 14443 Type B)</div></td></tr>
+<tr class="memitem:ae5a8eb629dd9bf97c67b9916a33e92c1" id="r_ae5a8eb629dd9bf97c67b9916a33e92c1"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ae5a8eb629dd9bf97c67b9916a33e92c1">nfcbTransceive</a> (uint8_t *rx, uint16_t &amp;rx_len, const uint8_t *tx, const uint16_t tx_len, const uint32_t timeout_ms)</td></tr>
+<tr class="memdesc:ae5a8eb629dd9bf97c67b9916a33e92c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Transceive an NFC-B frame.  <br /></td></tr>
+<tr class="separator:ae5a8eb629dd9bf97c67b9916a33e92c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5b351bf939b7a0e2231e4fc320d90eb7" id="r_a5b351bf939b7a0e2231e4fc320d90eb7"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a5b351bf939b7a0e2231e4fc320d90eb7">readTypeBReg</a> (uint8_t &amp;value)</td></tr>
+<tr class="memdesc:a5b351bf939b7a0e2231e4fc320d90eb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read the TypeBReg (PN512 Page 1, address 0x1E)  <br /></td></tr>
+<tr class="separator:a5b351bf939b7a0e2231e4fc320d90eb7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a45244a73fa60aa9f383104962db5b0cf" id="r_a45244a73fa60aa9f383104962db5b0cf"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a45244a73fa60aa9f383104962db5b0cf">writeTypeBReg</a> (const uint8_t value)</td></tr>
+<tr class="memdesc:a45244a73fa60aa9f383104962db5b0cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write the TypeBReg (PN512 Page 1, address 0x1E)  <br /></td></tr>
+<tr class="separator:a45244a73fa60aa9f383104962db5b0cf"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td colspan="2" onclick="javascript:dynsection.toggleInherit('pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html">m5::unit::UnitMFRC522</a></td></tr>
 <tr class="memitem:a783f8db18e0163840e6c2a7b37fefdad inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a783f8db18e0163840e6c2a7b37fefdad"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a783f8db18e0163840e6c2a7b37fefdad">UnitMFRC522</a> (const uint8_t addr=DEFAULT_ADDRESS)</td></tr>
 <tr class="memdesc:a783f8db18e0163840e6c2a7b37fefdad inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructor.  <br /></td></tr>
@@ -144,9 +178,6 @@ virtual&#160;</td><td class="memItemRight" valign="bottom"><b>~UnitMFRC522</b> (
 <tr class="memitem:a5a8f986c94ba1c32ca87246c05dac937 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a5a8f986c94ba1c32ca87246c05dac937"><td class="memItemLeft" align="right" valign="top">m5::nfc::NFC&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a5a8f986c94ba1c32ca87246c05dac937">NFCMode</a> () const</td></tr>
 <tr class="memdesc:a5a8f986c94ba1c32ca87246c05dac937 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the current operating mode.  <br /></td></tr>
 <tr class="separator:a5a8f986c94ba1c32ca87246c05dac937 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a1dbd5d302a665c4b4cb5a4c19d2d2443 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a1dbd5d302a665c4b4cb5a4c19d2d2443"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a1dbd5d302a665c4b4cb5a4c19d2d2443">configureNFCMode</a> (const m5::nfc::NFC mode)</td></tr>
-<tr class="memdesc:a1dbd5d302a665c4b4cb5a4c19d2d2443 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Configure NFC mode.  <br /></td></tr>
-<tr class="separator:a1dbd5d302a665c4b4cb5a4c19d2d2443 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aee5df80996fc4ddcd53bb94b2db604bf inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_aee5df80996fc4ddcd53bb94b2db604bf"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#aee5df80996fc4ddcd53bb94b2db604bf">softReset</a> (const bool blocking=true)</td></tr>
 <tr class="memdesc:aee5df80996fc4ddcd53bb94b2db604bf inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Software reset.  <br /></td></tr>
 <tr class="separator:aee5df80996fc4ddcd53bb94b2db604bf inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -176,6 +207,30 @@ void&#160;</td><td class="memItemRight" valign="bottom"><b>config</b> (const <a 
 <tr class="memitem:aa14d5043651687fd39fe2c7f70a58e37 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_aa14d5043651687fd39fe2c7f70a58e37"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#aa14d5043651687fd39fe2c7f70a58e37">writeReceiverGain</a> (const <a class="el" href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882">mfrc522::ReceiverGain</a> gain)</td></tr>
 <tr class="memdesc:aa14d5043651687fd39fe2c7f70a58e37 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write the receiver gain.  <br /></td></tr>
 <tr class="separator:aa14d5043651687fd39fe2c7f70a58e37 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a6d8ca26dc021d9ab23b54ab3efec3445 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a6d8ca26dc021d9ab23b54ab3efec3445"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a6d8ca26dc021d9ab23b54ab3efec3445">readGsN</a> (uint8_t &amp;value)</td></tr>
+<tr class="memdesc:a6d8ca26dc021d9ab23b54ab3efec3445 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read the GsN register (N-driver conductance: CWGsN[7:4] / ModGsN[3:0])  <br /></td></tr>
+<tr class="separator:a6d8ca26dc021d9ab23b54ab3efec3445 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa5a5b5654b99cc4044c1c56150008c84 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_aa5a5b5654b99cc4044c1c56150008c84"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#aa5a5b5654b99cc4044c1c56150008c84">writeGsN</a> (const uint8_t value)</td></tr>
+<tr class="memdesc:aa5a5b5654b99cc4044c1c56150008c84 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write the GsN register.  <br /></td></tr>
+<tr class="separator:aa5a5b5654b99cc4044c1c56150008c84 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:afc557663cdc15d25ca34f7d096905ca9 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_afc557663cdc15d25ca34f7d096905ca9"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#afc557663cdc15d25ca34f7d096905ca9">readCWGsP</a> (uint8_t &amp;value)</td></tr>
+<tr class="memdesc:afc557663cdc15d25ca34f7d096905ca9 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read the CWGsP register (P-driver conductance during no modulation)  <br /></td></tr>
+<tr class="separator:afc557663cdc15d25ca34f7d096905ca9 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a692ad3b5ec7a0fec59d86b3617339e77 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a692ad3b5ec7a0fec59d86b3617339e77"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a692ad3b5ec7a0fec59d86b3617339e77">writeCWGsP</a> (const uint8_t value)</td></tr>
+<tr class="memdesc:a692ad3b5ec7a0fec59d86b3617339e77 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write the CWGsP register.  <br /></td></tr>
+<tr class="separator:a692ad3b5ec7a0fec59d86b3617339e77 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:af164c424f48ee2e88e7ebed954aeeb91 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_af164c424f48ee2e88e7ebed954aeeb91"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#af164c424f48ee2e88e7ebed954aeeb91">readModGsP</a> (uint8_t &amp;value)</td></tr>
+<tr class="memdesc:af164c424f48ee2e88e7ebed954aeeb91 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read the ModGsP register (P-driver conductance during modulation)  <br /></td></tr>
+<tr class="separator:af164c424f48ee2e88e7ebed954aeeb91 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a486afd7edb7d8677e666a01d084d747b inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a486afd7edb7d8677e666a01d084d747b"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a486afd7edb7d8677e666a01d084d747b">writeModGsP</a> (const uint8_t value)</td></tr>
+<tr class="memdesc:a486afd7edb7d8677e666a01d084d747b inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write the ModGsP register.  <br /></td></tr>
+<tr class="separator:a486afd7edb7d8677e666a01d084d747b inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a696b970e95bcc9b425ed8cac12627169 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a696b970e95bcc9b425ed8cac12627169"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a696b970e95bcc9b425ed8cac12627169">readRxThreshold</a> (uint8_t &amp;value)</td></tr>
+<tr class="memdesc:a696b970e95bcc9b425ed8cac12627169 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read the RxThreshold register.  <br /></td></tr>
+<tr class="separator:a696b970e95bcc9b425ed8cac12627169 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aab3267375d48f3cf9d596f41b8cd9ec5 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_aab3267375d48f3cf9d596f41b8cd9ec5"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#aab3267375d48f3cf9d596f41b8cd9ec5">writeRxThreshold</a> (const uint8_t value)</td></tr>
+<tr class="memdesc:aab3267375d48f3cf9d596f41b8cd9ec5 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write the RxThreshold register.  <br /></td></tr>
+<tr class="separator:aab3267375d48f3cf9d596f41b8cd9ec5 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab5ca03f90d2703923ebf22af1486b338 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_ab5ca03f90d2703923ebf22af1486b338"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#ab5ca03f90d2703923ebf22af1486b338">readTPrescaler</a> (uint16_t &amp;tprescale)</td></tr>
 <tr class="memdesc:ab5ca03f90d2703923ebf22af1486b338 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read the TPrescaler.  <br /></td></tr>
 <tr class="separator:ab5ca03f90d2703923ebf22af1486b338 inherit pub_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -230,6 +285,14 @@ Protected Member Functions</h2></td></tr>
 <tr class="memitem:a280eb2cc03650358ea76c4dcf406e57c" id="r_a280eb2cc03650358ea76c4dcf406e57c"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a280eb2cc03650358ea76c4dcf406e57c">self_test</a> () override</td></tr>
 <tr class="memdesc:a280eb2cc03650358ea76c4dcf406e57c"><td class="mdescLeft">&#160;</td><td class="mdescRight">self test  <br /></td></tr>
 <tr class="separator:a280eb2cc03650358ea76c4dcf406e57c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0820484582811ba161bf75013491c7d3" id="r_a0820484582811ba161bf75013491c7d3"><td class="memItemLeft" align="right" valign="top"><a id="a0820484582811ba161bf75013491c7d3" name="a0820484582811ba161bf75013491c7d3"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>configure_nfca</b> ()</td></tr>
+<tr class="memdesc:a0820484582811ba161bf75013491c7d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Switch chip to NFC-A mode (default) <br /></td></tr>
+<tr class="separator:a0820484582811ba161bf75013491c7d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:adca283c96ae9d458ac3c6f073abb1fed" id="r_adca283c96ae9d458ac3c6f073abb1fed"><td class="memItemLeft" align="right" valign="top"><a id="adca283c96ae9d458ac3c6f073abb1fed" name="adca283c96ae9d458ac3c6f073abb1fed"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>configure_nfcb</b> ()</td></tr>
+<tr class="memdesc:adca283c96ae9d458ac3c6f073abb1fed"><td class="mdescLeft">&#160;</td><td class="mdescRight">Switch chip to NFC-B mode (PN512-compatible silicon only) <br /></td></tr>
+<tr class="separator:adca283c96ae9d458ac3c6f073abb1fed"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pro_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td colspan="2" onclick="javascript:dynsection.toggleInherit('pro_methods_classm5_1_1unit_1_1_unit_m_f_r_c522')"><img src="closed.png" alt="-"/>&#160;Protected Member Functions inherited from <a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html">m5::unit::UnitMFRC522</a></td></tr>
 <tr class="memitem:ac23873b615a45f994e4a343cdca71fe8 inherit pro_methods_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_ac23873b615a45f994e4a343cdca71fe8"><td class="memItemLeft" align="right" valign="top">
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>modify_bit_register8</b> (const uint8_t reg, const uint8_t set_mask, const uint8_t clear_mask)</td></tr>
@@ -298,8 +361,14 @@ bool&#160;</td><td class="memItemRight" valign="bottom"><b>mifare_classic_transc
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>calculate_crc</b> (uint16_t &amp;result, const uint8_t *buf, const uint8_t len)</td></tr>
 <tr class="separator:a8757d2ca9311e079a1011284019e8593 inherit pro_methods_classm5_1_1unit_1_1_unit_m_f_r_c522"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="inherited" name="inherited"></a>
-Additional Inherited Members</h2></td></tr>
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-attribs" name="pro-attribs"></a>
+Protected Attributes</h2></td></tr>
+<tr class="memitem:a412aca0691621bc1e1a76f4552cf6ede" id="r_a412aca0691621bc1e1a76f4552cf6ede"><td class="memItemLeft" align="right" valign="top"><a id="a412aca0691621bc1e1a76f4552cf6ede" name="a412aca0691621bc1e1a76f4552cf6ede"></a>
+<a class="el" href="structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html">config_t</a>&#160;</td><td class="memItemRight" valign="bottom"><b>_cfg</b> {}</td></tr>
+<tr class="separator:a412aca0691621bc1e1a76f4552cf6ede"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1a5d7d461440760e705c77609d25dbc4" id="r_a1a5d7d461440760e705c77609d25dbc4"><td class="memItemLeft" align="right" valign="top"><a id="a1a5d7d461440760e705c77609d25dbc4" name="a1a5d7d461440760e705c77609d25dbc4"></a>
+m5::nfc::NFC&#160;</td><td class="memItemRight" valign="bottom"><b>_mode</b> {m5::nfc::NFC::A}</td></tr>
+<tr class="separator:a1a5d7d461440760e705c77609d25dbc4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pro_attribs_classm5_1_1unit_1_1_unit_m_f_r_c522"><td colspan="2" onclick="javascript:dynsection.toggleInherit('pro_attribs_classm5_1_1unit_1_1_unit_m_f_r_c522')"><img src="closed.png" alt="-"/>&#160;Protected Attributes inherited from <a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html">m5::unit::UnitMFRC522</a></td></tr>
 <tr class="memitem:a4800b856afe722bcb971038dbea4d61c inherit pro_attribs_classm5_1_1unit_1_1_unit_m_f_r_c522" id="r_a4800b856afe722bcb971038dbea4d61c"><td class="memItemLeft" align="right" valign="top">
 <a class="el" href="structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html">config_t</a>&#160;</td><td class="memItemRight" valign="bottom"><b>_cfg</b> {}</td></tr>
@@ -310,7 +379,7 @@ uint16_t&#160;</td><td class="memItemRight" valign="bottom"><b>_tprescaler</b> {
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Radio frequency identification unit. </p>
-<p>Functionally compatible with MFRC522 </p>
+<p>Functionally compatible with MFRC522. Supports NFC-A (always) and NFC-B (if PN512-compatible silicon). </p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a69b1be44eb0fff74982ccaec1c1e4f7f" name="a69b1be44eb0fff74982ccaec1c1e4f7f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a69b1be44eb0fff74982ccaec1c1e4f7f">&#9670;&#160;</a></span>UnitWS1850S()</h2>
@@ -376,6 +445,147 @@ uint16_t&#160;</td><td class="memItemRight" valign="bottom"><b>_tprescaler</b> {
 
 </div>
 </div>
+<a id="ad4125ddd121ec87541aab7ec4935972c" name="ad4125ddd121ec87541aab7ec4935972c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad4125ddd121ec87541aab7ec4935972c">&#9670;&#160;</a></span>configureNFCMode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool m5::unit::UnitWS1850S::configureNFCMode </td>
+          <td>(</td>
+          <td class="paramtype">const m5::nfc::NFC</td>          <td class="paramname"><span class="paramname"><em>mode</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">override</span><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Configure NFC mode. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">mode</td><td>NFC::A or NFC::B </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>True if successful </dd></dl>
+<dl class="section note"><dt>Note</dt><dd>NFC::B requires PN512-compatible silicon. Antenna tuning values are taken from <a class="el" href="structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html" title="Settings for begin / configureNFCMode.">config_t</a>. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#a434a10f345d99ca2609bb54ba06a6634">m5::unit::UnitMFRC522</a>.</p>
+
+</div>
+</div>
+<a id="ae5a8eb629dd9bf97c67b9916a33e92c1" name="ae5a8eb629dd9bf97c67b9916a33e92c1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae5a8eb629dd9bf97c67b9916a33e92c1">&#9670;&#160;</a></span>nfcbTransceive()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool m5::unit::UnitWS1850S::nfcbTransceive </td>
+          <td>(</td>
+          <td class="paramtype">uint8_t *</td>          <td class="paramname"><span class="paramname"><em>rx</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint16_t &amp;</td>          <td class="paramname"><span class="paramname"><em>rx_len</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const uint8_t *</td>          <td class="paramname"><span class="paramname"><em>tx</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const uint16_t</td>          <td class="paramname"><span class="paramname"><em>tx_len</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const uint32_t</td>          <td class="paramname"><span class="paramname"><em>timeout_ms</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Transceive an NFC-B frame. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir"></td><td class="paramname">rx</td><td>Receive buffer (returned with trailing 2-byte CRC_B intact) </td></tr>
+    <tr><td class="paramdir">[in,out]</td><td class="paramname">rx_len</td><td>in:Size of rx buffer out:Actual received length </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">tx</td><td>Transmit buffer (without CRC; CRC_B is appended internally) </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">tx_len</td><td>Length of tx </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">timeout_ms</td><td>Timeout in milliseconds </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>True if successful </dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Software CRC_B is used for transmission. Both software and hardware CRC are also computed and compared in M5_LIB_LOGI for silicon compatibility diagnosis. </dd></dl>
+
+</div>
+</div>
+<a id="a8d83113690d4c819d42dd4b48b6c255d" name="a8d83113690d4c819d42dd4b48b6c255d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8d83113690d4c819d42dd4b48b6c255d">&#9670;&#160;</a></span>NFCMode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">m5::nfc::NFC m5::unit::UnitWS1850S::NFCMode </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Gets the current operating mode. </p>
+<dl class="section return"><dt>Returns</dt><dd>NFC::A or NFC::B </dd></dl>
+
+</div>
+</div>
+<a id="a5b351bf939b7a0e2231e4fc320d90eb7" name="a5b351bf939b7a0e2231e4fc320d90eb7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5b351bf939b7a0e2231e4fc320d90eb7">&#9670;&#160;</a></span>readTypeBReg()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool m5::unit::UnitWS1850S::readTypeBReg </td>
+          <td>(</td>
+          <td class="paramtype">uint8_t &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Read the TypeBReg (PN512 Page 1, address 0x1E) </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir">[out]</td><td class="paramname">value</td><td>8-bit raw value (RxSOFReq / EOFSOFWidth / TxEGT / EOFSOFAdjust) </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>True if successful </dd></dl>
+
+</div>
+</div>
 <a id="a280eb2cc03650358ea76c4dcf406e57c" name="a280eb2cc03650358ea76c4dcf406e57c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a280eb2cc03650358ea76c4dcf406e57c">&#9670;&#160;</a></span>self_test()</h2>
 
@@ -404,6 +614,33 @@ uint16_t&#160;</td><td class="memItemRight" valign="bottom"><b>_tprescaler</b> {
 <dl class="section warning"><dt>Warning</dt><dd>It seems to be compatible in function, but may not be compatible in behavior </dd></dl>
 
 <p>Reimplemented from <a class="el" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html">m5::unit::UnitMFRC522</a>.</p>
+
+</div>
+</div>
+<a id="a45244a73fa60aa9f383104962db5b0cf" name="a45244a73fa60aa9f383104962db5b0cf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45244a73fa60aa9f383104962db5b0cf">&#9670;&#160;</a></span>writeTypeBReg()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool m5::unit::UnitWS1850S::writeTypeBReg </td>
+          <td>(</td>
+          <td class="paramtype">const uint8_t</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Write the TypeBReg (PN512 Page 1, address 0x1E) </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">value</td><td>8-bit raw value. bit[5] is RFU (must be 0) per PN512 datasheet 8.2.2.15. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>True if successful, false if reserved bit set or I2C error </dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Effective only on PN512-compatible silicon (e.g. WS1850S). </dd></dl>
 
 </div>
 </div>

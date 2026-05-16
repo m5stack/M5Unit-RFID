@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['receiver_5fgain_0',['receiver_gain',['../structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html#a95dd0ce5fb8813f7e180f2c617853ae8',1,'m5::unit::UnitMFRC522::config_t']]]
+  ['nfcb_5fask_5fdepth_0',['nfcb_ask_depth',['../structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html#ad2217e05f52f18cac13704ec80e3825f',1,'m5::unit::UnitWS1850S::config_t']]]
 ];

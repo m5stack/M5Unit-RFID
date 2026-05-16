@@ -11,5 +11,6 @@ var searchData=
   ['mifareclassicauthenticateb_8',['mifareClassicAuthenticateB',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a7747bc4ef104a32261656c7ce7aab3be',1,'m5::unit::UnitMFRC522']]],
   ['mifareclassicstopcrypto1_9',['mifareClassicStopCrypto1',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#af34dd4ecbfcb8ebd86ed1cf59e6c3dec',1,'m5::unit::UnitMFRC522']]],
   ['mifareclassicvalueblock_10',['mifareClassicValueBlock',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#ab83ed747644047b2b4786f324c5563b6',1,'m5::unit::UnitMFRC522']]],
-  ['mode_5freg_11',['mode_reg',['../structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html#a86fc3dd9aad83b1e781b90742782e242',1,'m5::unit::UnitMFRC522::config_t']]]
+  ['mode_11',['mode',['../structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html#a93e0a33adfdf22d3c468d5637289ca0d',1,'m5::unit::UnitMFRC522::config_t']]],
+  ['mode_5freg_12',['mode_reg',['../structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html#a86fc3dd9aad83b1e781b90742782e242',1,'m5::unit::UnitMFRC522::config_t']]]
 ];
