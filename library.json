@@ -14,7 +14,7 @@
         "m5stack/M5UnitUnified": ">=0.4.6",
         "m5stack/M5Unit-NFC": ">=0.0.3"
     },
-    "version": "0.0.1",
+    "version": "0.0.2",
     "frameworks": [
         "arduino"
     ],
