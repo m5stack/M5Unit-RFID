@@ -12,7 +12,7 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedNFC.h>
 #include <M5Utility.h>
-#include <Wire.h>
+#include <wiring/m5_unit_unified_wiring.hpp>
 #include <vector>
 
 // *************************************************************
@@ -20,9 +20,9 @@
 // *************************************************************
 #if !defined(USING_UNIT_NFC) && !defined(USING_CAP_CC1101) && !defined(USING_UNIT_RFID2) && \
     !defined(USING_M5DIAL_BUILTIN_WS1850S)
-// For UnitNFC (ST25R3916, I2C)
+// For UnitNFC (U216)
 // #define USING_UNIT_NFC
-// For CapCC1101NFC (ST25R3916, SPI)
+// For CapCC1101 (U219)
 // #define USING_CAP_CC1101
 // For UnitRFID2 (WS1850S external, I2C GROVE)
 // #define USING_UNIT_RFID2
@@ -78,45 +78,20 @@ void setup()
         cfg.receiver_gain = m5::unit::mfrc522::ReceiverGain::dB33;
         unit.config(cfg);
     }
-    // M5Dial builtin WS1850S on In_I2C (G12/G11, shared with RTC8563)
-    M5_LOGI("Using M5.In_I2C for builtin WS1850S");
-    unit_ready = Units.add(unit, M5.In_I2C) && Units.begin();
+    unit_ready = m5::unit::wiring::i2cClass(Units, unit, M5.In_I2C) && Units.begin();
 
 #elif defined(USING_UNIT_NFC) || defined(USING_UNIT_RFID2)
-    // External I2C unit (GROVE port).
-    // NessoN1: Arduino Wire (I2C_NUM_0) cannot be used for GROVE port (used by In_I2C internals).
-    //   Use QWIIC (port_a) with Wire. (Requires QWIIC-GROVE conversion cable)
-    // NanoC6: Wire.begin() on GROVE pins conflicts with Ex_I2C on I2C_NUM_0; use M5.Ex_I2C directly.
-    if (M5.getBoard() == m5::board_t::board_M5NanoC6) {
-        M5_LOGI("Using M5.Ex_I2C");
-        unit_ready = Units.add(unit, M5.Ex_I2C) && Units.begin();
-    } else {
-        auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
-        auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
-        M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
-        Wire.end();
-        Wire.begin(pin_num_sda, pin_num_scl, 400 * 1000U);
-        unit_ready = Units.add(unit, Wire) && Units.begin();
-    }
+    unit_ready =
+        m5::unit::wiring::addI2C(Units, unit, 400 * 1000U, m5::unit::wiring::NessoPort::PortA) && Units.begin();
 
 #elif defined(USING_CAP_CC1101)
-    if (!SPI.bus()) {
-        auto spi_sclk = M5.getPin(m5::pin_name_t::sd_spi_sclk);
-        auto spi_mosi = M5.getPin(m5::pin_name_t::sd_spi_mosi);
-        auto spi_miso = M5.getPin(m5::pin_name_t::sd_spi_miso);
-        M5_LOGI("getPin: %d,%d,%d", spi_sclk, spi_mosi, spi_miso);
-        SPI.begin(spi_sclk, spi_miso, spi_mosi /* SS is shared SD, CC1101, ST25R3916 */);
-    }
-    SPISettings settings = {10000000, MSBFIRST, SPI_MODE1};
-    unit_ready           = Units.add(unit, SPI, settings) && Units.begin();
+    SPISettings settings{10000000, MSBFIRST, SPI_MODE1};
+    unit_ready = m5::unit::wiring::addSPI(Units, unit, settings) && Units.begin();
 #endif
 
     if (!unit_ready) {
         M5_LOGE("Failed to begin");
-        lcd.fillScreen(TFT_RED);
-        while (true) {
-            m5::utility::delay(10000);
-        }
+        m5::unit::wiring::failStop();
     }
     M5_LOGI("M5UnitUnified initialized");
     M5_LOGI("%s", Units.debugInfo().c_str());
