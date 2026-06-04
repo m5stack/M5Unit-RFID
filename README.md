@@ -7,7 +7,7 @@ M5UnitUnified has a unified API and can control multiple units via PaHub, etc.
 
 ### SKU:U031-B
 
-Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
+Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A/B standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
 
 
 ## PICC Support
