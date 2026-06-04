@@ -26,7 +26,7 @@ namespace unit {
  */
 namespace pn512 {
 
-//! TypeBReg (Page 1 address 0xE, accessed as 0x1E): EOFSOFWidth, TxEGT, EOFSOFAdjust
+//! TypeBReg (address 0x1E): RxSOFReq, RxEOFReq, EOFSOFWidth, NoTxSOF, NoTxEOF, TxEGT
 constexpr uint8_t TYPE_B_REG{0x1E};
 
 }  // namespace pn512

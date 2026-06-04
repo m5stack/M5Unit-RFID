@@ -5,6 +5,7 @@
  */
 /*!
   @file M5UnitUnifiedRFID.h
+  @brief Main header of M5Unit-RFID
  */
 #ifndef M5_UNIT_UNIFIED_RFID_H
 #define M5_UNIT_UNIFIED_RFID_H

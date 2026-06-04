@@ -46,7 +46,12 @@ struct AdapterWS1850SForB final : NFCLayerB::Adapter {
 
     bool receive(uint8_t* /*rx*/, uint16_t& /*rx_len*/, const uint32_t /*timeout_ms*/) override
     {
-        // Standalone receive is not supported on MFRC522-class chips (Transceive command based).
+        // Standalone receive is intentionally not implemented on MFRC522-class chips.
+        // It could be implemented via Command::Receive (activates the receiver without TX),
+        // but it is only reached on the ISO-DEP R(ACK) "receive again" chaining path
+        // (isoDEP.cpp). Normal NFC-B exchange goes through transceive(), so returning false
+        // here does not affect standard NFC-B operation. Implementing it requires hardware
+        // validation with a Type B card that exercises R-block response chaining.
         return false;
     }
 

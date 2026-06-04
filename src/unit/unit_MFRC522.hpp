@@ -132,17 +132,24 @@ public:
     /*!
       @brief Update internal state
       @param force Force update if true
+      @note This unit performs no periodic update; this override is a no-op
      */
     virtual void update(const bool force = false) override;
 
     ///@name Settings for begin
     ///@{
-    /*! @brief Gets the configuration */
+    /*!
+      @brief Gets the configuration
+      @return Current configuration
+     */
     inline config_t config()
     {
         return _cfg;
     }
-    //! @brief Set the configuration
+    /*!
+      @brief Set the configuration
+      @param cfg Configuration to set
+     */
     inline void config(const config_t& cfg)
     {
         _cfg = cfg;
@@ -151,9 +158,9 @@ public:
 
     /*!
       @brief Gets the current operating mode
-      @note Only NFC-A
+      @note Only NFC-A on pure MFRC522. Derived classes (e.g. UnitWS1850S) override this.
     */
-    inline m5::nfc::NFC NFCMode() const
+    inline virtual m5::nfc::NFC NFCMode() const
     {
         return m5::nfc::NFC::A;
     }
@@ -288,8 +295,9 @@ public:
     bool readTPrescaler(uint16_t& tprescale);
     /*!
       @brief Write the TPrescaler
-      @param tprescale TPrescaler value
+      @param tprescale TPrescaler value (0-4095, 12 bits)
       @return True if successful
+      @note Values greater than 4095 are rejected
      */
     bool writeTPrescaler(const uint16_t tprescale);
     ///@}
