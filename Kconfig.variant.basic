@@ -1,0 +1,20 @@
+# Shared "Target unit / board" selection for the M5Unit-NFC UnitUnified examples (ESP-IDF).
+# Used by NFC-A Emulation / NFC-F / NFC-V examples which only support ST25R3916-based units (UnitNFC, CapCC1101NFC).
+# rsource'd from each example's main/Kconfig.projbuild. The chosen CONFIG_EXAMPLE_USING_* is mapped
+# to the source-level USING_* macro in common/variant.cmake (shared with the Arduino build).
+menu "M5Unit-NFC example"
+
+choice EXAMPLE_NFC_VARIANT
+    prompt "Target unit / board"
+    default EXAMPLE_USING_UNIT_NFC
+    help
+        Which NFC unit this example drives.
+        WS1850S-based units (UnitRFID2, M5Dial built-in) are not listed because they do not support NFC-A Emulation / NFC-F / NFC-V.
+
+    config EXAMPLE_USING_UNIT_NFC
+        bool "UnitNFC (ST25R3916, I2C / GROVE)"
+    config EXAMPLE_USING_CAP_CC1101
+        bool "CapCC1101NFC (ST25R3916, SPI)"
+endchoice
+
+endmenu
