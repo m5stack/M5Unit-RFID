@@ -24,9 +24,9 @@
 // #define USING_UNIT_NFC
 // For CapCC1101 (U219)
 // #define USING_CAP_CC1101
-// For UnitRFID2 (WS1850S external, I2C GROVE)
+// For UnitRFID2 (U031-B)
 // #define USING_UNIT_RFID2
-// For M5Dial Builtin WS1850S (internal I2C)
+// For M5Dial Builtin WS1850S (K130)
 // #define USING_M5DIAL_BUILTIN_WS1850S
 #endif
 
@@ -85,8 +85,9 @@ void setup()
         m5::unit::wiring::addI2C(Units, unit, 400 * 1000U, m5::unit::wiring::NessoPort::PortA) && Units.begin();
 
 #elif defined(USING_CAP_CC1101)
-    SPISettings settings{10000000, MSBFIRST, SPI_MODE1};
-    unit_ready = m5::unit::wiring::addSPI(Units, unit, settings) && Units.begin();
+    // SPI mode 1 (CPOL=0, CPHA=1). Use literal so this builds in ESP-IDF native too
+    // (Arduino's SPI_MODE1 is not defined there).
+    unit_ready = m5::unit::wiring::addSPI(Units, unit, 10000000, 1) && Units.begin();
 #endif
 
     if (!unit_ready) {
@@ -133,3 +134,34 @@ void loop()
         nfc_a.deactivate();
     }
 }
+
+#if !defined(ARDUINO)
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <esp_timer.h>
+
+#if CONFIG_FREERTOS_UNICORE
+static inline void feedIdleTaskPeriodically(void)
+{
+    constexpr uint32_t FEED_INTERVAL_MS   = 2000;
+    constexpr TickType_t FEED_SLEEP_TICKS = pdMS_TO_TICKS(5);
+    static uint32_t s_next_feed_ms        = 0;
+    const uint32_t now_ms                 = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    if (now_ms >= s_next_feed_ms) {
+        s_next_feed_ms = now_ms + FEED_INTERVAL_MS;
+        vTaskDelay(FEED_SLEEP_TICKS);
+    }
+}
+#endif
+
+extern "C" void app_main(void)
+{
+    setup();
+    for (;;) {
+#if CONFIG_FREERTOS_UNICORE
+        feedIdleTaskPeriodically();
+#endif
+        loop();
+    }
+}
+#endif
