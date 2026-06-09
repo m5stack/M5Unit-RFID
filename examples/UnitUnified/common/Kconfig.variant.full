@@ -2,11 +2,11 @@
 # Used by NFC-A examples (Detect/Dump/NDEF/PolicyOverride/ReadWrite/ValueBlock) which support all 4 variants.
 # rsource'd from each example's main/Kconfig.projbuild. The chosen CONFIG_EXAMPLE_USING_* is mapped
 # to the source-level USING_* macro in common/variant.cmake (shared with the Arduino build).
-menu "M5Unit-NFC example"
+menu "M5Unit-RFID example"
 
 choice EXAMPLE_NFC_VARIANT
     prompt "Target unit / board"
-    default EXAMPLE_USING_UNIT_NFC
+    default EXAMPLE_USING_UNIT_RFID2
     help
         Which NFC/RFID unit (or built-in reader) this example drives.
 

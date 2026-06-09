@@ -10,6 +10,6 @@
 ##   to be required here; with 0.2.17 the registry version is self-contained.
 dependencies:
   idf: ">=5.0"
-  m5stack/M5Unit-NFC:
+  m5stack/M5Unit-RFID:
     path: "../../../../.."
   m5stack/M5Unified: ">=0.2.17"

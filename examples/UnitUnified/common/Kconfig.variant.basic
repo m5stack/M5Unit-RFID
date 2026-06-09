@@ -2,7 +2,7 @@
 # Used by NFC-A Emulation / NFC-F / NFC-V examples which only support ST25R3916-based units (UnitNFC, CapCC1101NFC).
 # rsource'd from each example's main/Kconfig.projbuild. The chosen CONFIG_EXAMPLE_USING_* is mapped
 # to the source-level USING_* macro in common/variant.cmake (shared with the Arduino build).
-menu "M5Unit-NFC example"
+menu "M5Unit-RFID example"
 
 choice EXAMPLE_NFC_VARIANT
     prompt "Target unit / board"
