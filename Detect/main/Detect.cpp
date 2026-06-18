@@ -82,8 +82,7 @@ void setup()
     unit_ready = m5::unit::wiring::i2cClass(Units, unit, M5.In_I2C) && Units.begin();
 
 #elif defined(USING_UNIT_NFC) || defined(USING_UNIT_RFID2)
-    unit_ready =
-        m5::unit::wiring::addI2C(Units, unit, 400 * 1000U, m5::unit::wiring::NessoPort::PortA) && Units.begin();
+    unit_ready = m5::unit::wiring::addI2C(Units, unit, 0, m5::unit::wiring::NessoPort::PortA) && Units.begin();
 
 #elif defined(USING_CAP_CC1101)
     // SPI mode 1 (CPOL=0, CPHA=1). Use literal so this builds in ESP-IDF native too
