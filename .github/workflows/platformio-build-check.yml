@@ -57,26 +57,29 @@ jobs:
           - NFCA_Detect
           - NFCB_Detect
 
+        # Build CI board axis = distinct compile config only (skill m5-build-ci-matrix).
+        # I2C path is a runtime M5.getBoard() branch (same compile for all boards), so
+        # only one board per compile config is kept; variant-header siblings are commented out.
         board:
-          - Core
-          - Core2
-          - CoreS3
-          - Fire
-          - StampS3
-          - Dial
-          - Atom
-          - AtomS3
-          - AtomS3R
-          - NanoC6
-          - NanoH2
-          - StickCPlus
-          - StickCPlus2
-          - StickS3
-          - Paper
-          - CoreInk
-          - Cardputer
-          - Tab5
-          - NessoN1
+          - Core          # espressif32 x ESP32 (xtensa-esp32)
+          - CoreS3        # espressif32 x ESP32-S3 (xtensa-esp32s3, separate GCC target)
+          - NanoC6        # pioarduino x ESP32-C6 (rv32)
+          - NanoH2        # pioarduino x ESP32-H2 (H2 image target / f_flash16M)
+          - Tab5          # pioarduino x ESP32-P4 (rv32 single-float / 16MB partition)
+          # - Core2       # ESP32: represented by Core
+          # - Fire        # ESP32: represented by Core
+          # - StampS3     # ESP32-S3: represented by CoreS3
+          # - Dial        # ESP32-S3: represented by CoreS3
+          # - Atom        # ESP32: represented by Core
+          # - AtomS3      # ESP32-S3: represented by CoreS3
+          # - AtomS3R     # ESP32-S3: represented by CoreS3
+          # - StickCPlus  # ESP32: represented by Core
+          # - StickCPlus2 # ESP32: represented by Core
+          # - StickS3     # ESP32-S3: represented by CoreS3
+          # - Paper       # ESP32: represented by Core
+          # - CoreInk     # ESP32: represented by Core
+          # - Cardputer   # ESP32-S3: represented by CoreS3
+          # - NessoN1     # ESP32-C6: represented by NanoC6
 
         framework:
           - Arduino

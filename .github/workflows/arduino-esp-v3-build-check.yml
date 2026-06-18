@@ -67,25 +67,27 @@ jobs:
         build-properties:
           - "-DUSING_UNIT_RFID2"
 
+        # Build CI board axis = distinct compile config only (skill m5-build-ci-matrix).
+        # esp32:esp32 3.x covers ESP32 / S3 / C6 / P4 (no H2 in this package).
         board:
-          - arduino_nesso_n1
-          - m5stack_atom
-          - m5stack_atoms3
-          - m5stack_capsule
-          - m5stack_cardputer
-          - m5stack_core
-          - m5stack_core2
-          - m5stack_coreink
-          - m5stack_cores3
-          - m5stack_dial
-          - m5stack_dinmeter
-          - m5stack_fire
-          - m5stack_nanoc6
-          - m5stack_paper
-          - m5stack_stamp_s3
-          - m5stack_stickc_plus
-          - m5stack_stickc_plus2
-          - m5stack_tab5
+          - m5stack_core        # esp32:esp32 x ESP32 (xtensa-esp32)
+          - m5stack_cores3      # esp32:esp32 x ESP32-S3 (separate GCC target)
+          - m5stack_nanoc6      # esp32:esp32 x ESP32-C6 (rv32)
+          - m5stack_tab5        # esp32:esp32 x ESP32-P4 (rv32 single-float)
+          # - arduino_nesso_n1  # ESP32-C6: represented by m5stack_nanoc6
+          # - m5stack_atom      # ESP32: represented by m5stack_core
+          # - m5stack_atoms3    # ESP32-S3: represented by m5stack_cores3
+          # - m5stack_capsule   # ESP32-S3: represented by m5stack_cores3
+          # - m5stack_cardputer # ESP32-S3: represented by m5stack_cores3
+          # - m5stack_core2     # ESP32: represented by m5stack_core
+          # - m5stack_coreink   # ESP32: represented by m5stack_core
+          # - m5stack_dial      # ESP32-S3: represented by m5stack_cores3
+          # - m5stack_dinmeter  # ESP32-S3: represented by m5stack_cores3
+          # - m5stack_fire      # ESP32: represented by m5stack_core
+          # - m5stack_paper     # ESP32: represented by m5stack_core
+          # - m5stack_stamp_s3  # ESP32-S3: represented by m5stack_cores3
+          # - m5stack_stickc_plus  # ESP32: represented by m5stack_core
+          # - m5stack_stickc_plus2 # ESP32: represented by m5stack_core
 
         platform-version:
           - 3.3.6
