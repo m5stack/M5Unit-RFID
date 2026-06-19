@@ -2,7 +2,7 @@ description: Library for M5Stack UNIT RFID using M5UnitUnified.
 url: https://github.com/m5stack/M5Unit-RFID
 issues: https://github.com/m5stack/M5Unit-RFID/issues
 license: MIT
-version: "0.0.2"
+version: "0.1.0"
 
 dependencies:
   idf: ">=5.0"
