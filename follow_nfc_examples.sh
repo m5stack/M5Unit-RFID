@@ -7,8 +7,14 @@ REMOTE_BRANCH="develop"
 
 SUBDIRS=("NFCA" "NFCB" "common")
 
+# Prevent M5Unit-NFC's tags from polluting this repo's tag namespace.
+# Fetch auto-follows tags pointing to downloaded objects (git subtree's internal
+# fetch too), which imported NFC's 0.0.3 / 0.1.0 etc. into refs/tags here.
+# --no-tags on the remote disables tag-following for every fetch to it.
+git config remote.$REMOTE_NAME.tagOpt --no-tags
+
 echo "--- 1. Fetch nfc_examples ---"
-git fetch $REMOTE_NAME
+git fetch --no-tags $REMOTE_NAME
 
 for SUBDIR in "${SUBDIRS[@]}"; do
     SRC_DIR="examples/UnitUnified/$SUBDIR"   # Path(M5Unit-NFC)
