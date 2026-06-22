@@ -57,12 +57,18 @@ public:
 
     ///@name Settings for begin / configureNFCMode
     ///@{
-    /*! @brief Gets the configuration */
+    /*!
+      @brief Gets the configuration
+      @return Current configuration
+     */
     inline config_t config() const
     {
         return _cfg;
     }
-    /*! @brief Set the configuration */
+    /*!
+      @brief Set the configuration
+      @param cfg Configuration to set
+     */
     inline void config(const config_t& cfg)
     {
         _cfg = cfg;
@@ -76,7 +82,7 @@ public:
       @brief Gets the current operating mode
       @return NFC::A or NFC::B
      */
-    inline m5::nfc::NFC NFCMode() const
+    inline m5::nfc::NFC NFCMode() const override
     {
         return _mode;
     }
@@ -100,15 +106,15 @@ public:
       @param tx_len Length of tx
       @param timeout_ms Timeout in milliseconds
       @return True if successful
-      @note Software CRC_B is used for transmission. Both software and hardware CRC are
-            also computed and compared in M5_LIB_LOGI for silicon compatibility diagnosis.
+      @note CRC_B is computed by the PN512 hardware CRC coprocessor (CRCPreset=0xFFFF) with
+            xorOut=0xFFFF applied manually, then appended to the transmit frame.
      */
     bool nfcbTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* tx, const uint16_t tx_len,
                         const uint32_t timeout_ms);
 
     /*!
       @brief Read the TypeBReg (PN512 Page 1, address 0x1E)
-      @param[out] value 8-bit raw value (RxSOFReq / EOFSOFWidth / TxEGT / EOFSOFAdjust)
+      @param[out] value 8-bit raw value (RxSOFReq/RxEOFReq/EOFSOFWidth/NoTxSOF/NoTxEOF/TxEGT)
       @return True if successful
      */
     bool readTypeBReg(uint8_t& value);

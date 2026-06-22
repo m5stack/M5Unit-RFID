@@ -16,9 +16,6 @@
 #include <esp_random.h>
 #include <cstring>
 
-namespace {
-}  // namespace
-
 using namespace m5::unit::googletest;
 using namespace m5::unit;
 using namespace m5::unit::mfrc522;
@@ -55,7 +52,7 @@ protected:
 TEST_F(TestWS1850S, selfTest)
 {
     SCOPED_TRACE(ustr);
-    EXPECT_FALSE(unit->selfTest());  // WS1850S failed always
+    EXPECT_FALSE(unit->selfTest());  // WS1850S always fails (self test unsupported)
 }
 
 TEST_F(TestWS1850S, coprocessorCRC)
@@ -117,7 +114,7 @@ TEST_F(TestWS1850S, Antenna)
     EXPECT_TRUE(unit->readAntennaStatus(status));
     EXPECT_TRUE(status);
 
-    // to ON
+    // to OFF
     EXPECT_TRUE(unit->readRegister8(TX_CONTROL_REG, prev, 0));
 
     EXPECT_TRUE(unit->turnOffAntenna());
@@ -127,7 +124,7 @@ TEST_F(TestWS1850S, Antenna)
     EXPECT_NE(now, prev);
     prev = now;
 
-    // to OFF
+    // to ON
     EXPECT_TRUE(unit->turnOnAntenna());
     EXPECT_TRUE(unit->readRegister8(TX_CONTROL_REG, now, 0));
     EXPECT_TRUE(unit->readAntennaStatus(status));
@@ -188,6 +185,10 @@ TEST_F(TestWS1850S, Tprescaler)
 
         EXPECT_EQ(tps, v);
     }
+
+    // Out-of-range (> 12 bits, 0x0FFF) must be rejected
+    EXPECT_FALSE(unit->writeTPrescaler(0x1000));
+    EXPECT_FALSE(unit->writeTPrescaler(0xFFFF));
 }
 
 TEST_F(TestWS1850S, AccessBit)
@@ -356,4 +357,42 @@ TEST_F(TestWS1850S, NFCBAskDepthTable)
         EXPECT_TRUE(unit->readModGsP(v));
         EXPECT_EQ(v & 0x3F, expected[depth]);
     }
+
+    // depth > 15 clamps to 15 (MOD_GSP_TABLE[15])
+    for (uint16_t over : {16, 255}) {
+        SCOPED_TRACE(m5::utility::formatString("clamp depth=%u", over));
+        auto cfg           = unit->config();
+        cfg.nfcb_ask_depth = static_cast<uint8_t>(over);
+        unit->config(cfg);
+        EXPECT_TRUE(unit->configureNFCMode(m5::nfc::NFC::B));
+        uint8_t v{};
+        EXPECT_TRUE(unit->readModGsP(v));
+        EXPECT_EQ(v & 0x3F, expected[15]);
+    }
+}
+
+TEST_F(TestWS1850S, BeginAppliesConfig)
+{
+    SCOPED_TRACE(ustr);
+
+    // Re-begin with a non-default configuration and verify it is applied.
+    // (enable_antenna is not asserted: configure_nfca/nfcb force the antenna ON regardless.)
+    auto cfg          = unit->config();
+    cfg.receiver_gain = ReceiverGain::dB18;  // non-default (default dB48)
+    cfg.mode          = m5::nfc::NFC::B;     // WS1850S supports NFC-B
+    unit->config(cfg);
+
+    EXPECT_TRUE(unit->begin());
+
+    ReceiverGain gain{};
+    EXPECT_TRUE(unit->readReceiverGain(gain));
+    EXPECT_EQ(gain, ReceiverGain::dB18);
+    EXPECT_EQ(unit->NFCMode(), m5::nfc::NFC::B);
+
+    // Restore defaults for subsequent tests
+    cfg               = unit->config();
+    cfg.receiver_gain = ReceiverGain::dB48;
+    cfg.mode          = m5::nfc::NFC::A;
+    unit->config(cfg);
+    EXPECT_TRUE(unit->begin());
 }

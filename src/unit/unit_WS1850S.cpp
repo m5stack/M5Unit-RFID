@@ -50,7 +50,7 @@ bool UnitWS1850S::begin()
  */
 bool UnitWS1850S::self_test()
 {
-    M5_LIB_LOGE("DON'T support it");
+    M5_LIB_LOGE("Self test is not supported");
     // Is AutoTestReg of the WS1850S read-only register???
     return false;
 }
@@ -78,12 +78,12 @@ bool UnitWS1850S::configure_nfca()
 
     // NFC-A framing: TxCRCEn=0, RxCRCEn=0 (M5Unit-NFC appends/validates CRC_A in software).
     // TxFraming/RxFraming=00 (Type A). Hardware CRC enabled would double-CRC the frame.
-    if (!writeRegister8(TX_MODE_REG, (uint8_t)0x00)) return false;
-    if (!writeRegister8(RX_MODE_REG, (uint8_t)0x00)) return false;
+    if (!writeRegister8(TX_MODE_REG, static_cast<uint8_t>(0x00))) return false;
+    if (!writeRegister8(RX_MODE_REG, static_cast<uint8_t>(0x00))) return false;
 
     // TxASKReg: Force100ASK=1 (0x40) — required for ISO/IEC 14443-3 Type A 100% ASK modulation.
     // Matches MFRC522::begin() default and the previously-working state.
-    if (!writeRegister8(TX_ASK_REG, (uint8_t)0x40)) return false;
+    if (!writeRegister8(TX_ASK_REG, static_cast<uint8_t>(0x40))) return false;
 
     // Antenna driver conductance (reset defaults)
     if (!writeCWGsP(0x20)) return false;
@@ -107,17 +107,19 @@ bool UnitWS1850S::configure_nfcb()
 
     // ModeReg: full write of _cfg.mode_reg with CRCPreset[1:0] forced to 0b11 (CRC_B 0xFFFF
     // preset). Full write ensures NFC-B state regardless of any prior register modifications.
-    if (!writeRegister8(MODE_REG, (uint8_t)((_cfg.mode_reg & 0xFC) | 0x03))) return false;
+    if (!writeRegister8(MODE_REG, static_cast<uint8_t>((_cfg.mode_reg & 0xFC) | 0x03))) return false;
 
     // TxModeReg: TxCRCEn=0 (software CRC), TxSpeed=000 (106 kbit), TxFraming=0b11 (Type B)
-    if (!writeRegister8(TX_MODE_REG, (uint8_t)0x03)) return false;
+    if (!writeRegister8(TX_MODE_REG, static_cast<uint8_t>(0x03))) return false;
 
     // RxModeReg: RxCRCEn=0, RxSpeed=000, RxFraming=0b11 (Type B)
-    if (!writeRegister8(RX_MODE_REG, (uint8_t)0x03)) return false;
+    if (!writeRegister8(RX_MODE_REG, static_cast<uint8_t>(0x03))) return false;
 
     // Fixed Type B physical layer constants (per ISO/IEC 14443-3 and PN512 datasheet)
-    constexpr uint8_t TYPE_B_REG_VALUE{0x10};  // EOFSOFWidth=1 (regulation compliant)
-    constexpr uint8_t CW_GSP_VALUE{0x3F};      // Maximum no-modulation conductance
+    // 0x10: EOFSOFWidth=1 (regulation-compliant SOF/EOF length). RxSOFReq=0 / RxEOFReq=0
+    // are intentionally cleared so frames with or without SOF/EOF are accepted (lenient Rx).
+    constexpr uint8_t TYPE_B_REG_VALUE{0x10};
+    constexpr uint8_t CW_GSP_VALUE{0x3F};  // Maximum no-modulation conductance
 
     // ASK depth (0-15) → ModGsP register value lookup
     constexpr uint8_t MOD_GSP_TABLE[16] = {
@@ -126,12 +128,12 @@ bool UnitWS1850S::configure_nfcb()
     const uint8_t depth   = std::min<uint8_t>(_cfg.nfcb_ask_depth, 15);
     const uint8_t mod_gsp = MOD_GSP_TABLE[depth];
 
-    // PN512 TypeBReg (Page 1 address 0xE): EOFSOFWidth/TxEGT/EOFSOFAdjust.
+    // PN512 TypeBReg (address 0x1E): RxSOFReq/RxEOFReq/EOFSOFWidth/NoTxSOF/NoTxEOF/TxEGT.
     // Effective only if the silicon is PN512-compatible; ignored otherwise.
     if (!writeTypeBReg(TYPE_B_REG_VALUE)) return false;
 
     // TxAutoReg/TxASKReg (0x15): release Force100ASK so the silicon emits 8-30% ASK
-    if (!writeRegister8(TX_ASK_REG, (uint8_t)0x00)) return false;
+    if (!writeRegister8(TX_ASK_REG, static_cast<uint8_t>(0x00))) return false;
 
     // Antenna driver tuning for Type B (~10% ASK depth)
     if (!writeCWGsP(CW_GSP_VALUE)) return false;
@@ -168,7 +170,7 @@ bool UnitWS1850S::nfcbTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
     const uint16_t rx_len_org = rx_len;
     rx_len                    = 0;
 
-    if (!rx || !rx_len_org || !tx || !tx_len || (uint32_t)tx_len + 2 > MAX_FIFO_DEPTH) {
+    if (!rx || !rx_len_org || !tx || !tx_len || static_cast<uint32_t>(tx_len) + 2 > MAX_FIFO_DEPTH) {
         return false;
     }
 
@@ -188,7 +190,7 @@ bool UnitWS1850S::nfcbTransceive(uint8_t* rx, uint16_t& rx_len, const uint8_t* t
 
     uint8_t discard{};
     uint8_t tmp[MAX_FIFO_DEPTH]{};
-    uint16_t rx_tmp = std::min<uint16_t>(rx_len_org, (uint16_t)MAX_FIFO_DEPTH);
+    uint16_t rx_tmp = std::min<uint16_t>(rx_len_org, static_cast<uint16_t>(MAX_FIFO_DEPTH));
 
     // crc=false: keep trailing 2-byte CRC in rx for upper layer to verify
     auto ret = transceive(tmp, rx_tmp, frame, tx_len + 2, timeout_ms, discard, 0, false);

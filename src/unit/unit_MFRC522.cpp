@@ -60,7 +60,7 @@ constexpr uint16_t crc_init_table[] = {0x0000,
 // Reference values based on firmware version
 // ** Version 0.0 (0x90)
 // Philips Semiconductors; Preliminary Specification Revision 2.0 - 01 August
-// 2005; 16.1 Sefttest
+// 2005; 16.1 Selftest
 constexpr std::array<uint8_t, 64> firmware_referenceV0_0{
     0x00, 0x87, 0x98, 0x0f, 0x49, 0xFF, 0x07, 0x19, 0xBF, 0x22, 0x30, 0x49, 0x59, 0x63, 0xAD, 0xCA,
     0x7F, 0xE3, 0x4E, 0x03, 0x5C, 0x4E, 0x49, 0x50, 0x47, 0x9A, 0x37, 0x61, 0xE7, 0xE2, 0xC6, 0x2E,
@@ -159,7 +159,7 @@ bool UnitMFRC522::begin()
         // TMODE_REG TAuto [7] | Prescale high [3:0]
         // TPRESCALE_REG_LOW [7:0]
         !writeRegister8(TMODE_REG, 0x80) || !writeRegister8(TPRESCALER_REG_L, 0xA9) ||
-        // reload timeer 1000 (0x03e8) (1/40 * 1000) ms
+        // reload timer 1000 (0x03e8) (1/40 * 1000) ms
         !writeRegister8(TRELOAD_REG_H, 0x03) || !writeRegister8(TRELOAD_REG_L, 0xE8) ||
         //! writeRegister8(TRELOAD_REG_H, 0x00) || !writeRegister8(TRELOAD_REG_L, 40*5) || // 5ms
         // forces a 100% ASK modulation
@@ -251,6 +251,10 @@ bool UnitMFRC522::readTPrescaler(uint16_t& tprescaler)
 
 bool UnitMFRC522::writeTPrescaler(const uint16_t tprescaler)
 {
+    if (tprescaler > 0x0FFF) {  // Tprescaler is 12 bits (0-4095)
+        M5_LIB_LOGE("tprescaler must be 0-4095: %u", tprescaler);
+        return false;
+    }
     uint8_t tm{};
     if (readRegister8(TMODE_REG, tm, 0)) {  // read TMODE_REG [7:4] and Tprescale high 4bits [3:0]
         tm = (tm & 0xF0) | ((tprescaler >> 8) & 0x0F);
@@ -387,7 +391,7 @@ bool UnitMFRC522::calculateCRC(uint16_t& result, const uint8_t* buf, const uint8
         return false;
     }
 
-    // MSG/LSB first?
+    // MSB/LSB first?
     uint8_t mode{};
     if (!readRegister8(MODE_REG, mode, 0)) {
         return false;
@@ -463,8 +467,12 @@ bool UnitMFRC522::anti_collision(const uint8_t lv, uint8_t buf[9])
 
         uint8_t err{};
         if (!transceive(rbuf, rlen, buf, sbytes + (sbits != 0), TIMEOUT_ANTICOLL, sbits, sbits, false, &err)) {
-            M5_LIB_LOGD("Failed ANTICOL:%02X", lv);
-            return false;
+            // transceive() returns false on collision, but err carries the collision bit.
+            // Only treat it as a real failure when it is not a collision.
+            if (!has_collision(err)) {
+                M5_LIB_LOGD("Failed ANTICOL:%02X", lv);
+                return false;
+            }
         }
         collision = has_collision(err);
 
@@ -663,8 +671,7 @@ bool UnitMFRC522::hlt()
     buf[2] = crc & 0xFF;
     buf[3] = (crc >> 8) & 0xFF;
 
-    (void)transmit_command(mfrc522::Command::Transceive, buf, sizeof(buf), txLast);  // No recv data
-    return true;
+    return transmit_command(mfrc522::Command::Transceive, buf, sizeof(buf), txLast);  // No recv data
 }
 
 // MIFARE
@@ -680,7 +687,7 @@ bool UnitMFRC522::mifareClassicValueBlock(const m5::nfc::a::Command cmd, const u
         return false;
     }
 
-    M5_LIB_LOGD("ValuBlock:%02X %u %u", cmd, block, arg);
+    M5_LIB_LOGD("ValueBlock:%02X %u %u", cmd, block, arg);
 
     if (!mifare_classic_transceive(cmd, block, TIMEOUT_VALUE_BLOCK)) {
         M5_LIB_LOGE("Failed to command %02X %u %u", cmd, block, arg);
@@ -753,7 +760,7 @@ bool UnitMFRC522::mifare_classic_transceive(const uint8_t* buf, const uint8_t le
 
     auto result = transceive(rbuf, rlen, buf2, len + 2, timeout_ms, validBits, 0, false, &err);
     /*
-      Remark: The MIFARE Increment, Decrement, and Restore command part 2 does notprovide an acknowledgement, so the
+      Remark: The MIFARE Increment, Decrement, and Restore command part 2 does not provide an acknowledgement, so the
       regular time out has to be used instead
      */
     if (!result) {
@@ -969,7 +976,7 @@ bool UnitMFRC522::transmit_command(const mfrc522::Command cmd, const uint8_t* bu
     if (!buf || !len) {
         return false;
     }
-    // bitframeing value RxAlign [6:4] TxLastBits [2:0]
+    // bit framing value RxAlign [6:4] TxLastBits [2:0]
     uint8_t bfvalue = ((rxAlign & 0x07) << 4) | (txLast & 0x07);
 
     // Execute transceive command

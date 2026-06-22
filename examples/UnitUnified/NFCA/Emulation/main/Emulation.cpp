@@ -11,7 +11,7 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedNFC.h>
 #include <M5Utility.h>
-#include <Wire.h>
+#include <wiring/m5_unit_unified_wiring.hpp>
 #include <vector>
 
 // *************************************************************
@@ -20,9 +20,9 @@
 //       UnitRFID2 (WS1850S) and M5Dial Builtin (WS1850S) do NOT support emulation.
 // *************************************************************
 #if !defined(USING_UNIT_NFC) && !defined(USING_CAP_CC1101)
-// For UnitNFC (ST25R3916, I2C)
+// For UnitNFC (U216)
 // #define USING_UNIT_NFC
-// For CapCC1101NFC (ST25R3916, SPI)
+// For CapCC1101 (U219)
 // #define USING_CAP_CC1101
 #endif
 #if defined(USING_UNIT_RFID2) || defined(USING_M5DIAL_BUILTIN_WS1850S)
@@ -174,48 +174,18 @@ void setup()
     cfg.mode      = NFC::A;
     unit.config(cfg);
 
-#if defined(USING_UNIT_NFC)
-    auto board = M5.getBoard();
     bool unit_ready{};
-    // NessoN1: port_b (GROVE) uses SoftwareI2C (M5HAL Bus) which causes I2C register
-    //          polling latency too high for ST25R3916 RF timing requirements.
-    //          Use QWIIC (port_a) with Wire instead. (Requires QWIIC-GROVE conversion cable)
-    if (board == m5::board_t::board_M5NanoC6) {
-        M5_LOGI("Using M5.Ex_I2C");
-        unit_ready = Units.add(unit, M5.Ex_I2C) && Units.begin();
-    } else {
-        auto pin_num_sda = M5.getPin(m5::pin_name_t::port_a_sda);
-        auto pin_num_scl = M5.getPin(m5::pin_name_t::port_a_scl);
-        M5_LOGI("getPin: SDA:%u SCL:%u", pin_num_sda, pin_num_scl);
-        Wire.end();
-        Wire.begin(pin_num_sda, pin_num_scl, 400 * 1000U);
-        unit_ready = Units.add(unit, Wire) && Units.begin();
-    }
+#if defined(USING_UNIT_NFC)
+    unit_ready = m5::unit::wiring::addI2C(Units, unit, 0, m5::unit::wiring::NessoPort::PortA) && Units.begin();
+#elif defined(USING_CAP_CC1101)
+    // SPI mode 1 (CPOL=0, CPHA=1). Use literal so this builds in ESP-IDF native too
+    // (Arduino's SPI_MODE1 is not defined there).
+    unit_ready = m5::unit::wiring::addSPI(Units, unit, 10000000, 1) && Units.begin();
+#endif
     if (!unit_ready) {
         M5_LOGE("Failed to begin");
-        lcd.fillScreen(TFT_RED);
-        while (true) {
-            m5::utility::delay(10000);
-        }
+        m5::unit::wiring::failStop();
     }
-#elif defined(USING_CAP_CC1101)
-    if (!SPI.bus()) {
-        auto spi_sclk = M5.getPin(m5::pin_name_t::sd_spi_sclk);
-        auto spi_mosi = M5.getPin(m5::pin_name_t::sd_spi_mosi);
-        auto spi_miso = M5.getPin(m5::pin_name_t::sd_spi_miso);
-        M5_LOGI("getPin: %d,%d,%d", spi_sclk, spi_mosi, spi_miso);
-        SPI.begin(spi_sclk, spi_miso, spi_mosi /* SS is shared SD, CC1101, ST25R3916 */);
-    }
-
-    SPISettings settings = {10000000, MSBFIRST, SPI_MODE1};
-    if (!Units.add(unit, SPI, settings) || !Units.begin()) {
-        M5_LOGE("Failed to begin");
-        lcd.fillScreen(TFT_RED);
-        while (true) {
-            m5::utility::delay(10000);
-        }
-    }
-#endif
     M5_LOGI("M5UnitUnified initialized");
     M5_LOGI("%s", Units.debugInfo().c_str());
 
@@ -257,3 +227,34 @@ void loop()
         lcd.endWrite();
     }
 }
+
+#if !defined(ARDUINO)
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <esp_timer.h>
+
+#if CONFIG_FREERTOS_UNICORE
+static inline void feedIdleTaskPeriodically(void)
+{
+    constexpr uint32_t FEED_INTERVAL_MS   = 2000;
+    constexpr TickType_t FEED_SLEEP_TICKS = pdMS_TO_TICKS(5);
+    static uint32_t s_next_feed_ms        = 0;
+    const uint32_t now_ms                 = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    if (now_ms >= s_next_feed_ms) {
+        s_next_feed_ms = now_ms + FEED_INTERVAL_MS;
+        vTaskDelay(FEED_SLEEP_TICKS);
+    }
+}
+#endif
+
+extern "C" void app_main(void)
+{
+    setup();
+    for (;;) {
+#if CONFIG_FREERTOS_UNICORE
+        feedIdleTaskPeriodically();
+#endif
+        loop();
+    }
+}
+#endif

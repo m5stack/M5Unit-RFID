@@ -7,7 +7,7 @@ M5UnitUnified has a unified API and can control multiple units via PaHub, etc.
 
 ### SKU:U031-B
 
-Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
+Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A/B standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
 
 
 ## PICC Support
@@ -103,20 +103,50 @@ Each example contains the following block to select the unit:
 ```cpp
 // For UnitNFC
 // #define USING_UNIT_NFC
-// For CapNFC
+// For CapCC1101
 // #define USING_CAP_CC1101
-// For UnitRFID2
+// For UnitRFID2 (external WS1850S)
 // #define USING_UNIT_RFID2
+// For M5Dial built-in WS1850S
+// #define USING_M5DIAL_BUILTIN_WS1850S
 ```
 
 The examples are shared with [M5Unit-NFC](https://github.com/m5stack/M5Unit-NFC), which is why other unit definitions exist.  
-For this library, uncomment `USING_UNIT_RFID2`:
+For this library, uncomment `USING_UNIT_RFID2` (external WS1850S), or `USING_M5DIAL_BUILTIN_WS1850S` for the M5Dial built-in WS1850S:
 
 ```cpp
 // #define USING_UNIT_NFC
 // #define USING_CAP_CC1101
 #define USING_UNIT_RFID2
+// #define USING_M5DIAL_BUILTIN_WS1850S
 ```
+
+### For ESP-IDF settings
+
+> **NOTE:** Works with ESP-IDF **5.x** (>=5.0), including the examples.  
+> `M5Unified` / `M5GFX` (used by the examples for display output) do not yet support ESP-IDF 6.x; stay on the latest 5.x release until upstream support lands.
+
+On ESP-IDF native builds (`idf.py`), the unit/board is selected via Kconfig instead of editing the source `#define`. Each example exposes the same choice through `main/Kconfig.projbuild`, which sources one of the family-specific Kconfig files in `examples/UnitUnified/common/`:
+
+| Kconfig file | Variants offered | Used by |
+|---|---|---|
+| `Kconfig.variant.full` | UnitRFID2 / M5Dial built-in WS1850S | NFC-A Detect / Dump / NDEF / PolicyOverride / ReadWrite / ValueBlock |
+| `Kconfig.variant.no_dial` | UnitRFID2 | NFC-B Detect / JapanIDCard (M5Dial built-in cannot do NFC-B) |
+
+For this library, choose **UnitRFID2** (external WS1850S) or **M5Dial built-in WS1850S**.
+`examples/UnitUnified/common/variant.cmake` then maps the chosen `CONFIG_EXAMPLE_USING_*` to the source-level `USING_*` macro shared with the Arduino build.
+
+Pick the variant with `menuconfig`:
+
+```sh
+cd examples/UnitUnified/NFCA/Detect    # or any example
+idf.py set-target esp32s3              # or esp32 / esp32c6 / esp32p4 / ...
+idf.py menuconfig
+# -> M5Unit-RFID example -> Target unit / board -> choose ONE of the options offered
+idf.py build flash monitor
+```
+
+The selected `CONFIG_EXAMPLE_USING_*` is translated into the Arduino-compatible `USING_*` macro at compile time, so the example source itself does not need to be edited.
 
 ## Doxygen document
 [GitHub Pages](https://m5stack.github.io/M5Unit-RFID/)
@@ -132,5 +162,4 @@ If you want to output Git commit hashes to html, do it for the git cloned folder
 
 ### Required
 - [Doxygen](https://www.doxygen.nl/)
-- [pcregrep](https://formulae.brew.sh/formula/pcre2)
 - [Git](https://git-scm.com/) (Output commit hash to html)
