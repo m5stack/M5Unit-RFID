@@ -15,7 +15,7 @@ var classm5_1_1unit_1_1_unit_m_f_r_c522 =
     [ "mifareClassicStopCrypto1", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#af34dd4ecbfcb8ebd86ed1cf59e6c3dec", null ],
     [ "mifareClassicValueBlock", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#ab83ed747644047b2b4786f324c5563b6", null ],
     [ "nfcaTransceive", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#a91a706d87b2f79539fd090490961a09b", null ],
-    [ "NFCMode", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#a5a8f986c94ba1c32ca87246c05dac937", null ],
+    [ "NFCMode", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#ad0d88fb3bb39cd0089f347aa23f3389f", null ],
     [ "readAntennaStatus", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#a083486358f690f668db6c59f021eac87", null ],
     [ "readBlock", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#a62f3822553808dd8023f89b20d07cef8", null ],
     [ "readCWGsP", "classm5_1_1unit_1_1_unit_m_f_r_c522.html#afc557663cdc15d25ca34f7d096905ca9", null ],
