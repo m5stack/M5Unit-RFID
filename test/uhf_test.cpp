@@ -58,3 +58,55 @@ TEST(UHF, BuildFrame)
     ASSERT_EQ(buf.size(), sizeof(expect2));
     EXPECT_EQ(0, memcmp(buf.data(), expect2, sizeof(expect2)));
 }
+
+TEST(UHF, ParseFrame)
+{
+    Frame f{};
+
+    // Valid response: BB 01 07 00 01 00 09 7E (Set Operating Region succeeded)
+    const uint8_t raw0[] = {0xBB, 0x01, 0x07, 0x00, 0x01, 0x00, 0x09, 0x7E};
+    ASSERT_TRUE(parse_frame(f, raw0, sizeof(raw0)));
+    EXPECT_EQ(f.type, 0x01);
+    EXPECT_EQ(f.command, 0x07);
+    ASSERT_EQ(f.parameter.size(), 1U);
+    EXPECT_EQ(f.parameter[0], 0x00);
+
+    // No parameter
+    const uint8_t raw1[] = {0xBB, 0x00, 0x28, 0x00, 0x00, 0x28, 0x7E};
+    ASSERT_TRUE(parse_frame(f, raw1, sizeof(raw1)));
+    EXPECT_EQ(f.command, 0x28);
+    EXPECT_TRUE(f.parameter.empty());
+
+    // Bad checksum (0x09 -> 0x0A)
+    const uint8_t bad_sum[] = {0xBB, 0x01, 0x07, 0x00, 0x01, 0x00, 0x0A, 0x7E};
+    EXPECT_FALSE(parse_frame(f, bad_sum, sizeof(bad_sum)));
+
+    // Bad header
+    const uint8_t bad_header[] = {0xAA, 0x01, 0x07, 0x00, 0x01, 0x00, 0x09, 0x7E};
+    EXPECT_FALSE(parse_frame(f, bad_header, sizeof(bad_header)));
+
+    // Bad end
+    const uint8_t bad_end[] = {0xBB, 0x01, 0x07, 0x00, 0x01, 0x00, 0x09, 0xDD};
+    EXPECT_FALSE(parse_frame(f, bad_end, sizeof(bad_end)));
+
+    // Truncated (shorter than the declared parameter length)
+    const uint8_t truncated[] = {0xBB, 0x01, 0x07, 0x00, 0x05, 0x00, 0x09, 0x7E};
+    EXPECT_FALSE(parse_frame(f, truncated, sizeof(truncated)));
+
+    // Shorter than the minimum frame (7 bytes)
+    const uint8_t too_short[] = {0xBB, 0x01, 0x07, 0x00, 0x00, 0x08};
+    EXPECT_FALSE(parse_frame(f, too_short, sizeof(too_short)));
+}
+
+TEST(UHF, ParseFrameR200Delimiter)
+{
+    Frame f{};
+    // R200 uses 0xAA / 0xDD but the structure is identical
+    const uint8_t raw[] = {0xAA, 0x00, 0x07, 0x00, 0x03, 0x04, 0x02, 0x05, 0x15, 0xDD};
+    ASSERT_TRUE(parse_frame(f, raw, sizeof(raw), 0xAA, 0xDD));
+    EXPECT_EQ(f.type, 0x00);
+    EXPECT_EQ(f.command, 0x07);
+    ASSERT_EQ(f.parameter.size(), 3U);
+    EXPECT_EQ(f.parameter[0], 0x04);
+    EXPECT_EQ(f.parameter[2], 0x05);
+}

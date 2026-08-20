@@ -81,6 +81,64 @@ inline bool build_frame(std::vector<uint8_t>& out, const uint8_t type, const uin
     return true;
 }
 
+//! @brief Fixed part of a frame (Header, Type, Command, PL_MSB, PL_LSB, Checksum, End)
+constexpr size_t FRAME_OVERHEAD = 7;
+//! @brief Offset of the Type byte
+constexpr size_t FRAME_TYPE_OFFSET = 1;
+//! @brief Offset of the Parameter
+constexpr size_t FRAME_PARAMETER_OFFSET = 5;
+
+//! @brief Frame type: command (host to module)
+constexpr uint8_t TYPE_COMMAND = 0x00;
+//! @brief Frame type: response (module to host)
+constexpr uint8_t TYPE_RESPONSE = 0x01;
+//! @brief Frame type: notification (module to host)
+constexpr uint8_t TYPE_NOTIFICATION = 0x02;
+
+/*!
+  @struct Frame
+  @brief Parsed frame
+ */
+struct Frame {
+    uint8_t type{};                    //!< Frame type
+    uint8_t command{};                 //!< Command code
+    std::vector<uint8_t> parameter{};  //!< Parameter
+};
+
+/*!
+  @brief Parse a frame
+  @param[out] out Parsed frame
+  @param raw Raw bytes (a whole frame including the header and the end)
+  @param len Length of raw
+  @param header Expected frame header
+  @param end Expected frame end
+  @return True if the frame is well-formed and the checksum matches
+ */
+inline bool parse_frame(Frame& out, const uint8_t* raw, const size_t len, const uint8_t header = FRAME_HEADER,
+                        const uint8_t end = FRAME_END)
+{
+    if (raw == nullptr || len < FRAME_OVERHEAD) {
+        return false;
+    }
+    if (raw[0] != header || raw[len - 1] != end) {
+        return false;
+    }
+
+    const uint16_t param_len = static_cast<uint16_t>((raw[3] << 8) | raw[4]);
+    if (param_len > MAX_PARAMETER_LENGTH || len != static_cast<size_t>(param_len) + FRAME_OVERHEAD) {
+        return false;
+    }
+    // The checksum covers Type through the last Parameter byte
+    if (raw[len - 2] != checksum(raw + FRAME_TYPE_OFFSET, len - 3)) {
+        return false;
+    }
+
+    out.type    = raw[1];
+    out.command = raw[2];
+    out.parameter.assign(raw + FRAME_PARAMETER_OFFSET, raw + FRAME_PARAMETER_OFFSET + param_len);
+    return true;
+}
+
 }  // namespace jrd4035
 }  // namespace unit
 }  // namespace m5
