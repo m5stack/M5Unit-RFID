@@ -53,6 +53,11 @@ concurrency:
 # and the M5Dial built-in WS1850S (In_I2C, ESP32-S3 only); UnitNFC / CapCC1101 select the
 # ST25R3916 (M5Unit-NFC) path and are not built here. RFID has no Tab5-specific example, so
 # esp32p4 (Tab5) is folded into chip coverage rather than a separate Tab5 job.
+#
+# UHF-RFID (JRD-4035, UART) is a separate protocol family from the I2C WS1850S/MFRC522 units above,
+# with only one unit type (no Kconfig variant to select), so it does not fit the variant/chip jobs
+# above and gets its own build-uhf job covering every supported SoC (incl. esp32s3, which the
+# I2C jobs above do not cover for this family).
 jobs:
   # Variant coverage: RFID variants on esp32s3 (LCD-capable dual-core Xtensa with PSRAM; also the
   # M5Dial host chip). M5Dial built-in (In_I2C) is ESP32-S3 only, so it lives here.
@@ -130,3 +135,32 @@ jobs:
           esp_idf_version: ${{ matrix.idf }}
           target: ${{ matrix.target }}
           path: examples/UnitUnified/NFCA/Detect
+
+  # UHF coverage: Unit UHF-RFID (JRD-4035) is UART-based (addUART, PortC preferred / PortA
+  # fallback) and has no Kconfig variant (single unit type), so no "Select Kconfig variant" step
+  # is needed here. Built across every supported SoC (incl. esp32s3) to catch UART wiring
+  # differences per chip.
+  build-uhf:
+    name: ${{ matrix.idf }} ${{ matrix.target }} UHF-Detect
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        target: [esp32, esp32s3, esp32c6, esp32h2, esp32p4]
+        idf: [v5.1.7, v5.4.4, v5.5.4]
+        exclude:
+          # esp32p4 stable from IDF v5.3 (M5GFX P4 verified on 5.4/5.5). 5.1.7 not applicable.
+          - target: esp32p4
+            idf: v5.1.7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ESP-IDF build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf }}
+          target: ${{ matrix.target }}
+          path: examples/UnitUnified/UHF/Detect

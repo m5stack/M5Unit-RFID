@@ -9,6 +9,12 @@ M5UnitUnified has a unified API and can control multiple units via PaHub, etc.
 
 Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A/B standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
 
+### SKU:U107
+
+Unit UHF-RFID is an ultra high frequency (840-960MHz) RFID read/write unit based on the JRD-4035 module.
+It complies with EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C and communicates over UART at 115200 bps.
+The read distance is 1.5-2 m.
+
 
 ## PICC Support
 
@@ -58,6 +64,13 @@ Support may be expanded in future updates to cover PICCs not listed here.
 | Unclassified | None | Yes | Partial | Yes | ISO-DEP transport only |
 
 > **Note:** NFC-B is **not supported on the M5Dial builtin WS1850S**. The builtin small loop antenna cannot generate sufficient RF field for Type B PICC activation (Type B uses 10% ASK + BPSK subcarrier which is more sensitive to field strength and SNR than Type A). NFC-B requires the external **UnitRFID2** (with larger antenna).
+
+
+## UHF Tag Support
+
+| Standard | Detect | Read/Write | Notes |
+|---|---|---|---|
+| EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C | Yes | Not yet | Read/Write is planned |
 
 
 ## Emulation

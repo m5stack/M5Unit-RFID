@@ -56,6 +56,7 @@ jobs:
         example:
           - NFCA_Detect
           - NFCB_Detect
+          - UHF_Detect
 
         # Build CI board axis = distinct compile config only (skill m5-build-ci-matrix).
         # I2C path is a runtime M5.getBoard() branch (same compile for all boards), so
