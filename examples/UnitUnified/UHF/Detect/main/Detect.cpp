@@ -41,12 +41,27 @@ const char* region_to_string(const m5::uhf::Region r)
 
 void print_tag(const m5::uhf::Tag& tag)
 {
-    std::string s{};
+    std::string epc{};
     for (size_t i = 0; i < tag.epc.size(); ++i) {
-        s += m5::utility::formatString("%02X", tag.epc[i]);
+        epc += m5::utility::formatString("%02X", tag.epc[i]);
     }
-    M5_LOGI("EPC:%s PC:%04X RSSI:%d", s.c_str(), tag.pc, tag.rssi);
-    lcd.printf("%s %ddBm\n", s.c_str(), tag.rssi);
+
+    // The PC carries the EPC length, the user memory indicator and the numbering system,
+    // which tells a lot about an unknown tag without reading any memory bank
+    const uint8_t words  = m5::uhf::pcEPCLengthWords(tag.pc);
+    const bool length_ok = (words * 2 == static_cast<int>(tag.epc.size()));
+    const bool crc_ok    = m5::unit::jrd4035::verify_tag_crc(tag);
+
+    M5_LOGI("EPC : %s (%u bytes / %u bits)", epc.c_str(), (unsigned)tag.epc.size(), (unsigned)(tag.epc.size() * 8));
+    M5_LOGI("PC  : %04X len=%uword UMI=%u XI=%u NSI=0x%03X -> length %s", tag.pc, words,
+            m5::uhf::pcUserMemoryIndicator(tag.pc) ? 1 : 0, m5::uhf::pcXPCIndicator(tag.pc) ? 1 : 0,
+            m5::uhf::pcNumberingSystemIdentifier(tag.pc), length_ok ? "matches" : "MISMATCH");
+    M5_LOGI("CRC : %04X (%s)", tag.crc, crc_ok ? "valid" : "INVALID");
+    M5_LOGI("RSSI: %d dBm", tag.rssi);
+
+    lcd.printf("%s\n", epc.c_str());
+    lcd.printf("  %ddBm UMI=%u CRC=%s\n", tag.rssi, m5::uhf::pcUserMemoryIndicator(tag.pc) ? 1 : 0,
+               crc_ok ? "OK" : "NG");
 }
 }  // namespace
 
@@ -66,6 +81,9 @@ void setup()
     M5_LOGI("M5UnitUnified has been begun");
     M5_LOGI("%s", Units.debugInfo().c_str());
 
+    // Reader settings are rejected while polling, so stop it first
+    unit.stopPolling();
+
     // Show the module settings
     m5::uhf::ModuleInformation info{};
     if (unit.readModuleInformation(info)) {
@@ -84,6 +102,9 @@ void setup()
     if (unit.readChannel(channel)) {
         M5_LOGI("Channel: %u", channel);
     }
+
+    // Resume detection now that the settings have been read
+    unit.startPolling(unit.config().polling_count);
 
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);

@@ -46,6 +46,8 @@ public:
     virtual bool writeAutomaticFrequencyHopping(const bool enable) override;
     virtual bool readQueryParameters(m5::uhf::QueryParameters& qp) override;
     virtual bool writeQueryParameters(const m5::uhf::QueryParameters& qp) override;
+    virtual bool writeAutoSleepTime(const uint8_t minutes) override;
+    virtual bool sleep() override;
     ///@}
 
 protected:

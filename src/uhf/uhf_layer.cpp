@@ -19,7 +19,7 @@ bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
     tags.clear();
 
     const bool was_polling = _u.inPolling();
-    if (!was_polling && !_u.startPolling()) {
+    if (!was_polling && !_u.startPolling(_u.config().polling_count)) {
         M5_LIB_LOGE("Failed to startPolling");
         return false;
     }

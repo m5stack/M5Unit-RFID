@@ -38,9 +38,12 @@ public:
      */
     struct config_t {
         //! Start polling on begin
-        bool start_polling{true};
-        //! Polling count issued per multiple polling command
-        uint16_t polling_count{0xFFFF};
+        bool start_polling{false};
+        //! Rounds requested per multiple polling command. Kept short deliberately: the module
+        //! runs the rounds on its own and cannot be stopped once the host is gone, so a large
+        //! count leaves it transmitting for minutes after an MCU reset. update() reissues the
+        //! command long before the count runs out, so polling still looks continuous.
+        uint16_t polling_count{128};
         //! Operating region (Unspecified keeps the module's factory setting)
         m5::uhf::Region region{m5::uhf::Region::Unspecified};
         //! Capacity of the tag queue
@@ -69,12 +72,13 @@ public:
     ///@{
     /*!
       @brief Start continuous polling
-      @param count Polling count issued per multiple polling command
+      @param count Rounds requested per multiple polling command (0 - 65535)
       @return True if successful
-      @note The count is finite (0 - 65535). When it is exhausted the command is reissued
-      automatically, so the caller sees continuous operation
+      @note The count is finite, and update() renews the command before it runs out, so the
+      caller sees continuous operation. Keep it short: the module runs the rounds on its own and
+      cannot be stopped once the host is gone
      */
-    bool startPolling(const uint16_t count = 0xFFFF);
+    bool startPolling(const uint16_t count);
     //! @brief Stop continuous polling
     bool stopPolling();
     //! @brief In continuous polling?
@@ -154,6 +158,22 @@ public:
     virtual bool readQueryParameters(m5::uhf::QueryParameters& qp) = 0;
     //! @brief Write the query parameters
     virtual bool writeQueryParameters(const m5::uhf::QueryParameters& qp) = 0;
+    /*!
+      @brief Write the inactivity period after which the module sleeps automatically
+      @param minutes 1 to 30 minutes, or 0 to disable automatic sleep
+      @return True if successful
+      @note Waking the module costs the first byte it receives and makes it reload the chip
+      firmware, so a sleeping module ignores the command that woke it. Disabling automatic
+      sleep avoids that entirely when the unit is permanently powered
+     */
+    virtual bool writeAutoSleepTime(const uint8_t minutes) = 0;
+    /*!
+      @brief Put the module into low power sleep
+      @return True if successful
+      @note Any byte wakes the module up again, but that byte is discarded and the module
+      reloads the chip firmware before it can answer
+     */
+    virtual bool sleep() = 0;
     ///@}
 
     virtual bool begin() override;
@@ -171,20 +191,29 @@ protected:
     //! @brief Issue the stop polling command
     virtual bool stop_polling_command() = 0;
 
+    /*!
+      @brief Refuse a reader setting while polling is running
+      @param what Name of the operation, used in the warning
+      @return True when the caller must give up
+      @details The module answers unreliably while it is running inventory rounds, so reader
+      settings are rejected outright instead of failing later with a timeout
+     */
+    bool reject_while_polling(const char* what) const;
+
     //! @brief Push a tag into the queue, counting a drop when it overflows
     void push_tag(const m5::uhf::Tag& tag);
-    //! @brief Note that a frame arrived (used to detect polling count exhaustion)
+    //! @brief Note that a frame arrived (exposed through lastFrameAt)
     void note_frame_arrival();
-    //! @brief Reissue the polling command when the count looks exhausted
+    //! @brief Reissue the polling command before its round count runs out
     void reissue_polling_if_needed();
 
     config_t _cfg{};
     std::unique_ptr<m5::container::CircularBuffer<m5::uhf::Tag>> _tags{};
     uint32_t _dropped{};
     bool _polling{};
-    uint16_t _polling_count{0xFFFF};
+    uint16_t _polling_count{};
     unsigned long _last_frame_at{};
-    uint32_t _reissue_threshold_ms{500};
+    unsigned long _polling_issued_at{};
 
     friend class m5::uhf::UHFLayer;
 };

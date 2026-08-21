@@ -11,6 +11,15 @@
 
 #include <M5Utility.hpp>
 
+namespace {
+// How often the polling command is reissued. Multiple polling runs a finite number of rounds and
+// then stops, so the command is renewed on a timer rather than after the stream falls silent:
+// waiting for silence would leave a gap in detection, and the module can also go quiet for a
+// while with rounds still to run. The interval stays short enough that the count never runs out
+// between renewals, whatever the round rate happens to be.
+constexpr uint32_t POLLING_REISSUE_INTERVAL_MS{500};
+}  // namespace
+
 namespace m5 {
 namespace unit {
 
@@ -35,9 +44,10 @@ bool UHFRFIDComponent::startPolling(const uint16_t count)
         M5_LIB_LOGE("Failed to start polling");
         return false;
     }
-    _polling       = true;
-    _polling_count = count;
-    _last_frame_at = m5::utility::millis();
+    _polling           = true;
+    _polling_count     = count;
+    _last_frame_at     = m5::utility::millis();
+    _polling_issued_at = _last_frame_at;
     return true;
 }
 
@@ -49,6 +59,15 @@ bool UHFRFIDComponent::stopPolling()
         return false;
     }
     return true;
+}
+
+bool UHFRFIDComponent::reject_while_polling(const char* what) const
+{
+    if (_polling) {
+        M5_LIB_LOGW("%s is unreliable while polling; call stopPolling() first", what);
+        return true;
+    }
+    return false;
 }
 
 void UHFRFIDComponent::push_tag(const m5::uhf::Tag& tag)
@@ -73,14 +92,11 @@ void UHFRFIDComponent::reissue_polling_if_needed()
     if (!_polling) {
         return;
     }
-    // While polling the module keeps emitting frames even when no tag is present
-    // (Inventory Fail 0x15 per round). Silence therefore means the polling count is exhausted.
-    if (m5::utility::millis() - _last_frame_at < _reissue_threshold_ms) {
+    if (m5::utility::millis() - _polling_issued_at < POLLING_REISSUE_INTERVAL_MS) {
         return;
     }
-    M5_LIB_LOGD("Reissue polling");
     if (start_polling_command(_polling_count)) {
-        _last_frame_at = m5::utility::millis();
+        _polling_issued_at = m5::utility::millis();
     }
 }
 
