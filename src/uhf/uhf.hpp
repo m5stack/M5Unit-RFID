@@ -10,6 +10,7 @@
 #ifndef M5_UNIT_RFID_UHF_UHF_HPP
 #define M5_UNIT_RFID_UHF_UHF_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -88,6 +89,27 @@ struct ModuleInformation {
     std::string software_version{};
     std::string manufacturer{};
 };
+
+/*!
+  @brief Append a tag unless an identical EPC is already present
+  @param[in,out] dst Destination
+  @param tag Tag to append
+  @return True if the tag was appended
+  @note A tag whose EPC is empty is never appended
+ */
+inline bool append_unique(std::vector<Tag>& dst, const Tag& tag)
+{
+    if (tag.epc.empty()) {
+        return false;
+    }
+    for (size_t i = 0; i < dst.size(); ++i) {
+        if (dst[i].epc == tag.epc) {
+            return false;
+        }
+    }
+    dst.push_back(tag);
+    return true;
+}
 
 }  // namespace uhf
 }  // namespace m5

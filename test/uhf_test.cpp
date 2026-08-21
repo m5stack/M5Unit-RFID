@@ -166,3 +166,41 @@ TEST(UHF, ErrorClassification)
     EXPECT_FALSE(is_no_tag(0x20));  // FHSS Fail
     EXPECT_FALSE(is_no_tag(0x09));  // Read Fail
 }
+
+namespace {
+m5::uhf::Tag make_tag(const std::vector<uint8_t>& epc, const int8_t rssi)
+{
+    m5::uhf::Tag t{};
+    t.pc   = 0x3400;
+    t.epc  = epc;
+    t.crc  = 0x1234;
+    t.rssi = rssi;
+    return t;
+}
+}  // namespace
+
+TEST(UHF, DeduplicateByEPC)
+{
+    std::vector<m5::uhf::Tag> dst{};
+
+    // The first tag is appended
+    EXPECT_TRUE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03, 0x04}, -50)));
+    ASSERT_EQ(dst.size(), 1U);
+
+    // The same EPC is rejected even when the RSSI differs
+    EXPECT_FALSE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03, 0x04}, -60)));
+    ASSERT_EQ(dst.size(), 1U);
+    EXPECT_EQ(dst[0].rssi, -50);  // The first observation is kept
+
+    // A different EPC is appended
+    EXPECT_TRUE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03, 0x05}, -55)));
+    ASSERT_EQ(dst.size(), 2U);
+
+    // A prefix of an existing EPC is a different tag (length matters)
+    EXPECT_TRUE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03}, -55)));
+    ASSERT_EQ(dst.size(), 3U);
+
+    // An empty EPC is never appended
+    EXPECT_FALSE(m5::uhf::append_unique(dst, make_tag({}, -55)));
+    ASSERT_EQ(dst.size(), 3U);
+}
