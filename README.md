@@ -87,6 +87,19 @@ Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
 
 > **Note:** GROVE port support may be added in a future update if SoftwareI2C performance improves.
 
+### UnitUHFRFID Recovers Only by Power Cycling
+
+The JRD-4035 module occasionally stops answering the UART altogether after the host MCU resets, and
+**resetting the host again does not bring it back**. `begin()` then fails with a message asking for a
+power cycle. Disconnect the unit for a few seconds and reconnect it, or power the host down
+completely rather than pressing reset.
+
+Nothing sent over the UART recovers the module once it reaches that state: prolonged silence, large
+runs of filler bytes, probing every standard baud rate, and the firmware-transfer terminator of the
+M100 boot handshake were all tried on hardware without effect. The module's `EN` pin is the only
+reset it has, and on this unit `EN` is tied to +5V through a 10k resistor and is not brought out to
+the GROVE connector, so the host cannot drive it. The protocol has no reset command either.
+
 
 ## Related Link
 
