@@ -39,6 +39,15 @@ const char* region_to_string(const m5::uhf::Region r)
     }
 }
 
+void print_channel_levels(const char* what, const m5::uhf::ChannelLevels& levels)
+{
+    std::string s{};
+    for (size_t i = 0; i < levels.dbm.size(); ++i) {
+        s += m5::utility::formatString("%u:%d ", (unsigned)(levels.first_channel + i), levels.dbm[i]);
+    }
+    M5_LOGI("%s per channel (dBm): %s", what, s.c_str());
+}
+
 void print_tag(const m5::uhf::Tag& tag)
 {
     std::string epc{};
@@ -101,6 +110,17 @@ void setup()
     uint8_t channel{};
     if (unit.readChannel(channel)) {
         M5_LOGI("Channel: %u", channel);
+    }
+
+    // Survey the band before reading anything. A tag that refuses to answer while the antenna
+    // and the transmit power are both fine is usually drowned out by something on the air, and
+    // these two scans are what tells that apart from a problem with the tag
+    m5::uhf::ChannelLevels levels{};
+    if (unit.readBlockingSignal(levels)) {
+        print_channel_levels("Blocking", levels);
+    }
+    if (unit.readChannelRSSI(levels)) {
+        print_channel_levels("RSSI", levels);
     }
 
     // Resume detection now that the settings have been read

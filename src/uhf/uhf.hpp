@@ -91,6 +91,17 @@ struct ModuleInformation {
 };
 
 /*!
+  @struct ChannelLevels
+  @brief Signal level measured on each channel of the operating region
+  @details The reader scans a contiguous range of channels and reports one signed level per
+  channel, so the level of channel first_channel + i is dbm[i]
+ */
+struct ChannelLevels {
+    uint8_t first_channel{};    //!< Index of the first measured channel
+    std::vector<int8_t> dbm{};  //!< Measured level of each channel in dBm (signed)
+};
+
+/*!
   @brief EPC length in 16-bit words encoded in the PC
   @param pc Protocol Control
   @return Number of 16-bit words comprising the EPC

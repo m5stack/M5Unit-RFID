@@ -103,9 +103,8 @@ TEST_F(TestUnitJRD4035, PollingEmitsFramesWithoutTag)
 {
     SCOPED_TRACE(ustr);
 
-    // While polling, the module answers every round even when no tag is present
-    // (Inventory Fail 0x15), so frames keep flowing; UHFRFIDComponent::reissue_polling_if_needed()
-    // relies on this liveness signal. A no-tag notification is consumed by route_frame() and never
+    // While polling, the module answers every round even when no tag is present (Inventory Fail
+    // 0x15), so frames keep flowing. A no-tag notification is consumed by route_frame() and never
     // reaches the tag queue, so available() would stay 0 the whole time; lastFrameAt() is used
     // instead to observe that frames are actually arriving.
     if (!unit->startPolling(1000)) {
@@ -131,7 +130,72 @@ TEST_F(TestUnitJRD4035, PollingEmitsFramesWithoutTag)
     EXPECT_TRUE(unit->stopPolling());
 }
 
-TEST_F(TestUnitJRD4035, SyncCommandDuringPolling)
+TEST_F(TestUnitJRD4035, PollingIsRenewedOnATimer)
+{
+    SCOPED_TRACE(ustr);
+
+    // A count this small is exhausted in a fraction of the renewal interval, so the stream can
+    // only keep going if update() reissues the command on its timer. As above, lastFrameAt()
+    // stands in for available() since no-tag notifications never reach the tag queue.
+    if (!unit->startPolling(10)) {
+        EXPECT_TRUE(false) << "Failed to startPolling";
+        return;
+    }
+
+    const unsigned long began_at  = m5::utility::millis();
+    unsigned long last_frame_seen = unit->lastFrameAt();
+    int bursts{};
+    unsigned long longest_gap{};
+    unsigned long previous_arrival = m5::utility::millis();
+    while (m5::utility::millis() - began_at < 3000) {
+        unit->update();
+        const unsigned long now = unit->lastFrameAt();
+        if (now != last_frame_seen) {
+            const unsigned long gap = m5::utility::millis() - previous_arrival;
+            if (gap > 100) {
+                ++bursts;  // The stream resumed after the count ran out
+                if (gap > longest_gap) {
+                    longest_gap = gap;
+                }
+            }
+            last_frame_seen  = now;
+            previous_arrival = m5::utility::millis();
+        }
+        m5::utility::delay(1);
+    }
+    M5_LOGI("Observed %d resumptions, longest gap %lu ms", bursts, longest_gap);
+    EXPECT_GE(bursts, 1) << "Polling was not renewed after the count was exhausted";
+
+    EXPECT_TRUE(unit->stopPolling());
+}
+
+TEST_F(TestUnitJRD4035, ScanChannels)
+{
+    SCOPED_TRACE(ustr);
+
+    // Both scans sweep the channels of the current region and report one signed level each
+    m5::uhf::ChannelLevels blocking{};
+    if (unit->readBlockingSignal(blocking)) {
+        EXPECT_FALSE(blocking.dbm.empty());
+        M5_LOGI("Blocking: %u channels from %u", (unsigned)blocking.dbm.size(), blocking.first_channel);
+    } else {
+        EXPECT_TRUE(false) << "Failed to readBlockingSignal";
+    }
+
+    m5::uhf::ChannelLevels rssi{};
+    if (unit->readChannelRSSI(rssi)) {
+        EXPECT_FALSE(rssi.dbm.empty());
+        M5_LOGI("RSSI: %u channels from %u", (unsigned)rssi.dbm.size(), rssi.first_channel);
+    } else {
+        EXPECT_TRUE(false) << "Failed to readChannelRSSI";
+    }
+
+    // The two scans cover the same channels of the same region
+    EXPECT_EQ(blocking.first_channel, rssi.first_channel);
+    EXPECT_EQ(blocking.dbm.size(), rssi.dbm.size());
+}
+
+TEST_F(TestUnitJRD4035, RejectSettingsWhilePolling)
 {
     SCOPED_TRACE(ustr);
 
@@ -140,47 +204,19 @@ TEST_F(TestUnitJRD4035, SyncCommandDuringPolling)
         return;
     }
 
-    // A synchronous command issued while notifications are streaming must still
-    // get its own response back
-    for (int i = 0; i < 5; ++i) {
-        int16_t dbm100{};
-        EXPECT_TRUE(unit->readTransmitPower(dbm100)) << "iteration " << i;
-        unit->update();
-    }
+    // The module answers reader settings unreliably while it is running inventory rounds, so
+    // they are refused outright instead of failing later with a timeout
+    int16_t dbm100{};
+    EXPECT_FALSE(unit->readTransmitPower(dbm100));
+    m5::uhf::ModuleInformation info{};
+    EXPECT_FALSE(unit->readModuleInformation(info));
+    uint8_t channel{};
+    EXPECT_FALSE(unit->readChannel(channel));
 
-    EXPECT_TRUE(unit->stopPolling());
-}
-
-TEST_F(TestUnitJRD4035, ReissueAfterCountExhausted)
-{
-    SCOPED_TRACE(ustr);
-
-    // A small count exhausts in a few hundred milliseconds, which makes the reissue path
-    // (UHFRFIDComponent::reissue_polling_if_needed(), 500ms threshold by default) deterministic to
-    // observe. As above, lastFrameAt() stands in for available() since no-tag notifications never
-    // reach the tag queue.
-    if (!unit->startPolling(10)) {
-        EXPECT_TRUE(false) << "Failed to startPolling";
-        return;
-    }
-
-    const unsigned long expire_at = m5::utility::millis() + 5000;
-    unsigned long last_frame_seen = unit->lastFrameAt();
-    unsigned long quiet_since     = m5::utility::millis();
-    int reissued{};
-    while (m5::utility::millis() < expire_at && reissued < 2) {
-        unit->update();
-        const unsigned long now = unit->lastFrameAt();
-        if (now != last_frame_seen) {
-            if (m5::utility::millis() - quiet_since > 400) {
-                ++reissued;
-            }
-            last_frame_seen = now;
-            quiet_since     = m5::utility::millis();
-        }
-        m5::utility::delay(1);
-    }
-    EXPECT_GE(reissued, 1) << "Polling was not reissued after the count was exhausted";
+    // A scan cannot share the antenna with an inventory round either
+    m5::uhf::ChannelLevels levels{};
+    EXPECT_FALSE(unit->readChannelRSSI(levels));
+    EXPECT_FALSE(unit->readBlockingSignal(levels));
 
     EXPECT_TRUE(unit->stopPolling());
 }

@@ -33,10 +33,19 @@ constexpr uint8_t CMD_SET_TX_POWER{0xB6};
 constexpr uint8_t CMD_GET_TX_POWER{0xB7};
 constexpr uint8_t CMD_SLEEP{0x17};
 constexpr uint8_t CMD_SET_AUTO_SLEEP_TIME{0x1D};
+constexpr uint8_t CMD_INSERT_CHANNEL{0xA9};
+constexpr uint8_t CMD_SCAN_JAMMER{0xF2};
+constexpr uint8_t CMD_SCAN_RSSI{0xF3};
+
+// The channel count of the insert command is a single byte
+constexpr size_t CHANNEL_LIST_MAX{255};
+
+// A scan sweeps every channel of the region and answers only once it is done, so it needs far
+// longer than an ordinary setting command
+constexpr uint32_t CHANNEL_SCAN_TIMEOUT_MS{3000};
 
 // Longest inactivity period the module accepts before sleeping
 constexpr uint8_t AUTO_SLEEP_MAX_MINUTES{30};
-
 
 // Reserved byte of the multiple polling parameter
 constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
@@ -63,10 +72,10 @@ constexpr uint32_t BEGIN_RETRY_INTERVAL_MS{50};
 // the board brings up while M5Unified initialises, so the module may still be booting
 constexpr uint32_t STARTUP_DELAY_MS{500};
 
-// Upper bound for the begin probe. A healthy module answers the first probe within tens of
-// milliseconds, and the slowest legitimate start observed on hardware was about two seconds.
-// Beyond that the module is in the state described in ARCHITECTURE below, which no amount of
-// waiting resolves, so the probe gives up rather than stalling the caller.
+// Upper bound for the begin probe. Across nearly fifty starts on hardware the module always
+// answered the first probe within 6 to 64 milliseconds, so this window is generous by a wide
+// margin. It is bounded because a module that is not answering at all is almost always one that
+// is not wired up, and stalling the caller does not help with that.
 constexpr uint32_t BEGIN_PROBE_WINDOW_MS{3000};
 
 constexpr int MODULE_INFORMATION_RETRY{3};
@@ -159,11 +168,9 @@ bool UnitJRD4035::begin()
     }
     const unsigned long probe_elapsed = m5::utility::millis() - probe_started_at;
     if (!detected) {
-        // The module can stop answering altogether until its power is removed, and nothing that
-        // can be sent over the UART brings it back, so say what actually helps
         M5_LIB_LOGE(
-            "UnitJRD4035 did not answer in %lums (%d probes). The module stops responding until "
-            "its power is removed: disconnect the unit for a few seconds and reconnect it.",
+            "UnitJRD4035 did not answer in %lums (%d probes). Check the cable and the connectors, "
+            "and that the unit is powered.",
             probe_elapsed, attempts);
         return false;
     }
@@ -539,6 +546,64 @@ bool UnitJRD4035::sleep()
     // The module answers before it powers down, so the response is awaited as usual
     Frame res{};
     return send_and_wait(res, CMD_SLEEP, nullptr, 0);
+}
+
+bool UnitJRD4035::writeOperatingChannels(const std::vector<uint8_t>& channels)
+{
+    if (reject_while_polling("writeOperatingChannels")) {
+        return false;
+    }
+    if (channels.empty() || channels.size() > CHANNEL_LIST_MAX) {
+        M5_LIB_LOGE("Illegal channel count %zu", channels.size());
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    param.reserve(channels.size() + 1);
+    param.push_back(static_cast<uint8_t>(channels.size()));
+    param.insert(param.end(), channels.begin(), channels.end());
+
+    Frame res{};
+    return send_and_wait(res, CMD_INSERT_CHANNEL, param.data(), static_cast<uint16_t>(param.size()));
+}
+
+bool UnitJRD4035::read_channel_levels(m5::uhf::ChannelLevels& levels, const uint8_t command)
+{
+    Frame res{};
+    // CH_L and CH_H bracket the scanned range, and one signed level follows for each channel
+    if (!send_and_wait(res, command, nullptr, 0, CHANNEL_SCAN_TIMEOUT_MS) || res.parameter.size() < 3) {
+        return false;
+    }
+    const uint8_t first = res.parameter[0];
+    const uint8_t last  = res.parameter[1];
+    const size_t count  = res.parameter.size() - 2;
+    if (last < first || static_cast<size_t>(last - first) + 1 != count) {
+        M5_LIB_LOGE("Channel range %u-%u does not match %zu levels", first, last, count);
+        return false;
+    }
+
+    levels.first_channel = first;
+    levels.dbm.clear();
+    levels.dbm.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        levels.dbm.push_back(static_cast<int8_t>(res.parameter[i + 2]));
+    }
+    return true;
+}
+
+bool UnitJRD4035::readBlockingSignal(m5::uhf::ChannelLevels& levels)
+{
+    if (reject_while_polling("readBlockingSignal")) {
+        return false;
+    }
+    return read_channel_levels(levels, CMD_SCAN_JAMMER);
+}
+
+bool UnitJRD4035::readChannelRSSI(m5::uhf::ChannelLevels& levels)
+{
+    if (reject_while_polling("readChannelRSSI")) {
+        return false;
+    }
+    return read_channel_levels(levels, CMD_SCAN_RSSI);
 }
 
 }  // namespace unit

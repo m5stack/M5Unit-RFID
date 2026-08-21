@@ -48,6 +48,9 @@ public:
     virtual bool writeQueryParameters(const m5::uhf::QueryParameters& qp) override;
     virtual bool writeAutoSleepTime(const uint8_t minutes) override;
     virtual bool sleep() override;
+    virtual bool writeOperatingChannels(const std::vector<uint8_t>& channels) override;
+    virtual bool readBlockingSignal(m5::uhf::ChannelLevels& levels) override;
+    virtual bool readChannelRSSI(m5::uhf::ChannelLevels& levels) override;
     ///@}
 
 protected:
@@ -66,6 +69,8 @@ protected:
     void route_frame(const jrd4035::Frame& f);
     //! @brief Read the module information for one kind (0x00 hardware / 0x01 software / 0x02 manufacturer)
     bool read_module_information_kind(std::string& out, const uint8_t kind);
+    //! @brief Run one of the channel scans and decode its contiguous range of levels
+    bool read_channel_levels(m5::uhf::ChannelLevels& levels, const uint8_t command);
 
     //! Frame header. Derived classes for the R200 family override this with 0xAA
     uint8_t _frame_header{jrd4035::FRAME_HEADER};

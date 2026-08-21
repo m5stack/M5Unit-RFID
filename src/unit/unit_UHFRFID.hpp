@@ -11,6 +11,7 @@
 #define M5_UNIT_RFID_UNIT_UNIT_UHFRFID_HPP
 
 #include <memory>
+#include <vector>
 
 #include <M5UnitComponent.hpp>
 #include <m5_utility/container/circular_buffer.hpp>
@@ -174,6 +175,29 @@ public:
       reloads the chip firmware before it can answer
      */
     virtual bool sleep() = 0;
+    /*!
+      @brief Replace the channel list used for automatic frequency hopping
+      @param channels Channel indices of the operating region, in the order to hop through
+      @return True if successful
+      @note Automatic frequency hopping picks from this list once it is set, instead of the
+      list preset in the module. Useful to keep the reader inside the channels a region permits
+     */
+    virtual bool writeOperatingChannels(const std::vector<uint8_t>& channels) = 0;
+    /*!
+      @brief Measure the blocking signal on every channel of the operating region
+      @param[out] levels Measured level of each channel
+      @return True if successful
+      @details Scans for interference the reader itself does not produce, which is what keeps a
+      tag from being read when the antenna and the power are both fine
+     */
+    virtual bool readBlockingSignal(m5::uhf::ChannelLevels& levels) = 0;
+    /*!
+      @brief Measure the RSSI on every channel of the operating region
+      @param[out] levels Measured level of each channel
+      @return True if successful
+      @details Reveals other readers operating nearby
+     */
+    virtual bool readChannelRSSI(m5::uhf::ChannelLevels& levels) = 0;
     ///@}
 
     virtual bool begin() override;
