@@ -8,6 +8,7 @@
 */
 #include <gtest/gtest.h>
 #include <unit/jrd4035_frame.hpp>
+#include <uhf/uhf.hpp>
 #include <cstdint>
 #include <vector>
 #include <cstring>
@@ -109,4 +110,44 @@ TEST(UHF, ParseFrameR200Delimiter)
     ASSERT_EQ(f.parameter.size(), 3U);
     EXPECT_EQ(f.parameter[0], 0x04);
     EXPECT_EQ(f.parameter[2], 0x05);
+}
+
+TEST(UHF, ParseTagNotification)
+{
+    m5::uhf::Tag tag{};
+
+    // From the protocol document (96-bit EPC), PL = 0x0011 = 17 = 1 + 2 + 12 + 2
+    const uint8_t p96[] = {0xC9,                                                              // RSSI
+                           0x34, 0x00,                                                        // PC
+                           0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
+                           0x3A, 0x76};                                                       // CRC
+    ASSERT_TRUE(parse_tag_notification(tag, p96, sizeof(p96)));
+    EXPECT_EQ(tag.rssi, -55);  // 0xC9 as a signed byte
+    EXPECT_EQ(tag.pc, 0x3400);
+    ASSERT_EQ(tag.epc.size(), 12U);
+    EXPECT_EQ(tag.epc[0], 0x30);
+    EXPECT_EQ(tag.epc[11], 0x70);
+    EXPECT_EQ(tag.crc, 0x3A76);
+
+    // 32-bit EPC (4 bytes)
+    const uint8_t p32[] = {0xB0, 0x18, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0x12, 0x34};
+    ASSERT_TRUE(parse_tag_notification(tag, p32, sizeof(p32)));
+    EXPECT_EQ(tag.rssi, -80);
+    ASSERT_EQ(tag.epc.size(), 4U);
+    EXPECT_EQ(tag.epc[3], 0xDD);
+
+    // Positive RSSI
+    const uint8_t ppos[] = {0x0A, 0x34, 0x00, 0x01, 0x02, 0x03, 0x04, 0x00, 0x00};
+    ASSERT_TRUE(parse_tag_notification(tag, ppos, sizeof(ppos)));
+    EXPECT_EQ(tag.rssi, 10);
+
+    // Too short (5 bytes means an empty EPC, which is not a valid tag)
+    const uint8_t pshort[] = {0xC9, 0x34, 0x00, 0x3A, 0x76};
+    EXPECT_FALSE(parse_tag_notification(tag, pshort, sizeof(pshort)));
+
+    // Shorter than the fixed part
+    const uint8_t ptiny[] = {0xC9, 0x34};
+    EXPECT_FALSE(parse_tag_notification(tag, ptiny, sizeof(ptiny)));
+
+    EXPECT_FALSE(parse_tag_notification(tag, nullptr, 0));
 }

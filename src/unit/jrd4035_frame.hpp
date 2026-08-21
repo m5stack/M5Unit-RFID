@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "uhf/uhf.hpp"
+
 namespace m5 {
 namespace unit {
 /*!
@@ -136,6 +138,35 @@ inline bool parse_frame(Frame& out, const uint8_t* raw, const size_t len, const 
     out.type    = raw[1];
     out.command = raw[2];
     out.parameter.assign(raw + FRAME_PARAMETER_OFFSET, raw + FRAME_PARAMETER_OFFSET + param_len);
+    return true;
+}
+
+//! @brief Command code of the single polling notification
+constexpr uint8_t COMMAND_SINGLE_POLLING = 0x22;
+//! @brief Command code of the multiple polling notification
+constexpr uint8_t COMMAND_MULTIPLE_POLLING = 0x27;
+//! @brief Fixed part of a tag notification (RSSI, PC and CRC)
+constexpr size_t TAG_NOTIFICATION_OVERHEAD = 5;
+
+/*!
+  @brief Parse the parameter of a tag notification
+  @param[out] out Parsed tag
+  @param param Parameter of the notification frame (RSSI, PC, EPC and CRC)
+  @param len Parameter length
+  @return True if successful
+  @note The EPC length is derived from len, so a variable length EPC is supported
+ */
+inline bool parse_tag_notification(m5::uhf::Tag& out, const uint8_t* param, const size_t len)
+{
+    if (param == nullptr || len <= TAG_NOTIFICATION_OVERHEAD) {
+        return false;
+    }
+
+    const size_t epc_len = len - TAG_NOTIFICATION_OVERHEAD;
+    out.rssi             = static_cast<int8_t>(param[0]);
+    out.pc               = static_cast<uint16_t>((param[1] << 8) | param[2]);
+    out.epc.assign(param + 3, param + 3 + epc_len);
+    out.crc = static_cast<uint16_t>((param[3 + epc_len] << 8) | param[4 + epc_len]);
     return true;
 }
 
