@@ -91,6 +91,46 @@ struct ModuleInformation {
 };
 
 /*!
+  @brief EPC length in 16-bit words encoded in the PC
+  @param pc Protocol Control
+  @return Number of 16-bit words comprising the EPC
+ */
+inline uint8_t pcEPCLengthWords(const uint16_t pc)
+{
+    return static_cast<uint8_t>((pc >> 11) & 0x1F);
+}
+
+/*!
+  @brief User Memory Indicator of the PC
+  @param pc Protocol Control
+  @return True if the tag reports user memory holding data
+ */
+inline bool pcUserMemoryIndicator(const uint16_t pc)
+{
+    return (pc & 0x0400) != 0;
+}
+
+/*!
+  @brief XPC indicator of the PC
+  @param pc Protocol Control
+  @return True if an XPC word follows
+ */
+inline bool pcXPCIndicator(const uint16_t pc)
+{
+    return (pc & 0x0200) != 0;
+}
+
+/*!
+  @brief Numbering System Identifier of the PC
+  @param pc Protocol Control
+  @return NSI (0x000 for EPCglobal)
+ */
+inline uint16_t pcNumberingSystemIdentifier(const uint16_t pc)
+{
+    return static_cast<uint16_t>(pc & 0x01FF);
+}
+
+/*!
   @brief Append a tag unless an identical EPC is already present
   @param[in,out] dst Destination
   @param tag Tag to append

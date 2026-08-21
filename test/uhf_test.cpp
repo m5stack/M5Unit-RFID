@@ -242,3 +242,23 @@ TEST(UHF, VerifyTagCRC)
     m5::uhf::Tag empty{};
     EXPECT_FALSE(verify_tag_crc(empty));
 }
+
+TEST(UHF, DecodeProtocolControl)
+{
+    // From the protocol document: PC=0x3400 accompanies a 12-byte (6-word) EPC
+    EXPECT_EQ(m5::uhf::pcEPCLengthWords(0x3400), 6);
+    EXPECT_TRUE(m5::uhf::pcUserMemoryIndicator(0x3400));
+    EXPECT_FALSE(m5::uhf::pcXPCIndicator(0x3400));
+    EXPECT_EQ(m5::uhf::pcNumberingSystemIdentifier(0x3400), 0x000);
+
+    // 0x3000 is the common PC of a 96-bit EPC without user memory data
+    EXPECT_EQ(m5::uhf::pcEPCLengthWords(0x3000), 6);
+    EXPECT_FALSE(m5::uhf::pcUserMemoryIndicator(0x3000));
+
+    // 128-bit EPC is 8 words
+    EXPECT_EQ(m5::uhf::pcEPCLengthWords(0x4000), 8);
+
+    // XPC indicator and a non-EPCglobal numbering system
+    EXPECT_TRUE(m5::uhf::pcXPCIndicator(0x3200));
+    EXPECT_EQ(m5::uhf::pcNumberingSystemIdentifier(0x3055), 0x055);
+}
