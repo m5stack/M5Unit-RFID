@@ -28,8 +28,8 @@ namespace uhf {
  */
 enum class Bank : uint8_t {
     Reserved,  //!< Kill password and access password
-    EPC,       //!< CRC-16, PC and EPC
-    TID,       //!< Tag identification
+    Epc,       //!< CRC-16, PC and EPC
+    Tid,       //!< Tag identification
     User,      //!< User memory
 };
 
