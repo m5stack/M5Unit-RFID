@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <m5_utility/crc.hpp>
+
 #include "uhf/uhf.hpp"
 
 namespace m5 {
@@ -27,9 +29,9 @@ namespace unit {
 namespace jrd4035 {
 
 //! @brief Frame header of the JRD-4035 / JRD-100
-constexpr uint8_t FRAME_HEADER = 0xBB;
+constexpr uint8_t FRAME_HEADER{0xBB};
 //! @brief Frame end of the JRD-4035 / JRD-100
-constexpr uint8_t FRAME_END = 0x7E;
+constexpr uint8_t FRAME_END{0x7E};
 
 /*!
   @brief Calculate the frame checksum
@@ -47,7 +49,7 @@ inline uint8_t checksum(const uint8_t* body, const size_t len)
 }
 
 //! @brief Maximum parameter length accepted for a frame
-constexpr uint16_t MAX_PARAMETER_LENGTH = 512;
+constexpr uint16_t MAX_PARAMETER_LENGTH{512};
 
 /*!
   @brief Build a command frame
@@ -84,18 +86,18 @@ inline bool build_frame(std::vector<uint8_t>& out, const uint8_t type, const uin
 }
 
 //! @brief Fixed part of a frame (Header, Type, Command, PL_MSB, PL_LSB, Checksum, End)
-constexpr size_t FRAME_OVERHEAD = 7;
+constexpr size_t FRAME_OVERHEAD{7};
 //! @brief Offset of the Type byte
-constexpr size_t FRAME_TYPE_OFFSET = 1;
+constexpr size_t FRAME_TYPE_OFFSET{1};
 //! @brief Offset of the Parameter
-constexpr size_t FRAME_PARAMETER_OFFSET = 5;
+constexpr size_t FRAME_PARAMETER_OFFSET{5};
 
 //! @brief Frame type: command (host to module)
-constexpr uint8_t TYPE_COMMAND = 0x00;
+constexpr uint8_t TYPE_COMMAND{0x00};
 //! @brief Frame type: response (module to host)
-constexpr uint8_t TYPE_RESPONSE = 0x01;
+constexpr uint8_t TYPE_RESPONSE{0x01};
 //! @brief Frame type: notification (module to host)
-constexpr uint8_t TYPE_NOTIFICATION = 0x02;
+constexpr uint8_t TYPE_NOTIFICATION{0x02};
 
 /*!
   @struct Frame
@@ -142,11 +144,11 @@ inline bool parse_frame(Frame& out, const uint8_t* raw, const size_t len, const 
 }
 
 //! @brief Command code of the single polling notification
-constexpr uint8_t COMMAND_SINGLE_POLLING = 0x22;
+constexpr uint8_t COMMAND_SINGLE_POLLING{0x22};
 //! @brief Command code of the multiple polling notification
-constexpr uint8_t COMMAND_MULTIPLE_POLLING = 0x27;
+constexpr uint8_t COMMAND_MULTIPLE_POLLING{0x27};
 //! @brief Fixed part of a tag notification (RSSI, PC and CRC)
-constexpr size_t TAG_NOTIFICATION_OVERHEAD = 5;
+constexpr size_t TAG_NOTIFICATION_OVERHEAD{5};
 
 /*!
   @brief Parse the parameter of a tag notification
@@ -170,8 +172,46 @@ inline bool parse_tag_notification(m5::uhf::Tag& out, const uint8_t* param, cons
     return true;
 }
 
+//! @brief Initial value of the EPC Gen2 CRC-16
+constexpr uint16_t GEN2_CRC16_INIT{0xFFFF};
+//! @brief Polynomial of the EPC Gen2 CRC-16 (x^16 + x^12 + x^5 + 1)
+constexpr uint16_t GEN2_CRC16_POLYNOMIAL{0x1021};
+//! @brief Final xor value of the EPC Gen2 CRC-16
+constexpr uint16_t GEN2_CRC16_XOROUT{0xFFFF};
+
+/*!
+  @brief Calculate the EPC Gen2 CRC-16
+  @param data Data to calculate over
+  @param len Length in bytes
+  @return CRC-16
+ */
+inline uint16_t gen2_crc16(const uint8_t* data, const size_t len)
+{
+    m5::utility::CRC16 crc{GEN2_CRC16_INIT, GEN2_CRC16_POLYNOMIAL, false, false, GEN2_CRC16_XOROUT};
+    return crc.range(data, len);
+}
+
+/*!
+  @brief Verify the CRC-16 reported with a detected tag
+  @param tag Tag to verify
+  @return True if the CRC-16 recalculated from PC and EPC matches the reported one
+  @note The Gen2 CRC-16 covers the PC followed by the EPC
+ */
+inline bool verify_tag_crc(const m5::uhf::Tag& tag)
+{
+    if (tag.epc.empty()) {
+        return false;
+    }
+    std::vector<uint8_t> buf{};
+    buf.reserve(tag.epc.size() + 2);
+    buf.push_back(static_cast<uint8_t>(tag.pc >> 8));
+    buf.push_back(static_cast<uint8_t>(tag.pc & 0xFF));
+    buf.insert(buf.end(), tag.epc.begin(), tag.epc.end());
+    return gen2_crc16(buf.data(), buf.size()) == tag.crc;
+}
+
 //! @brief Command code used by every failure notification
-constexpr uint8_t COMMAND_ERROR = 0xFF;
+constexpr uint8_t COMMAND_ERROR{0xFF};
 
 /*!
   @enum Error

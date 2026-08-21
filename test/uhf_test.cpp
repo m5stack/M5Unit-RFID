@@ -204,3 +204,41 @@ TEST(UHF, DeduplicateByEPC)
     EXPECT_FALSE(m5::uhf::append_unique(dst, make_tag({}, -55)));
     ASSERT_EQ(dst.size(), 3U);
 }
+
+TEST(UHF, Gen2CRC16)
+{
+    // From the protocol document: PC=0x3400, EPC=30 75 ... 70, CRC=0x3A76
+    const uint8_t pc_epc[] = {0x34, 0x00, 0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70};
+    EXPECT_EQ(gen2_crc16(pc_epc, sizeof(pc_epc)), 0x3A76);
+
+    // A single flipped bit must change the result
+    uint8_t broken[sizeof(pc_epc)]{};
+    memcpy(broken, pc_epc, sizeof(pc_epc));
+    broken[5] ^= 0x01;
+    EXPECT_NE(gen2_crc16(broken, sizeof(broken)), 0x3A76);
+}
+
+TEST(UHF, VerifyTagCRC)
+{
+    m5::uhf::Tag tag{};
+    const uint8_t param[] = {0xC9,                                                                    // RSSI
+                             0x34, 0x00,                                                              // PC
+                             0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
+                             0x3A, 0x76};                                                             // CRC
+    ASSERT_TRUE(parse_tag_notification(tag, param, sizeof(param)));
+    EXPECT_TRUE(verify_tag_crc(tag));
+
+    // Corrupting the EPC must be detected
+    m5::uhf::Tag bad = tag;
+    bad.epc[0] ^= 0x01;
+    EXPECT_FALSE(verify_tag_crc(bad));
+
+    // Corrupting the PC must be detected
+    bad = tag;
+    bad.pc ^= 0x0001;
+    EXPECT_FALSE(verify_tag_crc(bad));
+
+    // An empty EPC has nothing to verify
+    m5::uhf::Tag empty{};
+    EXPECT_FALSE(verify_tag_crc(empty));
+}

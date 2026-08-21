@@ -17,24 +17,24 @@ using namespace m5::utility::mmh3;
 
 namespace {
 // Command codes
-constexpr uint8_t CMD_MODULE_INFORMATION = 0x03;
-constexpr uint8_t CMD_MULTIPLE_POLLING   = 0x27;
-constexpr uint8_t CMD_STOP_POLLING       = 0x28;
-constexpr uint8_t CMD_GET_QUERY          = 0x0D;
-constexpr uint8_t CMD_SET_QUERY          = 0x0E;
-constexpr uint8_t CMD_SET_REGION         = 0x07;
-constexpr uint8_t CMD_GET_REGION         = 0x08;
-constexpr uint8_t CMD_GET_CHANNEL        = 0xAA;
-constexpr uint8_t CMD_SET_CHANNEL        = 0xAB;
-constexpr uint8_t CMD_SET_HOPPING        = 0xAD;
-constexpr uint8_t CMD_SET_TX_POWER       = 0xB6;
-constexpr uint8_t CMD_GET_TX_POWER       = 0xB7;
+constexpr uint8_t CMD_MODULE_INFORMATION{0x03};
+constexpr uint8_t CMD_MULTIPLE_POLLING{0x27};
+constexpr uint8_t CMD_STOP_POLLING{0x28};
+constexpr uint8_t CMD_GET_QUERY{0x0D};
+constexpr uint8_t CMD_SET_QUERY{0x0E};
+constexpr uint8_t CMD_SET_REGION{0x07};
+constexpr uint8_t CMD_GET_REGION{0x08};
+constexpr uint8_t CMD_GET_CHANNEL{0xAA};
+constexpr uint8_t CMD_SET_CHANNEL{0xAB};
+constexpr uint8_t CMD_SET_HOPPING{0xAD};
+constexpr uint8_t CMD_SET_TX_POWER{0xB6};
+constexpr uint8_t CMD_GET_TX_POWER{0xB7};
 
 // Reserved byte of the multiple polling parameter
-constexpr uint8_t MULTIPLE_POLLING_RESERVED = 0x22;
+constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
 
 // Number of begin retries (NessoN1 first-transaction failure)
-constexpr int BEGIN_RETRY = 3;
+constexpr int BEGIN_RETRY{3};
 
 uint8_t to_region_code(const m5::uhf::Region region)
 {
@@ -187,6 +187,12 @@ void UnitJRD4035::route_frame(const Frame& f)
     if (f.command == COMMAND_SINGLE_POLLING || f.command == COMMAND_MULTIPLE_POLLING) {
         m5::uhf::Tag tag{};
         if (parse_tag_notification(tag, f.parameter.data(), f.parameter.size())) {
+            // The module already rejects tags failing the CRC check (Inventory Fail 0x15), so a
+            // mismatch here points at our own parsing rather than at RF corruption. Warn and keep
+            // the tag so the problem is visible instead of silently losing detections
+            if (!verify_tag_crc(tag)) {
+                M5_LIB_LOGW("Gen2 CRC-16 mismatch (reported %04X)", tag.crc);
+            }
             push_tag(tag);
         }
         return;
