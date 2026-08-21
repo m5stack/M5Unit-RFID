@@ -117,10 +117,10 @@ TEST(UHF, ParseTagNotification)
     m5::uhf::Tag tag{};
 
     // From the protocol document (96-bit EPC), PL = 0x0011 = 17 = 1 + 2 + 12 + 2
-    const uint8_t p96[] = {0xC9,                                                              // RSSI
-                           0x34, 0x00,                                                        // PC
+    const uint8_t p96[] = {0xC9,                                                                    // RSSI
+                           0x34, 0x00,                                                              // PC
                            0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
-                           0x3A, 0x76};                                                       // CRC
+                           0x3A, 0x76};                                                             // CRC
     ASSERT_TRUE(parse_tag_notification(tag, p96, sizeof(p96)));
     EXPECT_EQ(tag.rssi, -55);  // 0xC9 as a signed byte
     EXPECT_EQ(tag.pc, 0x3400);
@@ -150,4 +150,19 @@ TEST(UHF, ParseTagNotification)
     EXPECT_FALSE(parse_tag_notification(tag, ptiny, sizeof(ptiny)));
 
     EXPECT_FALSE(parse_tag_notification(tag, nullptr, 0));
+}
+
+TEST(UHF, ErrorClassification)
+{
+    // 0xFF is the command code used by every failure notification
+    EXPECT_TRUE(is_error_frame(0xFF));
+    EXPECT_FALSE(is_error_frame(0x27));
+    EXPECT_FALSE(is_error_frame(0x22));
+
+    // 0x15 during polling only means "no tag this round"
+    EXPECT_TRUE(is_no_tag(0x15));
+    EXPECT_FALSE(is_no_tag(0x16));  // Access Fail
+    EXPECT_FALSE(is_no_tag(0x17));  // Command Error
+    EXPECT_FALSE(is_no_tag(0x20));  // FHSS Fail
+    EXPECT_FALSE(is_no_tag(0x09));  // Read Fail
 }

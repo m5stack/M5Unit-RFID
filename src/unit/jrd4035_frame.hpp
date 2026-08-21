@@ -170,6 +170,46 @@ inline bool parse_tag_notification(m5::uhf::Tag& out, const uint8_t* param, cons
     return true;
 }
 
+//! @brief Command code used by every failure notification
+constexpr uint8_t COMMAND_ERROR = 0xFF;
+
+/*!
+  @enum Error
+  @brief Error codes carried by a failure notification
+ */
+enum class Error : uint8_t {
+    ReadFail           = 0x09,  //!< Failed to read the tag's data memory area
+    WriteFail          = 0x10,  //!< Failed to write the tag's data memory area
+    KillFail           = 0x12,  //!< Failed to kill the tag
+    LockFail           = 0x13,  //!< Failed to lock the tag's data memory area
+    BlockPermalockFail = 0x14,  //!< BlockPermalock execution failed
+    InventoryFail      = 0x15,  //!< No tag responded or a data CRC check error occurred
+    AccessFail         = 0x16,  //!< Failed to access the tag
+    CommandError       = 0x17,  //!< Command error in the command frame
+    FHSSFail           = 0x20,  //!< Frequency hopping channel search timed out
+};
+
+/*!
+  @brief Is the command code of a failure notification?
+  @param command Command code of the received frame
+  @return True if the frame reports a failure
+ */
+inline bool is_error_frame(const uint8_t command)
+{
+    return command == COMMAND_ERROR;
+}
+
+/*!
+  @brief Does the error code only mean "no tag was found this round"?
+  @param error_code Error code carried by the failure notification
+  @return True if no tag responded
+  @note During polling this is an expected condition, not a command failure
+ */
+inline bool is_no_tag(const uint8_t error_code)
+{
+    return error_code == static_cast<uint8_t>(Error::InventoryFail);
+}
+
 }  // namespace jrd4035
 }  // namespace unit
 }  // namespace m5
