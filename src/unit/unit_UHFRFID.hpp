@@ -82,6 +82,16 @@ public:
     {
         return _polling;
     }
+    /*!
+      @brief Timestamp (m5::utility::millis()) of the most recently arrived frame
+      @details Updated by note_frame_arrival() for every frame, including a no-tag notification
+      (Inventory Fail). Useful to observe polling liveness from outside even when no tag is
+      present, since available() alone cannot show that frames are still flowing.
+     */
+    inline unsigned long lastFrameAt() const
+    {
+        return _last_frame_at;
+    }
     ///@}
 
     ///@name Tag queue (raw; not deduplicated)
