@@ -292,3 +292,156 @@ TEST(UHF, DecodeProtocolControl)
     EXPECT_TRUE(m5::uhf::pcXPCIndicator(0x3200));
     EXPECT_EQ(m5::uhf::pcNumberingSystemIdentifier(0x3055), 0x055);
 }
+
+TEST(UHF, BuildSelectParameter)
+{
+    // Datasheet 2.5.1: SelParam=0x01 (Target 000 / Action 000 / MemBank EPC), Ptr=0x20 bits,
+    // MaskLength=0x60 (96 bits), Truncate off, Mask = the tag's EPC
+    const uint8_t mask[] = {0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70};
+    std::vector<uint8_t> param{};
+    const uint8_t sel = select_parameter_byte(0, 0, MEMBANK_EPC);
+    EXPECT_EQ(sel, 0x01);
+    if (!build_select_parameter(param, sel, 0x00000020, 0x60, SELECT_TRUNCATE_OFF, mask, sizeof(mask))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+
+    std::vector<uint8_t> buf{};
+    if (!build_frame(buf, 0x00, 0x0C, param.data(), static_cast<uint16_t>(param.size()))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    const uint8_t expect[] = {0xBB, 0x00, 0x0C, 0x00, 0x13, 0x01, 0x00, 0x00, 0x00, 0x20, 0x60, 0x00, 0x30,
+                              0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70, 0xAD, 0x7E};
+    EXPECT_EQ(buf.size(), sizeof(expect));
+    EXPECT_EQ(0, memcmp(buf.data(), expect, sizeof(expect)));
+
+    // Reserved memory cannot be selected on
+    EXPECT_FALSE(build_select_parameter(param, select_parameter_byte(0, 0, MEMBANK_RESERVED), 0x20, 0x60,
+                                        SELECT_TRUNCATE_OFF, mask, sizeof(mask)));
+    // A mask shorter than the length claims
+    EXPECT_FALSE(build_select_parameter(param, sel, 0x20, 0x60, SELECT_TRUNCATE_OFF, mask, 4));
+    // Empty mask
+    EXPECT_FALSE(build_select_parameter(param, sel, 0x20, 0, SELECT_TRUNCATE_OFF, mask, sizeof(mask)));
+}
+
+TEST(UHF, BuildReadTagMemory)
+{
+    // Datasheet 2.8.1: AccessPassword=0x0000FFFF, MemBank=User, SA=0, DL=2
+    std::vector<uint8_t> param{};
+    if (!build_read_tag_memory(param, 0x0000FFFF, MEMBANK_USER, 0x0000, 0x0002)) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    std::vector<uint8_t> buf{};
+    if (!build_frame(buf, 0x00, 0x39, param.data(), static_cast<uint16_t>(param.size()))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    const uint8_t expect[] = {0xBB, 0x00, 0x39, 0x00, 0x09, 0x00, 0x00, 0xFF,
+                              0xFF, 0x03, 0x00, 0x00, 0x00, 0x02, 0x45, 0x7E};
+    EXPECT_EQ(buf.size(), sizeof(expect));
+    EXPECT_EQ(0, memcmp(buf.data(), expect, sizeof(expect)));
+
+    // Reading zero words would mean "to the end of the bank", which is unverified on this module
+    EXPECT_FALSE(build_read_tag_memory(param, 0, MEMBANK_USER, 0, 0));
+}
+
+TEST(UHF, BuildWriteTagMemory)
+{
+    // Datasheet 2.9.1: same addressing as the read plus DT = 12345678
+    const uint8_t data[] = {0x12, 0x34, 0x56, 0x78};
+    std::vector<uint8_t> param{};
+    if (!build_write_tag_memory(param, 0x0000FFFF, MEMBANK_USER, 0x0000, data, sizeof(data))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    std::vector<uint8_t> buf{};
+    if (!build_frame(buf, 0x00, 0x49, param.data(), static_cast<uint16_t>(param.size()))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    const uint8_t expect[] = {0xBB, 0x00, 0x49, 0x00, 0x0D, 0x00, 0x00, 0xFF, 0xFF, 0x03,
+                              0x00, 0x00, 0x00, 0x02, 0x12, 0x34, 0x56, 0x78, 0x6D, 0x7E};
+    EXPECT_EQ(buf.size(), sizeof(expect));
+    EXPECT_EQ(0, memcmp(buf.data(), expect, sizeof(expect)));
+
+    // An odd byte count cannot be expressed in words
+    const uint8_t odd[] = {0x12, 0x34, 0x56};
+    EXPECT_FALSE(build_write_tag_memory(param, 0, MEMBANK_USER, 0, odd, sizeof(odd)));
+    // The module writes at most 32 words
+    const std::vector<uint8_t> too_long(WRITE_MAX_WORDS * 2 + 2, 0xAA);
+    EXPECT_FALSE(build_write_tag_memory(param, 0, MEMBANK_USER, 0, too_long.data(), too_long.size()));
+    // Exactly 32 words is fine
+    const std::vector<uint8_t> at_limit(WRITE_MAX_WORDS * 2, 0xAA);
+    EXPECT_TRUE(build_write_tag_memory(param, 0, MEMBANK_USER, 0, at_limit.data(), at_limit.size()));
+}
+
+TEST(UHF, BuildLockPayload)
+{
+    using m5::uhf::LockAction;
+    using m5::uhf::LockSetting;
+    using m5::uhf::LockTarget;
+
+    // Datasheet 2.10.1 locks the access password and expects LD = 0x020080. Only the pwd-write
+    // bit is masked in, leaving the permalock bit of that field untouched
+    const LockSetting lock_access[] = {{LockTarget::AccessPassword, LockAction::Lock}};
+    EXPECT_EQ(m5::uhf::buildLockPayload(lock_access, 1), 0x00020080U);
+
+    std::vector<uint8_t> param{};
+    if (!build_lock_tag(param, 0x0000FFFF, 0x00020080U)) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    std::vector<uint8_t> buf{};
+    if (!build_frame(buf, 0x00, 0x82, param.data(), static_cast<uint16_t>(param.size()))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    const uint8_t expect[] = {0xBB, 0x00, 0x82, 0x00, 0x07, 0x00, 0x00, 0xFF, 0xFF, 0x02, 0x00, 0x80, 0x09, 0x7E};
+    EXPECT_EQ(buf.size(), sizeof(expect));
+    EXPECT_EQ(0, memcmp(buf.data(), expect, sizeof(expect)));
+
+    // Kill password sits in the highest slot, User in the lowest
+    const LockSetting lock_kill[] = {{LockTarget::KillPassword, LockAction::Lock}};
+    EXPECT_EQ(m5::uhf::buildLockPayload(lock_kill, 1), 0x00080200U);
+    const LockSetting lock_user[] = {{LockTarget::User, LockAction::Lock}};
+    EXPECT_EQ(m5::uhf::buildLockPayload(lock_user, 1), 0x00000802U);
+
+    // A permanent action masks in the permalock bit as well
+    const LockSetting perma_user[] = {{LockTarget::User, LockAction::PermanentLock}};
+    EXPECT_EQ(m5::uhf::buildLockPayload(perma_user, 1), 0x00000C03U);
+
+    // Targets left out keep their current state, so their mask bits stay zero
+    const LockSetting two[] = {{LockTarget::Epc, LockAction::Lock}, {LockTarget::Tid, LockAction::Lock}};
+    EXPECT_EQ(m5::uhf::buildLockPayload(two, 2), 0x0000A028U);
+
+    // Nothing asked for, nothing changed
+    EXPECT_EQ(m5::uhf::buildLockPayload(nullptr, 0), 0x00000000U);
+
+    EXPECT_TRUE(m5::uhf::isPermanent(LockAction::PermanentOpen));
+    EXPECT_TRUE(m5::uhf::isPermanent(LockAction::PermanentLock));
+    EXPECT_FALSE(m5::uhf::isPermanent(LockAction::Open));
+    EXPECT_FALSE(m5::uhf::isPermanent(LockAction::Lock));
+}
+
+TEST(UHF, BuildKillTag)
+{
+    // Datasheet 2.11.1: KillPassword = 0x0000FFFF
+    std::vector<uint8_t> param{};
+    if (!build_kill_tag(param, 0x0000FFFF)) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    std::vector<uint8_t> buf{};
+    if (!build_frame(buf, 0x00, 0x65, param.data(), static_cast<uint16_t>(param.size()))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    const uint8_t expect[] = {0xBB, 0x00, 0x65, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xFF, 0x67, 0x7E};
+    EXPECT_EQ(buf.size(), sizeof(expect));
+    EXPECT_EQ(0, memcmp(buf.data(), expect, sizeof(expect)));
+
+    // A tag whose kill password is zero refuses to be killed, so the frame is never built
+    EXPECT_FALSE(build_kill_tag(param, 0));
+}

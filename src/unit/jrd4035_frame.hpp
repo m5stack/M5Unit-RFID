@@ -215,6 +215,177 @@ inline bool verify_tag_crc(const m5::uhf::Tag& tag)
     return gen2_crc16(buf, tag.epc.size + 2U) == tag.crc;
 }
 
+//! @brief MemBank values of the Select parameter and of the read/write commands
+constexpr uint8_t MEMBANK_RESERVED{0x00};
+constexpr uint8_t MEMBANK_EPC{0x01};
+constexpr uint8_t MEMBANK_TID{0x02};
+constexpr uint8_t MEMBANK_USER{0x03};
+
+//! @brief Truncate field of the Select parameter
+constexpr uint8_t SELECT_TRUNCATE_OFF{0x00};
+constexpr uint8_t SELECT_TRUNCATE_ON{0x80};
+
+//! @brief Select modes of Set Select Mode (0x12)
+constexpr uint8_t SELECT_MODE_ALWAYS{0x00};         //!< Select before every operation, inventory included
+constexpr uint8_t SELECT_MODE_NEVER{0x01};          //!< Never send Select
+constexpr uint8_t SELECT_MODE_NON_INVENTORY{0x02};  //!< Select before everything except inventory
+
+//! @brief Longest write the module accepts, in 16-bit words
+constexpr size_t WRITE_MAX_WORDS{32};
+//! @brief Longest mask the Select parameter accepts, in bits
+constexpr size_t SELECT_MASK_MAX_BITS{255};
+
+/*!
+  @brief Build the SelParam byte of Set Select Parameter
+  @param target Target (3 bits)
+  @param action Action (3 bits)
+  @param membank Memory bank (2 bits)
+  @return SelParam
+ */
+inline uint8_t select_parameter_byte(const uint8_t target, const uint8_t action, const uint8_t membank)
+{
+    return static_cast<uint8_t>(((target & 0x07) << 5) | ((action & 0x07) << 2) | (membank & 0x03));
+}
+
+/*!
+  @brief Build the parameter of Set Select Parameter (0x0C)
+  @param[out] out Parameter
+  @param sel_param SelParam byte
+  @param pointer_bits Start of the mask as a bit address inside the bank
+  @param mask_length_bits Mask length in bits
+  @param truncate SELECT_TRUNCATE_OFF or SELECT_TRUNCATE_ON
+  @param mask Mask bytes
+  @param mask_len Length of mask in bytes
+  @return True if successful
+  @note Reserved memory cannot be selected on: a tag ignores a Select that names it
+ */
+inline bool build_select_parameter(std::vector<uint8_t>& out, const uint8_t sel_param, const uint32_t pointer_bits,
+                                   const uint8_t mask_length_bits, const uint8_t truncate, const uint8_t* mask,
+                                   const size_t mask_len)
+{
+    if ((sel_param & 0x03) == MEMBANK_RESERVED) {
+        return false;
+    }
+    if (mask_len == 0 || mask == nullptr || mask_length_bits == 0) {
+        return false;
+    }
+    if (mask_length_bits > SELECT_MASK_MAX_BITS || (mask_length_bits + 7U) / 8U > mask_len) {
+        return false;
+    }
+
+    out.clear();
+    out.reserve(7 + mask_len);
+    out.push_back(sel_param);
+    out.push_back(static_cast<uint8_t>(pointer_bits >> 24));
+    out.push_back(static_cast<uint8_t>(pointer_bits >> 16));
+    out.push_back(static_cast<uint8_t>(pointer_bits >> 8));
+    out.push_back(static_cast<uint8_t>(pointer_bits));
+    out.push_back(mask_length_bits);
+    out.push_back(truncate);
+    out.insert(out.end(), mask, mask + mask_len);
+    return true;
+}
+
+/*!
+  @brief Build the parameter of Read Tag Memory Area (0x39)
+  @param[out] out Parameter
+  @param access_password Access password, 0 when the tag has none
+  @param membank Memory bank
+  @param word_address Start address in 16-bit words
+  @param word_count Number of 16-bit words
+  @return True if successful
+  @note A word_count of zero would mean "to the end of the bank" in EPC Gen2, but whether the
+  module honours that is unverified, so it is refused here
+ */
+inline bool build_read_tag_memory(std::vector<uint8_t>& out, const uint32_t access_password, const uint8_t membank,
+                                  const uint16_t word_address, const uint16_t word_count)
+{
+    if (word_count == 0) {
+        return false;
+    }
+    out.clear();
+    out.reserve(9);
+    out.push_back(static_cast<uint8_t>(access_password >> 24));
+    out.push_back(static_cast<uint8_t>(access_password >> 16));
+    out.push_back(static_cast<uint8_t>(access_password >> 8));
+    out.push_back(static_cast<uint8_t>(access_password));
+    out.push_back(membank);
+    out.push_back(static_cast<uint8_t>(word_address >> 8));
+    out.push_back(static_cast<uint8_t>(word_address));
+    out.push_back(static_cast<uint8_t>(word_count >> 8));
+    out.push_back(static_cast<uint8_t>(word_count));
+    return true;
+}
+
+/*!
+  @brief Build the parameter of Write Tag Memory Area (0x49)
+  @param[out] out Parameter
+  @param access_password Access password, 0 when the tag has none
+  @param membank Memory bank
+  @param word_address Start address in 16-bit words
+  @param data Bytes to write
+  @param len Length of data, which must be even and at most 64
+  @return True if successful
+ */
+inline bool build_write_tag_memory(std::vector<uint8_t>& out, const uint32_t access_password, const uint8_t membank,
+                                   const uint16_t word_address, const uint8_t* data, const size_t len)
+{
+    if (data == nullptr || len == 0 || (len % 2) != 0 || len / 2 > WRITE_MAX_WORDS) {
+        return false;
+    }
+    const uint16_t word_count = static_cast<uint16_t>(len / 2);
+    if (!build_read_tag_memory(out, access_password, membank, word_address, word_count)) {
+        return false;
+    }
+    out.insert(out.end(), data, data + len);
+    return true;
+}
+
+/*!
+  @brief Build the parameter of Lock (0x82)
+  @param[out] out Parameter
+  @param access_password Access password
+  @param payload 20-bit lock payload, see m5::uhf::buildLockPayload
+  @return True if successful
+ */
+inline bool build_lock_tag(std::vector<uint8_t>& out, const uint32_t access_password, const uint32_t payload)
+{
+    if (payload > 0x000FFFFFU) {
+        return false;
+    }
+    out.clear();
+    out.reserve(7);
+    out.push_back(static_cast<uint8_t>(access_password >> 24));
+    out.push_back(static_cast<uint8_t>(access_password >> 16));
+    out.push_back(static_cast<uint8_t>(access_password >> 8));
+    out.push_back(static_cast<uint8_t>(access_password));
+    out.push_back(static_cast<uint8_t>(payload >> 16));
+    out.push_back(static_cast<uint8_t>(payload >> 8));
+    out.push_back(static_cast<uint8_t>(payload));
+    return true;
+}
+
+/*!
+  @brief Build the parameter of Kill (0x65)
+  @param[out] out Parameter
+  @param kill_password Kill password
+  @return True if successful
+  @note A tag whose kill password is zero refuses to be killed, so zero is refused here
+ */
+inline bool build_kill_tag(std::vector<uint8_t>& out, const uint32_t kill_password)
+{
+    if (kill_password == 0) {
+        return false;
+    }
+    out.clear();
+    out.reserve(4);
+    out.push_back(static_cast<uint8_t>(kill_password >> 24));
+    out.push_back(static_cast<uint8_t>(kill_password >> 16));
+    out.push_back(static_cast<uint8_t>(kill_password >> 8));
+    out.push_back(static_cast<uint8_t>(kill_password));
+    return true;
+}
+
 //! @brief Command code used by every failure notification
 constexpr uint8_t COMMAND_ERROR{0xFF};
 

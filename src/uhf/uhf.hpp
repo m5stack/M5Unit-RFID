@@ -209,6 +209,66 @@ struct Tag {
 };
 
 /*!
+  @enum LockTarget
+  @brief What a lock setting applies to, in the order EPC Gen2 lays them out
+ */
+enum class LockTarget : uint8_t { KillPassword, AccessPassword, Epc, Tid, User };
+
+/*!
+  @enum LockAction
+  @brief What a lock setting does
+  @details EPC Gen2 does not define these as four values but as two independent bits, a
+  pwd-write bit and a permalock bit (v1.2.0 Table 6.43). These four names are the four
+  combinations of those bits
+ */
+enum class LockAction : uint8_t {
+    Open          = 0x00,  //!< Writeable from either the open or the secured state
+    PermanentOpen = 0x01,  //!< Permanently writeable and can never be locked. Cannot be undone
+    Lock          = 0x02,  //!< Writeable from the secured state only
+    PermanentLock = 0x03,  //!< Not writeable from any state. Cannot be undone
+};
+
+/*!
+  @struct LockSetting
+  @brief One entry of a lock operation. Targets left out keep their current lock state
+ */
+struct LockSetting {
+    LockTarget target{};
+    LockAction action{};
+};
+
+//! @brief Is this action one of the two that cannot be undone?
+inline bool isPermanent(const LockAction action)
+{
+    return action == LockAction::PermanentOpen || action == LockAction::PermanentLock;
+}
+
+/*!
+  @brief Build the 20-bit payload of the Gen2 Lock command
+  @param settings Settings to apply
+  @param count Number of settings
+  @return 20-bit payload, Mask in bits 19-10 and Action in bits 9-0
+  @details Each target owns a 2-bit action, a pwd-write bit and a permalock bit, and a 2-bit
+  mask that says which of those two to overwrite. Only the permalock bit is masked in when the
+  action asserts it: a permalock bit can never be cleared once set (v1.2.0 6.3.2.11.3.5), so
+  asking to write a zero there would be asking for an error
+ */
+inline uint32_t buildLockPayload(const LockSetting* settings, const size_t count)
+{
+    uint32_t payload{};
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t slot         = static_cast<uint8_t>(settings[i].target);  // 0:Kill ... 4:User
+        const uint8_t action       = static_cast<uint8_t>(settings[i].action);
+        const uint8_t mask         = static_cast<uint8_t>(0x02 | (action & 0x01));
+        const uint8_t mask_shift   = static_cast<uint8_t>(18 - slot * 2);
+        const uint8_t action_shift = static_cast<uint8_t>(8 - slot * 2);
+        payload |= static_cast<uint32_t>(mask) << mask_shift;
+        payload |= static_cast<uint32_t>(action) << action_shift;
+    }
+    return payload;
+}
+
+/*!
   @struct QueryParameters
   @brief EPC Gen2 query parameters
  */
