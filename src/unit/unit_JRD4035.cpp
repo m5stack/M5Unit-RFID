@@ -279,8 +279,10 @@ void UnitJRD4035::route_frame(const Frame& f)
     // Failure notification
     if (is_error_frame(f.command)) {
         const uint8_t code = f.parameter.empty() ? 0x00 : f.parameter[0];
-        // During polling this only means that no tag responded this round
-        if (is_no_tag(code)) {
+        // While polling, this only means that no tag answered the round, and it arrives once per
+        // round. Outside polling the very same code means the tag being addressed did not answer,
+        // which is a genuine failure the caller has to see
+        if (is_no_tag(code) && _polling) {
             return;
         }
         M5_LIB_LOGW("Error frame %02X", code);
@@ -321,8 +323,8 @@ bool UnitJRD4035::send_command(const uint8_t command, const uint8_t* param, cons
     return writeWithTransaction(frame.data(), frame.size()) == m5::hal::error::error_t::OK;
 }
 
-bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
-                                const uint32_t timeout_ms)
+bool UnitJRD4035::send_and_wait_answered_as(Frame& response, const uint8_t command, const uint8_t answered_as,
+                                            const uint8_t* param, const uint16_t param_len, const uint32_t timeout_ms)
 {
     // The response to a command that timed out can still arrive afterwards, and would then be
     // taken for the answer to this one, shifting every later exchange by one frame. Whatever is
@@ -330,7 +332,7 @@ bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const ui
     // usual and drops the stale responses, because nothing is pending yet.
     pump(1);
 
-    _awaiting_command = command;
+    _awaiting_command = answered_as;
     _response         = Frame{};
     _response_pending = true;
 
@@ -352,7 +354,7 @@ bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const ui
         }
     }
     _response_pending = false;
-    M5_LIB_LOGE("Timeout waiting for response of %02X", command);
+    M5_LIB_LOGE("Timeout waiting for %02X, the response to %02X", answered_as, command);
     return false;
 }
 
