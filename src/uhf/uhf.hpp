@@ -64,10 +64,11 @@ enum class Target : uint8_t { A, B };
 constexpr size_t EPC_MAX_BYTES{62};
 /*!
   @brief How much of the TID identify() keeps
-  @details Enough for the XTID header, a serial of up to 144 bits, and the segments that
-  follow it (TDS 16.2)
+  @details The longest XTID the standard can describe: the two fixed words, the header, a
+  144-bit serial and every optional segment through the one that carries the User memory size
+  (TDS 16.2). Twenty words in all
  */
-constexpr size_t TID_MAX_BYTES{32};
+constexpr size_t TID_MAX_BYTES{40};
 
 /*!
   @struct Epc
@@ -151,14 +152,78 @@ struct Tid {
 
 /*!
   @enum Vendor
-  @brief Tag mask-designer identifier held in TID bits 0Bh to 13h
+  @brief Mask designers this library knows by name
+  @details The value is the mask-designer identifier the registration authority assigned, as
+  held in TID bits 0Bh to 13h. The list covers the designers whose chips turn up on tags in the
+  field, not the whole registry; a tag from any other reports Vendor::Unknown while Tag::mdid
+  still carries the raw identifier, which can be looked up in the GS1 registry at
+  https://www.gs1.org/docs/epc/mdid_list.json
+  @note Being named here says who made the chip, nothing more. Chip resolution is a separate
+  step, and only the designers in resolveChip() have their model numbers listed
  */
 enum class Vendor : uint16_t {
-    Unknown = 0x000,
-    Impinj  = 0x001,
-    Alien   = 0x003,
-    NXP     = 0x006,
+    Unknown               = 0x000,
+    Impinj                = 0x001,
+    TexasInstruments      = 0x002,
+    Alien                 = 0x003,
+    Atmel                 = 0x005,
+    NXP                   = 0x006,
+    STMicroelectronics    = 0x007,
+    EPMicroelectronics    = 0x008,
+    EMMicroelectronic     = 0x00B,
+    Quanray               = 0x00F,
+    Fujitsu               = 0x010,
+    Nationz               = 0x01B,
+    Invengo               = 0x01C,
+    RFMicron              = 0x024,
+    FudanMicroelectronics = 0x027,
+    AMS                   = 0x02F,
+    HuadaSemiconductor    = 0x032,
+    Mikron                = 0x034,
 };
+
+namespace detail {
+/*!
+  @struct VendorEntry
+  @brief A named mask designer paired with the name the registry spells it out as
+ */
+struct VendorEntry {
+    Vendor vendor;     //!< Enumerator
+    const char* name;  //!< Name as the GS1 registry gives it
+};
+
+/*!
+  @brief The mask designers this library names
+  @param[out] count Number of entries
+  @return Pointer to the first entry
+  @details resolveVendor and Tag::vendorAsString both read this table, so a designer added here
+  becomes both recognised and printable in a single edit
+ */
+inline const VendorEntry* vendorEntries(size_t& count)
+{
+    static const VendorEntry entries[] = {
+        {Vendor::Impinj, "Impinj"},
+        {Vendor::TexasInstruments, "Texas Instruments"},
+        {Vendor::Alien, "Alien Technology"},
+        {Vendor::Atmel, "Atmel"},
+        {Vendor::NXP, "NXP Semiconductors"},
+        {Vendor::STMicroelectronics, "ST Microelectronics"},
+        {Vendor::EPMicroelectronics, "EP Microelectronics"},
+        {Vendor::EMMicroelectronic, "EM Microelectronic"},
+        {Vendor::Quanray, "Quanray Electronics"},
+        {Vendor::Fujitsu, "Fujitsu"},
+        {Vendor::Nationz, "Nationz"},
+        {Vendor::Invengo, "Invengo"},
+        {Vendor::RFMicron, "RFMicron"},
+        {Vendor::FudanMicroelectronics, "Shanghai Fudan Microelectronics Group"},
+        {Vendor::AMS, "ams AG"},
+        {Vendor::HuadaSemiconductor, "Huada Semiconductor"},
+        {Vendor::Mikron, "PJSC Mikron"},
+    };
+    count = sizeof(entries) / sizeof(entries[0]);
+    return entries;
+}
+}  // namespace detail
 
 /*!
   @enum Chip
@@ -171,6 +236,8 @@ enum class Chip : uint8_t {
     ImpinjMonza4QT,
     NxpUcodeG2iM,
     NxpUcodeG2iMPlus,
+    NxpUcode8,
+    NxpUcode9,
 };
 
 /*!
@@ -188,8 +255,9 @@ struct Tag {
 
     // Filled in by identification
     Tid tid{};                        //!< TID starting at word 0
-    Chip chip{Chip::Unknown};         //!< Identified chip
-    Vendor vendor{Vendor::Unknown};   //!< Mask-designer identifier
+    Chip chip{Chip::Unknown};         //!< Identified chip, Unknown when the pair below is not listed
+    Vendor vendor{Vendor::Unknown};   //!< Named mask designer, Unknown when mdid is not listed
+    uint16_t mdid{};                  //!< Raw mask-designer identifier (9 bits)
     uint16_t model_number{};          //!< Tag model number (12 bits)
     uint16_t serial_bits{};           //!< Length of the XTID serial, 0 when the tag has none
     uint16_t user_memory_bits{};      //!< Size of the User bank, 0 when unknown
@@ -205,6 +273,8 @@ struct Tag {
         return !epc.empty();
     }
     //! @brief Chip name, "Unknown" until the tag has been identified
+    //! @brief Mask designer as a printable name, "Unknown" when the identifier is not one we list
+    std::string vendorAsString() const;
     std::string chipAsString() const;
 };
 
@@ -225,25 +295,67 @@ inline uint16_t xtidSerialBits(const uint16_t xtid_header)
 }
 
 /*!
-  @brief Resolve a chip from its mask-designer identifier and model number
-  @param vendor Mask-designer identifier
+  @brief Resolve a named mask designer from its identifier
+  @param mdid Mask-designer identifier (9 bits)
+  @return Vendor, or Vendor::Unknown when the identifier is not one we list
+ */
+inline Vendor resolveVendor(const uint16_t mdid)
+{
+    size_t count{};
+    const detail::VendorEntry* entries = detail::vendorEntries(count);
+    for (size_t i = 0; i < count; ++i) {
+        if (static_cast<uint16_t>(entries[i].vendor) == mdid) {
+            return entries[i].vendor;
+        }
+    }
+    return Vendor::Unknown;
+}
+
+/*!
+  @brief Resolve a chip from its mask designer and model number
+  @param vendor Named mask designer
   @param model_number Tag model number
   @return Chip, or Chip::Unknown when the pair is not one we have confirmed
   @note Only pairs read from a manufacturer datasheet are listed. A tag whose chip comes back
-  Unknown still reports its vendor and model number
+  Unknown still reports its raw mask-designer identifier and model number
  */
 inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
 {
-    if (vendor == Vendor::NXP) {
-        // UCODE G2iM/G2iM+ datasheet Rev 3.7: TID starts E200680Ah and E200680Bh
-        if (model_number == 0x80A) {
-            return Chip::NxpUcodeG2iM;
-        }
-        if (model_number == 0x80B) {
-            return Chip::NxpUcodeG2iMPlus;
-        }
+    switch (vendor) {
+        case Vendor::Impinj:
+            // Monza 4 datasheet Rev 8.0 Table 4-7
+            return model_number == 0x105 ? Chip::ImpinjMonza4QT : Chip::Unknown;
+        case Vendor::Alien:
+            switch (model_number) {
+                case 0x412:
+                    return Chip::AlienHiggs3;  // Higgs 3 IC datasheet, Table 1
+                case 0x821:
+                    // Neither Alien nor the GS1 registry publishes this one. Six independent
+                    // third-party tables agree on it, and it is consistent with the datasheet
+                    // saying Higgs 9 carries an XTID, but it has yet to be read off a real tag
+                    return Chip::AlienHiggs9;
+                default:
+                    return Chip::Unknown;
+            }
+        case Vendor::NXP:
+            switch (model_number) {
+                case 0x80A:
+                    return Chip::NxpUcodeG2iM;  // UCODE G2iM datasheet Rev 3.7
+                case 0x80B:
+                    return Chip::NxpUcodeG2iMPlus;
+                case 0x894:
+                    return Chip::NxpUcode8;  // SL3S1205/1215 datasheet
+                case 0x995:
+                case 0x915:
+                    // NXP moved UCODE 9 from 995h to 915h in PCN 202301029F01 without renaming
+                    // the part, so both are in the field
+                    return Chip::NxpUcode9;
+                default:
+                    return Chip::Unknown;
+            }
+        default:
+            return Chip::Unknown;
     }
-    return Chip::Unknown;
 }
 
 /*!
@@ -264,7 +376,8 @@ inline bool decodeTid(Tag& tag, const uint8_t* tid, const size_t len)
     tag.has_xtid          = (tid[1] & 0x80) != 0;
     tag.supports_security = (tid[1] & 0x40) != 0;
     tag.supports_file     = (tid[1] & 0x20) != 0;
-    tag.vendor            = static_cast<Vendor>(((tid[1] & 0x1F) << 4) | (tid[2] >> 4));
+    tag.mdid              = static_cast<uint16_t>(((tid[1] & 0x1F) << 4) | (tid[2] >> 4));
+    tag.vendor            = resolveVendor(tag.mdid);
     tag.model_number      = static_cast<uint16_t>(((tid[2] & 0x0F) << 8) | tid[3]);
     tag.chip              = resolveChip(tag.vendor, tag.model_number);
     tag.serial_bits       = 0;
@@ -442,6 +555,18 @@ inline std::string Tid::toString() const
     return detail::to_hex(data.data(), size);
 }
 
+inline std::string Tag::vendorAsString() const
+{
+    size_t count{};
+    const detail::VendorEntry* entries = detail::vendorEntries(count);
+    for (size_t i = 0; i < count; ++i) {
+        if (entries[i].vendor == vendor) {
+            return entries[i].name;
+        }
+    }
+    return "Unknown";
+}
+
 inline std::string Tag::chipAsString() const
 {
     switch (chip) {
@@ -455,6 +580,10 @@ inline std::string Tag::chipAsString() const
             return "NXP UCODE G2iM";
         case Chip::NxpUcodeG2iMPlus:
             return "NXP UCODE G2iM+";
+        case Chip::NxpUcode8:
+            return "NXP UCODE 8";
+        case Chip::NxpUcode9:
+            return "NXP UCODE 9";
         default:
             return "Unknown";
     }

@@ -469,6 +469,7 @@ TEST(UHF, DecodeTid)
     const uint8_t g2im[] = {0xE2, 0x00, 0x68, 0x0A};
     EXPECT_TRUE(m5::uhf::decodeTid(tag, g2im, sizeof(g2im)));
     EXPECT_EQ(tag.vendor, m5::uhf::Vendor::NXP);
+    EXPECT_EQ(tag.mdid, 0x006);
     EXPECT_EQ(tag.model_number, 0x80A);
     EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcodeG2iM);
     EXPECT_EQ(tag.chipAsString(), "NXP UCODE G2iM");
@@ -483,15 +484,14 @@ TEST(UHF, DecodeTid)
     EXPECT_EQ(tag.model_number, 0x80B);
     EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcodeG2iMPlus);
 
-    // An Impinj tag carrying an XTID with a 48-bit serial. The chip is not in the table yet,
-    // so it stays Unknown while the vendor and model number still come through
+    // An Impinj tag carrying an XTID with a 48-bit serial
     const uint8_t impinj[] = {0xE2, 0x80, 0x11, 0x05, 0x20, 0x00};
     tag                    = m5::uhf::Tag{};
     EXPECT_TRUE(m5::uhf::decodeTid(tag, impinj, sizeof(impinj)));
     EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Impinj);
+    EXPECT_EQ(tag.mdid, 0x001);
     EXPECT_EQ(tag.model_number, 0x105);
-    EXPECT_EQ(tag.chip, m5::uhf::Chip::Unknown);
-    EXPECT_EQ(tag.chipAsString(), "Unknown");
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::ImpinjMonza4QT);
     EXPECT_TRUE(tag.has_xtid);
     EXPECT_EQ(tag.serial_bits, 48U);
 
@@ -505,6 +505,99 @@ TEST(UHF, DecodeTid)
     EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Alien);
     EXPECT_EQ(tag.model_number, 0x123);
     EXPECT_EQ(tag.serial_bits, 0U);  // the header says no serialisation
+
+    // Impinj Monza 4QT, from the Monza 4 datasheet Rev 8.0
+    const uint8_t monza4qt[] = {0xE2, 0x80, 0x11, 0x05, 0x20, 0x00};
+    tag                      = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, monza4qt, sizeof(monza4qt)));
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::ImpinjMonza4QT);
+    EXPECT_EQ(tag.chipAsString(), "Impinj Monza 4QT");
+
+    // NXP UCODE 8, the chip on the tag this library was first tried against
+    const uint8_t ucode8[] = {0xE2, 0x80, 0x68, 0x94};
+    tag                    = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, ucode8, sizeof(ucode8)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::NXP);
+    EXPECT_EQ(tag.model_number, 0x894);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcode8);
+
+    // NXP moved UCODE 9 from 995h to 915h without renaming the part, so both mean UCODE 9
+    const uint8_t ucode9_old[] = {0xE2, 0x80, 0x69, 0x95};
+    tag                        = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, ucode9_old, sizeof(ucode9_old)));
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcode9);
+    const uint8_t ucode9_new[] = {0xE2, 0x80, 0x69, 0x15};
+    tag                        = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, ucode9_new, sizeof(ucode9_new)));
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcode9);
+
+    // Alien Higgs-3
+    const uint8_t higgs3[] = {0xE2, 0x00, 0x34, 0x12};
+    tag                    = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, higgs3, sizeof(higgs3)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Alien);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::AlienHiggs3);
+    EXPECT_FALSE(tag.has_xtid);
+
+    // The same designer with a model number nobody has published stays Unknown
+    const uint8_t alien_other[] = {0xE2, 0x00, 0x3F, 0xFF};
+    tag                         = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, alien_other, sizeof(alien_other)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Alien);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::Unknown);
+
+    // A designer we do not list still reports its raw identifier and model number, so an
+    // unsupported tag can be described well enough to be added to the table later
+    const uint8_t unlisted[] = {0xE2, 0x01, 0x23, 0x45, 0x00, 0x00};
+    tag                      = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, unlisted, sizeof(unlisted)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Unknown);
+    EXPECT_EQ(tag.mdid, 0x012);
+    EXPECT_EQ(tag.model_number, 0x345);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::Unknown);
+
+    // Every identifier the enum lists resolves back to itself
+    EXPECT_EQ(m5::uhf::resolveVendor(0x001), m5::uhf::Vendor::Impinj);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x002), m5::uhf::Vendor::TexasInstruments);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x003), m5::uhf::Vendor::Alien);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x005), m5::uhf::Vendor::Atmel);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x006), m5::uhf::Vendor::NXP);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x007), m5::uhf::Vendor::STMicroelectronics);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x008), m5::uhf::Vendor::EPMicroelectronics);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x00B), m5::uhf::Vendor::EMMicroelectronic);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x00F), m5::uhf::Vendor::Quanray);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x010), m5::uhf::Vendor::Fujitsu);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x01B), m5::uhf::Vendor::Nationz);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x01C), m5::uhf::Vendor::Invengo);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x024), m5::uhf::Vendor::RFMicron);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x027), m5::uhf::Vendor::FudanMicroelectronics);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x02F), m5::uhf::Vendor::AMS);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x032), m5::uhf::Vendor::HuadaSemiconductor);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x034), m5::uhf::Vendor::Mikron);
+    // A registered designer we do not list, an identifier nobody holds, and the unassigned zero
+    EXPECT_EQ(m5::uhf::resolveVendor(0x012), m5::uhf::Vendor::Unknown);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x1FF), m5::uhf::Vendor::Unknown);
+    EXPECT_EQ(m5::uhf::resolveVendor(0x000), m5::uhf::Vendor::Unknown);
+
+    // A designer that is named but whose model numbers are not listed still reaches Chip::Unknown
+    const uint8_t em[] = {0xE2, 0x00, 0xB1, 0x23, 0x00, 0x00};
+    tag                = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, em, sizeof(em)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::EMMicroelectronic);
+    EXPECT_EQ(tag.mdid, 0x00B);
+    EXPECT_EQ(tag.model_number, 0x123);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::Unknown);
+    EXPECT_STREQ(tag.vendorAsString().c_str(), "EM Microelectronic");
+    EXPECT_STREQ(tag.chipAsString().c_str(), "Unknown");
+
+    // Every named designer prints, and one we do not list falls back
+    tag        = m5::uhf::Tag{};
+    tag.vendor = m5::uhf::Vendor::Impinj;
+    EXPECT_STREQ(tag.vendorAsString().c_str(), "Impinj");
+    tag.vendor = m5::uhf::Vendor::FudanMicroelectronics;
+    EXPECT_STREQ(tag.vendorAsString().c_str(), "Shanghai Fudan Microelectronics Group");
+    tag.vendor = m5::uhf::Vendor::Unknown;
+    EXPECT_STREQ(tag.vendorAsString().c_str(), "Unknown");
 
     // A class identifier other than E2h is not something this decoder understands
     const uint8_t e0[] = {0xE0, 0x00, 0x68, 0x0A};
