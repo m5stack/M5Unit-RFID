@@ -41,22 +41,31 @@ TEST(UHF, BuildFrame)
 
     // Get module information (hardware version): BB 00 03 00 01 00 04 7E
     const uint8_t param0[] = {0x00};
-    ASSERT_TRUE(build_frame(buf, 0x00, 0x03, param0, sizeof(param0)));
+    if (!(build_frame(buf, 0x00, 0x03, param0, sizeof(param0)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     const uint8_t expect0[] = {0xBB, 0x00, 0x03, 0x00, 0x01, 0x00, 0x04, 0x7E};
-    ASSERT_EQ(buf.size(), sizeof(expect0));
+    EXPECT_EQ(buf.size(), sizeof(expect0));
     EXPECT_EQ(0, memcmp(buf.data(), expect0, sizeof(expect0)));
 
     // Stop multiple polling: BB 00 28 00 00 28 7E (no parameter)
-    ASSERT_TRUE(build_frame(buf, 0x00, 0x28, nullptr, 0));
+    if (!(build_frame(buf, 0x00, 0x28, nullptr, 0))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     const uint8_t expect1[] = {0xBB, 0x00, 0x28, 0x00, 0x00, 0x28, 0x7E};
-    ASSERT_EQ(buf.size(), sizeof(expect1));
+    EXPECT_EQ(buf.size(), sizeof(expect1));
     EXPECT_EQ(0, memcmp(buf.data(), expect1, sizeof(expect1)));
 
     // Multiple polling 10000 times: BB 00 27 00 03 22 27 10 83 7E
     const uint8_t param2[] = {0x22, 0x27, 0x10};
-    ASSERT_TRUE(build_frame(buf, 0x00, 0x27, param2, sizeof(param2)));
+    if (!(build_frame(buf, 0x00, 0x27, param2, sizeof(param2)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     const uint8_t expect2[] = {0xBB, 0x00, 0x27, 0x00, 0x03, 0x22, 0x27, 0x10, 0x83, 0x7E};
-    ASSERT_EQ(buf.size(), sizeof(expect2));
+    EXPECT_EQ(buf.size(), sizeof(expect2));
     EXPECT_EQ(0, memcmp(buf.data(), expect2, sizeof(expect2)));
 }
 
@@ -66,15 +75,21 @@ TEST(UHF, ParseFrame)
 
     // Valid response: BB 01 07 00 01 00 09 7E (Set Operating Region succeeded)
     const uint8_t raw0[] = {0xBB, 0x01, 0x07, 0x00, 0x01, 0x00, 0x09, 0x7E};
-    ASSERT_TRUE(parse_frame(f, raw0, sizeof(raw0)));
+    if (!(parse_frame(f, raw0, sizeof(raw0)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_EQ(f.type, 0x01);
     EXPECT_EQ(f.command, 0x07);
-    ASSERT_EQ(f.parameter.size(), 1U);
+    EXPECT_EQ(f.parameter.size(), 1U);
     EXPECT_EQ(f.parameter[0], 0x00);
 
     // No parameter
     const uint8_t raw1[] = {0xBB, 0x00, 0x28, 0x00, 0x00, 0x28, 0x7E};
-    ASSERT_TRUE(parse_frame(f, raw1, sizeof(raw1)));
+    if (!(parse_frame(f, raw1, sizeof(raw1)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_EQ(f.command, 0x28);
     EXPECT_TRUE(f.parameter.empty());
 
@@ -104,10 +119,13 @@ TEST(UHF, ParseFrameR200Delimiter)
     Frame f{};
     // R200 uses 0xAA / 0xDD but the structure is identical
     const uint8_t raw[] = {0xAA, 0x00, 0x07, 0x00, 0x03, 0x04, 0x02, 0x05, 0x15, 0xDD};
-    ASSERT_TRUE(parse_frame(f, raw, sizeof(raw), 0xAA, 0xDD));
+    if (!(parse_frame(f, raw, sizeof(raw), 0xAA, 0xDD))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_EQ(f.type, 0x00);
     EXPECT_EQ(f.command, 0x07);
-    ASSERT_EQ(f.parameter.size(), 3U);
+    EXPECT_EQ(f.parameter.size(), 3U);
     EXPECT_EQ(f.parameter[0], 0x04);
     EXPECT_EQ(f.parameter[2], 0x05);
 }
@@ -121,24 +139,33 @@ TEST(UHF, ParseTagNotification)
                            0x34, 0x00,                                                              // PC
                            0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
                            0x3A, 0x76};                                                             // CRC
-    ASSERT_TRUE(parse_tag_notification(tag, p96, sizeof(p96)));
+    if (!(parse_tag_notification(tag, p96, sizeof(p96)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_EQ(tag.rssi, -55);  // 0xC9 as a signed byte
     EXPECT_EQ(tag.pc, 0x3400);
-    ASSERT_EQ(tag.epc.size(), 12U);
+    EXPECT_EQ(tag.epc.size, 12U);
     EXPECT_EQ(tag.epc[0], 0x30);
     EXPECT_EQ(tag.epc[11], 0x70);
     EXPECT_EQ(tag.crc, 0x3A76);
 
     // 32-bit EPC (4 bytes)
     const uint8_t p32[] = {0xB0, 0x18, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0x12, 0x34};
-    ASSERT_TRUE(parse_tag_notification(tag, p32, sizeof(p32)));
+    if (!(parse_tag_notification(tag, p32, sizeof(p32)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_EQ(tag.rssi, -80);
-    ASSERT_EQ(tag.epc.size(), 4U);
+    EXPECT_EQ(tag.epc.size, 4U);
     EXPECT_EQ(tag.epc[3], 0xDD);
 
     // Positive RSSI
     const uint8_t ppos[] = {0x0A, 0x34, 0x00, 0x01, 0x02, 0x03, 0x04, 0x00, 0x00};
-    ASSERT_TRUE(parse_tag_notification(tag, ppos, sizeof(ppos)));
+    if (!(parse_tag_notification(tag, ppos, sizeof(ppos)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_EQ(tag.rssi, 10);
 
     // Too short (5 bytes means an empty EPC, which is not a valid tag)
@@ -172,9 +199,9 @@ m5::uhf::Tag make_tag(const std::vector<uint8_t>& epc, const int8_t rssi)
 {
     m5::uhf::Tag t{};
     t.pc   = 0x3400;
-    t.epc  = epc;
     t.crc  = 0x1234;
     t.rssi = rssi;
+    t.epc.assign(epc.data(), epc.size());
     return t;
 }
 }  // namespace
@@ -185,24 +212,24 @@ TEST(UHF, DeduplicateByEPC)
 
     // The first tag is appended
     EXPECT_TRUE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03, 0x04}, -50)));
-    ASSERT_EQ(dst.size(), 1U);
+    EXPECT_EQ(dst.size(), 1U);
 
     // The same EPC is rejected even when the RSSI differs
     EXPECT_FALSE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03, 0x04}, -60)));
-    ASSERT_EQ(dst.size(), 1U);
+    EXPECT_EQ(dst.size(), 1U);
     EXPECT_EQ(dst[0].rssi, -50);  // The first observation is kept
 
     // A different EPC is appended
     EXPECT_TRUE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03, 0x05}, -55)));
-    ASSERT_EQ(dst.size(), 2U);
+    EXPECT_EQ(dst.size(), 2U);
 
     // A prefix of an existing EPC is a different tag (length matters)
     EXPECT_TRUE(m5::uhf::append_unique(dst, make_tag({0x01, 0x02, 0x03}, -55)));
-    ASSERT_EQ(dst.size(), 3U);
+    EXPECT_EQ(dst.size(), 3U);
 
     // An empty EPC is never appended
     EXPECT_FALSE(m5::uhf::append_unique(dst, make_tag({}, -55)));
-    ASSERT_EQ(dst.size(), 3U);
+    EXPECT_EQ(dst.size(), 3U);
 }
 
 TEST(UHF, Gen2CRC16)
@@ -225,7 +252,10 @@ TEST(UHF, VerifyTagCRC)
                              0x34, 0x00,                                                              // PC
                              0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
                              0x3A, 0x76};                                                             // CRC
-    ASSERT_TRUE(parse_tag_notification(tag, param, sizeof(param)));
+    if (!(parse_tag_notification(tag, param, sizeof(param)))) {
+        EXPECT_TRUE(false);
+        return;
+    }
     EXPECT_TRUE(verify_tag_crc(tag));
 
     // Corrupting the EPC must be detected

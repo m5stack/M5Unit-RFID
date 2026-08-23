@@ -165,10 +165,13 @@ inline bool parse_tag_notification(m5::uhf::Tag& out, const uint8_t* param, cons
     }
 
     const size_t epc_len = len - TAG_NOTIFICATION_OVERHEAD;
-    out.rssi             = static_cast<int8_t>(param[0]);
-    out.pc               = static_cast<uint16_t>((param[1] << 8) | param[2]);
-    out.epc.assign(param + 3, param + 3 + epc_len);
-    out.crc = static_cast<uint16_t>((param[3 + epc_len] << 8) | param[4 + epc_len]);
+    // An EPC longer than the standard allows means the frame is not what it claims to be
+    if (!out.epc.assign(param + 3, epc_len)) {
+        return false;
+    }
+    out.rssi = static_cast<int8_t>(param[0]);
+    out.pc   = static_cast<uint16_t>((param[1] << 8) | param[2]);
+    out.crc  = static_cast<uint16_t>((param[3 + epc_len] << 8) | param[4 + epc_len]);
     return true;
 }
 
@@ -202,12 +205,14 @@ inline bool verify_tag_crc(const m5::uhf::Tag& tag)
     if (tag.epc.empty()) {
         return false;
     }
-    std::vector<uint8_t> buf{};
-    buf.reserve(tag.epc.size() + 2);
-    buf.push_back(static_cast<uint8_t>(tag.pc >> 8));
-    buf.push_back(static_cast<uint8_t>(tag.pc & 0xFF));
-    buf.insert(buf.end(), tag.epc.begin(), tag.epc.end());
-    return gen2_crc16(buf.data(), buf.size()) == tag.crc;
+    // The Gen2 CRC-16 covers the PC followed by the EPC, so they are laid out contiguously
+    uint8_t buf[2 + m5::uhf::EPC_MAX_BYTES]{};
+    buf[0] = static_cast<uint8_t>(tag.pc >> 8);
+    buf[1] = static_cast<uint8_t>(tag.pc & 0xFF);
+    for (size_t i = 0; i < tag.epc.size; ++i) {
+        buf[2 + i] = tag.epc[i];
+    }
+    return gen2_crc16(buf, tag.epc.size + 2U) == tag.crc;
 }
 
 //! @brief Command code used by every failure notification

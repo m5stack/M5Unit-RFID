@@ -50,18 +50,15 @@ void print_channel_levels(const char* what, const m5::uhf::ChannelLevels& levels
 
 void print_tag(const m5::uhf::Tag& tag)
 {
-    std::string epc{};
-    for (size_t i = 0; i < tag.epc.size(); ++i) {
-        epc += m5::utility::formatString("%02X", tag.epc[i]);
-    }
+    const std::string epc = tag.epc.toString();
 
     // The PC carries the EPC length, the user memory indicator and the numbering system,
     // which tells a lot about an unknown tag without reading any memory bank
     const uint8_t words  = m5::uhf::pcEPCLengthWords(tag.pc);
-    const bool length_ok = (words * 2 == static_cast<int>(tag.epc.size()));
+    const bool length_ok = (words * 2 == static_cast<int>(tag.epc.size));
     const bool crc_ok    = m5::unit::jrd4035::verify_tag_crc(tag);
 
-    M5_LOGI("EPC : %s (%u bytes / %u bits)", epc.c_str(), (unsigned)tag.epc.size(), (unsigned)(tag.epc.size() * 8));
+    M5_LOGI("EPC : %s (%u bytes / %u bits)", epc.c_str(), (unsigned)tag.epc.size, (unsigned)(tag.epc.size * 8));
     M5_LOGI("PC  : %04X len=%uword UMI=%u XI=%u NSI=0x%03X -> length %s", tag.pc, words,
             m5::uhf::pcUserMemoryIndicator(tag.pc) ? 1 : 0, m5::uhf::pcXPCIndicator(tag.pc) ? 1 : 0,
             m5::uhf::pcNumberingSystemIdentifier(tag.pc), length_ok ? "matches" : "MISMATCH");
