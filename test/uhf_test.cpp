@@ -445,3 +445,71 @@ TEST(UHF, BuildKillTag)
     // A tag whose kill password is zero refuses to be killed, so the frame is never built
     EXPECT_FALSE(build_kill_tag(param, 0));
 }
+
+TEST(UHF, XtidSerialBits)
+{
+    // TDS 16.2.2: bits 15-13 hold the serialisation code
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0x0000), 0U);  // no serial
+    // TDS: "If the tag only contained a 48 bit serial number the XTID header would be 0010000000000000"
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0x2000), 48U);
+    // TDS: a fully populated XTID header, still a 48-bit serial plus every optional segment
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0x3C00), 48U);
+    // 48 + (value - 1) * 16 for the rest
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0x4000), 64U);
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0x6000), 80U);
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0x8000), 96U);
+    EXPECT_EQ(m5::uhf::xtidSerialBits(0xE000), 144U);  // the longest the encoding allows
+}
+
+TEST(UHF, DecodeTid)
+{
+    m5::uhf::Tag tag{};
+
+    // UCODE G2iM datasheet Rev 3.7: the TID starts E200680Ah
+    const uint8_t g2im[] = {0xE2, 0x00, 0x68, 0x0A};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, g2im, sizeof(g2im)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::NXP);
+    EXPECT_EQ(tag.model_number, 0x80A);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcodeG2iM);
+    EXPECT_EQ(tag.chipAsString(), "NXP UCODE G2iM");
+    EXPECT_FALSE(tag.has_xtid);
+    EXPECT_FALSE(tag.supports_security);
+    EXPECT_FALSE(tag.supports_file);
+    EXPECT_EQ(tag.serial_bits, 0U);
+
+    // UCODE G2iM+ differs only in the model number
+    const uint8_t g2imp[] = {0xE2, 0x00, 0x68, 0x0B};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, g2imp, sizeof(g2imp)));
+    EXPECT_EQ(tag.model_number, 0x80B);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::NxpUcodeG2iMPlus);
+
+    // An Impinj tag carrying an XTID with a 48-bit serial. The chip is not in the table yet,
+    // so it stays Unknown while the vendor and model number still come through
+    const uint8_t impinj[] = {0xE2, 0x80, 0x11, 0x05, 0x20, 0x00};
+    tag                    = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, impinj, sizeof(impinj)));
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Impinj);
+    EXPECT_EQ(tag.model_number, 0x105);
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::Unknown);
+    EXPECT_EQ(tag.chipAsString(), "Unknown");
+    EXPECT_TRUE(tag.has_xtid);
+    EXPECT_EQ(tag.serial_bits, 48U);
+
+    // The security and file indicators sit next to the XTID indicator
+    const uint8_t flags[] = {0xE2, 0xE0, 0x31, 0x23, 0x00, 0x00};
+    tag                   = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, flags, sizeof(flags)));
+    EXPECT_TRUE(tag.has_xtid);
+    EXPECT_TRUE(tag.supports_security);
+    EXPECT_TRUE(tag.supports_file);
+    EXPECT_EQ(tag.vendor, m5::uhf::Vendor::Alien);
+    EXPECT_EQ(tag.model_number, 0x123);
+    EXPECT_EQ(tag.serial_bits, 0U);  // the header says no serialisation
+
+    // A class identifier other than E2h is not something this decoder understands
+    const uint8_t e0[] = {0xE0, 0x00, 0x68, 0x0A};
+    EXPECT_FALSE(m5::uhf::decodeTid(tag, e0, sizeof(e0)));
+    // Too short to hold even the fixed part
+    EXPECT_FALSE(m5::uhf::decodeTid(tag, g2im, 3));
+    EXPECT_FALSE(m5::uhf::decodeTid(tag, nullptr, 4));
+}

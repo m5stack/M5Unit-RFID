@@ -208,6 +208,72 @@ struct Tag {
     std::string chipAsString() const;
 };
 
+//! @brief ISO/IEC 15963 allocation class identifier used by EPCglobal tags
+constexpr uint8_t TID_CLASS_EPCGLOBAL{0xE2};
+
+/*!
+  @brief Serial length an XTID header announces
+  @param xtid_header XTID header word, TID bits 20h to 2Fh
+  @return Length of the serial in bits, 0 when the tag carries none
+  @details TDS 16.2.2 puts the serialisation bits in 15 to 13: zero means no serial, and any
+  other value means 48 + (value - 1) * 16 bits, so up to 144
+ */
+inline uint16_t xtidSerialBits(const uint16_t xtid_header)
+{
+    const uint8_t v = static_cast<uint8_t>((xtid_header >> 13) & 0x07);
+    return v == 0 ? 0U : static_cast<uint16_t>(48 + (v - 1) * 16);
+}
+
+/*!
+  @brief Resolve a chip from its mask-designer identifier and model number
+  @param vendor Mask-designer identifier
+  @param model_number Tag model number
+  @return Chip, or Chip::Unknown when the pair is not one we have confirmed
+  @note Only pairs read from a manufacturer datasheet are listed. A tag whose chip comes back
+  Unknown still reports its vendor and model number
+ */
+inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
+{
+    if (vendor == Vendor::NXP) {
+        // UCODE G2iM/G2iM+ datasheet Rev 3.7: TID starts E200680Ah and E200680Bh
+        if (model_number == 0x80A) {
+            return Chip::NxpUcodeG2iM;
+        }
+        if (model_number == 0x80B) {
+            return Chip::NxpUcodeG2iMPlus;
+        }
+    }
+    return Chip::Unknown;
+}
+
+/*!
+  @brief Decode the fixed part of a TID into a tag
+  @param[in,out] tag Tag to fill
+  @param tid TID bytes starting at word 0
+  @param len Length of tid in bytes, at least 4
+  @return True if the TID carries the EPCglobal class identifier
+  @details Gen2 v2.1 6.3.2.1.3 fixes the layout of the first 32 bits: an 8-bit class
+  identifier, the XTID, security and file indicators, a 9-bit mask-designer identifier and a
+  12-bit model number. Bytes 4 and 5, when present and the tag has an XTID, hold the XTID header
+ */
+inline bool decodeTid(Tag& tag, const uint8_t* tid, const size_t len)
+{
+    if (tid == nullptr || len < 4 || tid[0] != TID_CLASS_EPCGLOBAL) {
+        return false;
+    }
+    tag.has_xtid          = (tid[1] & 0x80) != 0;
+    tag.supports_security = (tid[1] & 0x40) != 0;
+    tag.supports_file     = (tid[1] & 0x20) != 0;
+    tag.vendor            = static_cast<Vendor>(((tid[1] & 0x1F) << 4) | (tid[2] >> 4));
+    tag.model_number      = static_cast<uint16_t>(((tid[2] & 0x0F) << 8) | tid[3]);
+    tag.chip              = resolveChip(tag.vendor, tag.model_number);
+    tag.serial_bits       = 0;
+    if (tag.has_xtid && len >= 6) {
+        tag.serial_bits = xtidSerialBits(static_cast<uint16_t>((tid[4] << 8) | tid[5]));
+    }
+    return true;
+}
+
 /*!
   @enum LockTarget
   @brief What a lock setting applies to, in the order EPC Gen2 lays them out
