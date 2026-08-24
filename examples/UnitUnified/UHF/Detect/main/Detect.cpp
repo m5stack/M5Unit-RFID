@@ -28,8 +28,34 @@ constexpr uint16_t USER_PROBE_WORDS{2};
 constexpr uint16_t USER_DUMP_MAX_WORDS{16};
 //! @brief Words the write test replaces and then puts back
 constexpr uint16_t WRITE_TEST_WORDS{2};
+/*
+  Reader settings tuned for a tag resting on the antenna.
+
+  A reader as it ships reaches about a metre and a half. At contact the reply overwhelms the
+  receiver: most inventory rounds find nothing and about half of every read fails, however strong
+  the reply is. Bringing the working distance in fixes it, either by lowering the transmit power or
+  by lowering the receiver gain. Measured at contact over 256 reads each: as shipped 49% of reads
+  succeed, with the gain lowered 97%, with the power lowered instead 98%.
+
+  WARNING: the module keeps these settings when it loses power, so running this sketch changes the
+  unit until something changes it back. What this unit was found set to is spelled out below; assign
+  those to the three constants in use to put it back the way it was.
+
+  Those are not the values the chip's own documentation calls the defaults, which are a mixer gain
+  of 9dB and a threshold of 0x01B0. This unit came set for distance rather than for stability.
+*/
+namespace as_shipped {
+constexpr int16_t TX_POWER_DBM100{2600};
+constexpr m5::unit::m100::MixerGain MIXER_GAIN{m5::unit::m100::MixerGain::dB6};
+constexpr uint16_t THRESHOLD{0x00B0};
+}  // namespace as_shipped
+
 //! @brief Transmit power in 1/100 dBm. The module accepts 1700 to 2600
-constexpr int16_t TX_POWER_DBM100{2000};
+constexpr int16_t TX_POWER_DBM100{2600};
+//! @brief Demodulation threshold. 0x01B0 is the lowest the chip documents as worth using
+constexpr uint16_t DEMODULATOR_THRESHOLD{0x01B0};
+//! @brief Mixer gain, a step below what this unit shipped with
+constexpr m5::unit::m100::MixerGain DEMODULATOR_MIXER_GAIN{m5::unit::m100::MixerGain::dB3};
 
 const char* region_to_string(const m5::uhf::Region r)
 {
@@ -270,8 +296,18 @@ void setup()
     // range further still, which is the vendor's next step after transmit power for close work
     m5::unit::m100::DemodulatorParameters dp{};
     if (unit.readDemodulatorParameters(dp)) {
-        M5_LOGI("Demodulator: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
+        M5_LOGI("Demodulator as found: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
                 m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
+        dp.mixer_gain = DEMODULATOR_MIXER_GAIN;
+        dp.threshold  = DEMODULATOR_THRESHOLD;
+        if (!unit.writeDemodulatorParameters(dp) || !unit.readDemodulatorParameters(dp)) {
+            M5_LOGE("Failed to set the demodulation threshold");
+        }
+        M5_LOGI("Demodulator now    : mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
+                m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
+        M5_LOGW("These settings survive a power cycle. As shipped: mixer=%udB threshold=0x%04X, power %d.%02ddBm",
+                m5::unit::m100::mixerGainDb(as_shipped::MIXER_GAIN), as_shipped::THRESHOLD,
+                as_shipped::TX_POWER_DBM100 / 100, as_shipped::TX_POWER_DBM100 % 100);
     }
     m5::uhf::QueryParameters qp{};
     if (unit.readQueryParameters(qp)) {

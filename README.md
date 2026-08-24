@@ -70,7 +70,37 @@ Support may be expanded in future updates to cover PICCs not listed here.
 
 | Standard | Detect | Read/Write | Notes |
 |---|---|---|---|
-| EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C | Yes | Not yet | Read/Write is planned |
+| EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C | Yes | Yes | Select, identify, read, write, lock and kill |
+
+Chips identified from the TID so far: NXP UCODE 8, Alien Higgs 9 and Impinj Monza 4QT. A chip that
+is not listed still reports its mask designer and model number, so it can be recognised by hand.
+
+### A Tag Resting On The Antenna
+
+A reader left as it ships reaches about a metre and a half, and a tag pressed against the antenna is
+far closer than that. At contact the reply overwhelms the receiver: most inventory rounds then find
+nothing at all, and roughly half of every read fails, even though the tag is as close as it can get
+and its RSSI is the strongest the reader ever reports.
+
+Bringing the working distance in fixes it. Either lower the transmit power, or lower the receiver
+gain, both of which the module's own tuning guide describes:
+
+```cpp
+unit.writeTransmitPower(2000);  // 20.00dBm, from a range of 17.00 to 26.00
+
+m5::unit::m100::DemodulatorParameters dp{};
+unit.readDemodulatorParameters(dp);
+dp.mixer_gain = m5::unit::m100::MixerGain::dB3;  // a step down from what the unit ships with
+dp.threshold  = 0x01B0;                          // the lowest value the chip documents
+unit.writeDemodulatorParameters(dp);
+```
+
+Measured at contact, over 256 read attempts each: as shipped, 49% of reads succeed; with the
+receiver gain lowered, 97%; with the transmit power lowered instead, 98%. Lowering the receiver gain
+is the better of the two, since the transmit power is what energises the tag in the first place.
+
+> **Note:** The module keeps these settings when it loses power. Writing them changes the unit until
+> something writes them back, so an application that wants the shipped behaviour has to restore it.
 
 
 ## Emulation
