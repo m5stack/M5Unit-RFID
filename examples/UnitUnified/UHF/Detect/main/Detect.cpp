@@ -5,7 +5,8 @@
  */
 /*
   Example using M5UnitUnified for M5Unit-RFID
-  Detect UHF-RFID tags with Unit UHF-RFID (U107), and identify a single tag by its TID
+  Detect UHF-RFID tags with Unit UHF-RFID (U107), identify a single tag by its TID, and write
+  to its User memory
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -25,6 +26,8 @@ m5::uhf::UHFLayer uhf{unit};
 constexpr uint16_t USER_PROBE_WORDS{2};
 //! @brief Enough of the User bank to see what is in it without filling the log with it
 constexpr uint16_t USER_DUMP_MAX_WORDS{16};
+//! @brief Words the write test replaces and then puts back
+constexpr uint16_t WRITE_TEST_WORDS{2};
 
 const char* region_to_string(const m5::uhf::Region r)
 {
@@ -93,6 +96,73 @@ void dump_bank(const char* what, const m5::uhf::Bank bank, const uint16_t word_a
         return;
     }
     M5_LOGI("%s: %s", what, to_hex(data).c_str());
+}
+
+/*!
+  Write two words of User memory, read them back and put the original contents back.
+
+  User memory is the only bank this touches. Rewriting EPC would change what the tag answers to
+  in inventory, and writing Reserved would set the access and kill passwords, which is how a
+  development tag stops being usable for development. Neither is worth it to prove a write works.
+ */
+void write_roundtrip(const m5::uhf::Tag& detected)
+{
+    if (!uhf.select(detected)) {
+        M5_LOGE("write: failed to select the tag");
+        return;
+    }
+
+    // A tag whose passwords have been set can refuse the write halfway, which would leave the
+    // original contents already gone. Checking first keeps that from happening quietly
+    std::vector<uint8_t> reserved{};
+    if (!uhf.readBank(reserved, m5::uhf::Bank::Reserved, 0, 4)) {
+        M5_LOGE("write: Reserved could not be read, so the passwords are unknown");
+        uhf.deselect();
+        return;
+    }
+    for (auto&& b : reserved) {
+        if (b != 0x00) {
+            M5_LOGW("write: this tag has a password set (%s); leaving it alone", to_hex(reserved).c_str());
+            uhf.deselect();
+            return;
+        }
+    }
+
+    std::vector<uint8_t> original{};
+    if (!uhf.readBank(original, m5::uhf::Bank::User, 0, WRITE_TEST_WORDS)) {
+        M5_LOGE("write: this tag has no User memory to write to");
+        uhf.deselect();
+        return;
+    }
+    M5_LOGI("write: original %s", to_hex(original).c_str());
+
+    const std::vector<uint8_t> pattern{0xA5, 0x5A, 0x12, 0x34};
+    if (!uhf.writeBank(m5::uhf::Bank::User, 0, pattern)) {
+        M5_LOGE("write: failed");
+        uhf.deselect();
+        return;
+    }
+
+    std::vector<uint8_t> readback{};
+    if (!uhf.readBank(readback, m5::uhf::Bank::User, 0, WRITE_TEST_WORDS)) {
+        M5_LOGE("write: wrote but could not read back, so the tag now holds the pattern");
+        uhf.deselect();
+        return;
+    }
+    M5_LOGI("write: read back %s -> %s", to_hex(readback).c_str(), readback == pattern ? "matches" : "MISMATCH");
+
+    // Put it back the way it was, and say so loudly if that does not work: the tag is left
+    // holding the pattern in that case
+    if (!uhf.writeBank(m5::uhf::Bank::User, 0, original)) {
+        M5_LOGE("write: FAILED TO RESTORE; the tag still holds %s", to_hex(pattern).c_str());
+        uhf.deselect();
+        return;
+    }
+    std::vector<uint8_t> restored{};
+    if (uhf.readBank(restored, m5::uhf::Bank::User, 0, WRITE_TEST_WORDS)) {
+        M5_LOGI("write: restored %s -> %s", to_hex(restored).c_str(), restored == original ? "matches" : "MISMATCH");
+    }
+    uhf.deselect();
 }
 
 void identify_and_dump(const m5::uhf::Tag& detected)
@@ -209,6 +279,7 @@ void setup()
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
     lcd.println("A: detect + identify");
+    lcd.println("B: write User memory (restores it)");
 }
 
 void loop()
@@ -235,6 +306,21 @@ void loop()
         } else {
             lcd.println("detect: no tag");
         }
+        return;
+    }
+
+    // Button B writes to User memory and puts the original contents back. Kept off button A so
+    // that nothing is written just by looking at a tag
+    if (M5.BtnB.wasClicked()) {
+        std::vector<m5::uhf::Tag> tags{};
+        lcd.fillScreen(TFT_DARKGREEN);
+        lcd.setCursor(0, 0);
+        if (!uhf.detect(tags, 1000) || tags.size() != 1) {
+            M5_LOGI("write: put a single tag in the field");
+            lcd.println("write: need one tag");
+            return;
+        }
+        write_roundtrip(tags[0]);
         return;
     }
 

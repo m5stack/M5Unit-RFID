@@ -758,9 +758,12 @@ bool UnitJRD4035::write_tag_memory(const m5::uhf::Bank bank, const uint16_t word
         return false;
     }
     Frame res{};
-    // Write answers under the command code of Read
-    if (!send_and_wait_answered_as(res, CMD_WRITE_TAG_MEMORY, CMD_READ_TAG_MEMORY, param.data(),
-                                   static_cast<uint16_t>(param.size()), TAG_OPERATION_TIMEOUT_MS)) {
+    // The protocol document says in prose that Write answers under the command code of Read,
+    // but the byte table on the same page reads BB 01 49 ... A9 7E, and that checksum only adds
+    // up with 0x49 in the command byte; 0x39 would make it 0x99. Same kind of slip as the one
+    // Set Select Mode carries, and the same resolution: follow the bytes
+    if (!send_and_wait(res, CMD_WRITE_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                       TAG_OPERATION_TIMEOUT_MS)) {
         return false;
     }
     return succeeded(res, "write_tag_memory") && tag_carried_it_out(res, "write_tag_memory");
