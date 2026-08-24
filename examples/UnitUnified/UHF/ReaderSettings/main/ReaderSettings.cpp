@@ -44,34 +44,41 @@ void begin_unit()
 }
 
 /*
-  Reader settings tuned for a tag resting on the antenna.
+  Three sets of reader settings, and a button to move between them.
 
   A reader as it ships reaches about a metre and a half. At contact the reply overwhelms the
   receiver: most inventory rounds find nothing and about half of every read fails, however strong
   the reply is, so RSSI is no guide to what is wrong. Bringing the working distance in fixes it,
-  either by lowering the transmit power or by lowering the receiver gain. Lowering the gain is the
-  better of the two, since the transmit power is what energises the tag in the first place.
+  and lowering the receiver gain is the better way of doing that, since the transmit power is what
+  energises the tag in the first place.
 
-  WARNING: the module keeps these settings when it loses power, so running this sketch changes the
-  unit until something changes it back. What one unit was found set to is spelled out below;
-  assign those to the three constants in use to put it back the way it was.
+  The three differ in the mixer gain and the demodulation threshold and in nothing else, which is
+  what makes them worth comparing.
 
-  Those are not the values the chip's own documentation calls the defaults, which are a mixer gain
-  of 9dB and a threshold of 0x01B0. That unit came set for distance rather than for stability, so
-  read what is there before assuming what it was.
+  WARNING: the module keeps these settings when it loses power. Nothing is written until the button
+  is pressed, so starting this sketch leaves a unit alone, but pressing it does not. What a unit
+  was set to before that is only recoverable because one of the three says what this product was
+  found shipped with.
 */
-namespace as_shipped {
-constexpr int16_t TX_POWER_DBM100{2600};
-constexpr m5::unit::m100::MixerGain MIXER_GAIN{m5::unit::m100::MixerGain::dB6};
-constexpr uint16_t THRESHOLD{0x00B0};
-}  // namespace as_shipped
+struct Preset {
+    const char* name;
+    int16_t dbm100;
+    m5::unit::m100::MixerGain mixer_gain;
+    m5::unit::m100::IFGain if_gain;
+    uint16_t threshold;
+};
 
-//! @brief Transmit power in 1/100 dBm. The module accepts 1700 to 2600
-constexpr int16_t TX_POWER_DBM100{2600};
-//! @brief Demodulation threshold. 0x01B0 is the lowest the chip documents as worth using
-constexpr uint16_t DEMODULATOR_THRESHOLD{0x01B0};
-//! @brief Mixer gain, a step below what one unit was found shipped with
-constexpr m5::unit::m100::MixerGain DEMODULATOR_MIXER_GAIN{m5::unit::m100::MixerGain::dB3};
+const Preset PRESETS[] = {
+    // What the chip's own documentation gives as the defaults
+    {"documented", 2600, m5::unit::m100::MixerGain::dB9, m5::unit::m100::IFGain::dB36, 0x01B0},
+    // What one Unit UHF-RFID (U107) was found set to out of the box: tuned for reach, with a
+    // threshold below the floor the same documentation gives. Only one unit was ever looked at,
+    // so compare it against what this sketch prints at startup before trusting it
+    {"as the unit shipped", 2600, m5::unit::m100::MixerGain::dB6, m5::unit::m100::IFGain::dB36, 0x00B0},
+    // Measured to read a tag resting on the antenna, where the other two miss most rounds
+    {"for a tag at contact", 2600, m5::unit::m100::MixerGain::dB3, m5::unit::m100::IFGain::dB36, 0x01B0},
+};
+size_t preset_index{};
 
 const char* region_to_string(const m5::uhf::Region r)
 {
@@ -153,40 +160,50 @@ void report_settings()
                 m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
     }
 }
+
+//! @brief Write one of the presets and say what the reader holds afterwards
+void apply(const Preset& preset)
+{
+    M5_LOGI("--- applying: %s ---", preset.name);
+    if (!unit.writeTransmitPower(preset.dbm100)) {
+        M5_LOGE("Failed to set the transmit power");
+    }
+    m5::unit::m100::DemodulatorParameters dp{};
+    dp.mixer_gain = preset.mixer_gain;
+    dp.if_gain    = preset.if_gain;
+    dp.threshold  = preset.threshold;
+    if (!unit.writeDemodulatorParameters(dp)) {
+        M5_LOGE("Failed to set the demodulator parameters");
+    }
+    // Reading back rather than reporting what was asked for: the two are not the same thing
+    report_settings();
+
+    lcd.fillScreen(TFT_DARKGREEN);
+    lcd.setCursor(0, 0);
+    lcd.printf("%s\n", preset.name);
+    lcd.printf("mixer %udB thr %04X\n", m5::unit::m100::mixerGainDb(preset.mixer_gain), preset.threshold);
+    lcd.printf("%d.%02d dBm\n\n", preset.dbm100 / 100, preset.dbm100 % 100);
+    lcd.println("A: next preset");
+}
 }  // namespace
 
 void setup()
 {
     begin_unit();
 
+    // Read only. A unit that has never been written to still holds whatever it shipped with, and
+    // that is worth seeing before anything replaces it
     M5_LOGI("--- as found ---");
     report_settings();
-
-    if (!unit.writeTransmitPower(TX_POWER_DBM100)) {
-        M5_LOGE("Failed to set the transmit power");
-    }
-    m5::unit::m100::DemodulatorParameters dp{};
-    if (unit.readDemodulatorParameters(dp)) {
-        dp.mixer_gain = DEMODULATOR_MIXER_GAIN;
-        dp.threshold  = DEMODULATOR_THRESHOLD;
-        if (!unit.writeDemodulatorParameters(dp)) {
-            M5_LOGE("Failed to set the demodulator parameters");
-        }
-    }
-
-    M5_LOGI("--- now ---");
-    report_settings();
-    M5_LOGW("These settings survive a power cycle. As shipped: mixer=%udB threshold=0x%04X, power %d.%02ddBm",
-            m5::unit::m100::mixerGainDb(as_shipped::MIXER_GAIN), as_shipped::THRESHOLD,
-            as_shipped::TX_POWER_DBM100 / 100, as_shipped::TX_POWER_DBM100 % 100);
-
     survey_band();
 
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
-    lcd.println("A: survey the band");
-    lcd.println("(take the tag away first)");
+    lcd.println("as found");
+    lcd.println("(nothing written yet)");
+    lcd.println("");
+    lcd.println("A: next preset");
 }
 
 void loop()
@@ -194,13 +211,11 @@ void loop()
     M5.update();
     Units.update();
 
-    // Worth repeating: a tag that will not read while the antenna and the power are both fine is
-    // usually drowned out by something on the air, and these two scans tell that apart from a
-    // problem with the tag
     if (M5.BtnA.wasClicked()) {
-        lcd.fillScreen(TFT_DARKGREEN);
-        lcd.setCursor(0, 0);
-        lcd.println("surveying...");
+        apply(PRESETS[preset_index]);
+        preset_index = (preset_index + 1) % (sizeof(PRESETS) / sizeof(PRESETS[0]));
+        // The band looks different once the transmit power or the gain moves, and a tag left in
+        // the field reflects the carrier back and reads as interference
         survey_band();
     }
 }

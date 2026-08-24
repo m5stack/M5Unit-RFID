@@ -147,7 +147,13 @@ public:
     virtual bool readRegion(m5::uhf::Region& region) = 0;
     //! @brief Write the operating region
     virtual bool writeRegion(const m5::uhf::Region region) = 0;
-    //! @brief Read the operating channel index
+    /*!
+      @brief Read the operating channel index
+      @param[out] index Channel index within the operating region
+      @return True if successful
+      @details Whichever channel the reader is on at that moment, which is not the same as a
+      setting: while it hops it moves on its own, and two reads a second apart disagree
+     */
     virtual bool readChannel(uint8_t& index) = 0;
     //! @brief Write the operating channel index
     virtual bool writeChannel(const uint8_t index) = 0;
