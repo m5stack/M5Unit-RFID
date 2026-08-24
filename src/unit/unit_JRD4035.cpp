@@ -330,7 +330,7 @@ void UnitJRD4035::route_frame(const Frame& f)
             // The module already rejects tags failing the CRC check (Inventory Fail 0x15), so a
             // mismatch here points at our own parsing rather than at RF corruption. Warn and keep
             // the tag so the problem is visible instead of silently losing detections
-            if (!verify_tag_crc(tag)) {
+            if (!m5::uhf::verify_tag_crc(tag)) {
                 M5_LIB_LOGW("Gen2 CRC-16 mismatch (reported %04X)", tag.crc);
             }
             push_tag(tag);

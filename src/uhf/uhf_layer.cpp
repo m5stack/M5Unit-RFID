@@ -11,6 +11,10 @@
 
 #include <M5Utility.hpp>
 
+#include <algorithm>
+
+#include "unit/m100_frame.hpp"
+
 namespace m5 {
 namespace uhf {
 
@@ -237,9 +241,27 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const std
         M5_LIB_LOGE("writeBank needs a tag to have been selected");
         return false;
     }
-    pause_polling();
-    if (!_u.write_tag_memory(bank, word_address, data.data(), data.size(), _access_password)) {
+    if (data.empty() || (data.size() % 2) != 0) {
+        M5_LIB_LOGE("A write of %u bytes is not a whole number of words", (unsigned)data.size());
         return false;
+    }
+    pause_polling();
+
+    // One command carries at most WRITE_MAX_WORDS, which is a limit of the reader's command
+    // frame rather than of the tag or of EPC Gen2. A caller writing a bank larger than that
+    // should not have to know it, so the write is split here. The module is already looping
+    // internally: Gen2 writes one word at a time and it is the module that batches them
+    size_t written = 0;
+    while (written < data.size()) {
+        const size_t chunk = std::min(data.size() - written, m5::unit::m100::WRITE_MAX_WORDS * 2);
+        const uint16_t at  = static_cast<uint16_t>(word_address + written / 2);
+        if (!_u.write_tag_memory(bank, at, data.data() + written, chunk, _access_password)) {
+            // Say how far it got: whatever came before this is already on the tag
+            M5_LIB_LOGE("Wrote %u of %u words before failing at word %u", (unsigned)(written / 2),
+                        (unsigned)(data.size() / 2), at);
+            return false;
+        }
+        written += chunk;
     }
 
     // An EPC mask matches on the bytes that were just replaced, so it no longer picks this tag

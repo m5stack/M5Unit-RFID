@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include <m5_utility/crc.hpp>
+
 namespace m5 {
 /*!
   @namespace uhf
@@ -726,6 +728,46 @@ inline std::string Tag::chipAsString() const
         default:
             return "Unknown";
     }
+}
+
+//! @brief Initial value of the EPC Gen2 CRC-16
+constexpr uint16_t GEN2_CRC16_INIT{0xFFFF};
+//! @brief Polynomial of the EPC Gen2 CRC-16 (x^16 + x^12 + x^5 + 1)
+constexpr uint16_t GEN2_CRC16_POLYNOMIAL{0x1021};
+//! @brief Final xor value of the EPC Gen2 CRC-16
+constexpr uint16_t GEN2_CRC16_XOROUT{0xFFFF};
+
+/*!
+  @brief Calculate the EPC Gen2 CRC-16
+  @param data Data to calculate over
+  @param len Length in bytes
+  @return CRC-16
+ */
+inline uint16_t gen2_crc16(const uint8_t* data, const size_t len)
+{
+    m5::utility::CRC16 crc{GEN2_CRC16_INIT, GEN2_CRC16_POLYNOMIAL, false, false, GEN2_CRC16_XOROUT};
+    return crc.range(data, len);
+}
+
+/*!
+  @brief Verify the CRC-16 reported with a detected tag
+  @param tag Tag to verify
+  @return True if the CRC-16 recalculated from PC and EPC matches the reported one
+  @note The Gen2 CRC-16 covers the PC followed by the EPC
+ */
+inline bool verify_tag_crc(const Tag& tag)
+{
+    if (tag.epc.empty()) {
+        return false;
+    }
+    // The Gen2 CRC-16 covers the PC followed by the EPC, so they are laid out contiguously
+    uint8_t buf[2 + EPC_MAX_BYTES]{};
+    buf[0] = static_cast<uint8_t>(tag.pc >> 8);
+    buf[1] = static_cast<uint8_t>(tag.pc & 0xFF);
+    for (size_t i = 0; i < tag.epc.size; ++i) {
+        buf[2 + i] = tag.epc[i];
+    }
+    return gen2_crc16(buf, tag.epc.size + 2U) == tag.crc;
 }
 
 /*!

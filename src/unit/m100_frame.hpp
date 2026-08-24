@@ -16,8 +16,6 @@
 #include <cstdint>
 #include <vector>
 
-#include <m5_utility/crc.hpp>
-
 #include "uhf/uhf.hpp"
 
 namespace m5 {
@@ -31,10 +29,19 @@ namespace unit {
  */
 namespace m100 {
 
-//! @brief Frame header of the JRD-4035 / JRD-100
+/*!
+  @namespace jrd
+  @brief Framing the JRD-4035 and JRD-100 modules use
+  @details The bytes that delimit a frame are the one thing that varies between modules built
+  around this chip, so each family gets its own pair. The R200 uses 0xAA and 0xDD and everything
+  else about it is the same, which is why they are grouped here rather than named for the chip
+ */
+namespace jrd {
+//! @brief Frame header
 constexpr uint8_t FRAME_HEADER{0xBB};
-//! @brief Frame end of the JRD-4035 / JRD-100
+//! @brief Frame end
 constexpr uint8_t FRAME_END{0x7E};
+}  // namespace jrd
 
 /*!
   @brief Calculate the frame checksum
@@ -66,7 +73,8 @@ constexpr uint16_t MAX_PARAMETER_LENGTH{512};
   @return True if successful
  */
 inline bool build_frame(std::vector<uint8_t>& out, const uint8_t type, const uint8_t command, const uint8_t* param,
-                        const uint16_t param_len, const uint8_t header = FRAME_HEADER, const uint8_t end = FRAME_END)
+                        const uint16_t param_len, const uint8_t header = jrd::FRAME_HEADER,
+                        const uint8_t end = jrd::FRAME_END)
 {
     if (param_len > MAX_PARAMETER_LENGTH || (param == nullptr && param_len != 0)) {
         return false;
@@ -121,8 +129,8 @@ struct Frame {
   @param end Expected frame end
   @return True if the frame is well-formed and the checksum matches
  */
-inline bool parse_frame(Frame& out, const uint8_t* raw, const size_t len, const uint8_t header = FRAME_HEADER,
-                        const uint8_t end = FRAME_END)
+inline bool parse_frame(Frame& out, const uint8_t* raw, const size_t len, const uint8_t header = jrd::FRAME_HEADER,
+                        const uint8_t end = jrd::FRAME_END)
 {
     if (raw == nullptr || len < FRAME_OVERHEAD) {
         return false;
@@ -176,46 +184,6 @@ inline bool parse_tag_notification(m5::uhf::Tag& out, const uint8_t* param, cons
     out.pc   = static_cast<uint16_t>((param[1] << 8) | param[2]);
     out.crc  = static_cast<uint16_t>((param[3 + epc_len] << 8) | param[4 + epc_len]);
     return true;
-}
-
-//! @brief Initial value of the EPC Gen2 CRC-16
-constexpr uint16_t GEN2_CRC16_INIT{0xFFFF};
-//! @brief Polynomial of the EPC Gen2 CRC-16 (x^16 + x^12 + x^5 + 1)
-constexpr uint16_t GEN2_CRC16_POLYNOMIAL{0x1021};
-//! @brief Final xor value of the EPC Gen2 CRC-16
-constexpr uint16_t GEN2_CRC16_XOROUT{0xFFFF};
-
-/*!
-  @brief Calculate the EPC Gen2 CRC-16
-  @param data Data to calculate over
-  @param len Length in bytes
-  @return CRC-16
- */
-inline uint16_t gen2_crc16(const uint8_t* data, const size_t len)
-{
-    m5::utility::CRC16 crc{GEN2_CRC16_INIT, GEN2_CRC16_POLYNOMIAL, false, false, GEN2_CRC16_XOROUT};
-    return crc.range(data, len);
-}
-
-/*!
-  @brief Verify the CRC-16 reported with a detected tag
-  @param tag Tag to verify
-  @return True if the CRC-16 recalculated from PC and EPC matches the reported one
-  @note The Gen2 CRC-16 covers the PC followed by the EPC
- */
-inline bool verify_tag_crc(const m5::uhf::Tag& tag)
-{
-    if (tag.epc.empty()) {
-        return false;
-    }
-    // The Gen2 CRC-16 covers the PC followed by the EPC, so they are laid out contiguously
-    uint8_t buf[2 + m5::uhf::EPC_MAX_BYTES]{};
-    buf[0] = static_cast<uint8_t>(tag.pc >> 8);
-    buf[1] = static_cast<uint8_t>(tag.pc & 0xFF);
-    for (size_t i = 0; i < tag.epc.size; ++i) {
-        buf[2 + i] = tag.epc[i];
-    }
-    return gen2_crc16(buf, tag.epc.size + 2U) == tag.crc;
 }
 
 //! @brief MemBank values of the Select parameter and of the read/write commands

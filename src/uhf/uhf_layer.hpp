@@ -111,8 +111,11 @@ public:
       @brief Write a memory bank
       @param bank Memory bank
       @param word_address Start address in 16-bit words
-      @param data Bytes to write; the length must be even and at most 64
+      @param data Bytes to write; the length must be a whole number of 16-bit words
       @return True if successful
+      @note A bank larger than one command can carry is written in several, so the caller does
+      not have to know how much that is. A write that fails partway leaves everything before the
+      failure already on the tag, and says in the log how far it got
       @note Writing the EPC bank changes the very bytes an EPC mask matches on, so a selection
       made from an EPC is dropped afterwards and has to be made again
      */

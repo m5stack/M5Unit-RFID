@@ -150,10 +150,10 @@ protected:
     bool send_tag_operation(m100::Frame& response, const uint8_t command, const uint8_t* param,
                             const uint16_t param_len, const char* what);
 
-    //! Frame header. Derived classes for the R200 family override this with 0xAA
-    uint8_t _frame_header{m100::FRAME_HEADER};
-    //! Frame end. Derived classes for the R200 family override this with 0xDD
-    uint8_t _frame_end{m100::FRAME_END};
+    //! Frame header. A derived class for the R200 family sets this to m100::r200::FRAME_HEADER
+    uint8_t _frame_header{m100::jrd::FRAME_HEADER};
+    //! Frame end. A derived class for the R200 family sets this to m100::r200::FRAME_END
+    uint8_t _frame_end{m100::jrd::FRAME_END};
 
     //! Response slot filled by route_frame while send_and_wait is pumping
     m100::Frame _response{};

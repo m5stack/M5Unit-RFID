@@ -26,8 +26,22 @@ m5::uhf::UHFLayer uhf{unit};
 constexpr uint16_t USER_PROBE_WORDS{2};
 //! @brief Enough of the User bank to see what is in it without filling the log with it
 constexpr uint16_t USER_DUMP_MAX_WORDS{16};
-//! @brief Words the write test replaces and then puts back
+//! @brief Words the short write test replaces and then puts back
 constexpr uint16_t WRITE_TEST_WORDS{2};
+/*!
+  @brief Words the long write test replaces and then puts back
+  @details The most a single Write command carries. The module programs the words into the tag
+  one at a time and waits out the tag's write time for each, so this is the longest a tag
+  operation legitimately takes. Higgs 9 holds 43 words of user memory and Monza 4QT exactly 32
+ */
+constexpr uint16_t WRITE_TEST_MAX_WORDS{32};
+/*!
+  @brief Words the whole-bank write test replaces and then puts back
+  @details The full User bank of a Higgs 9, 688 bits of it. More than a single Write command
+  carries, so writeBank splits it, which is the thing worth exercising. A tag with less user
+  memory than this answers with a memory overrun and the test stops before writing anything
+ */
+constexpr uint16_t WRITE_TEST_BANK_WORDS{43};
 /*
   Reader settings tuned for a tag resting on the antenna.
 
@@ -92,7 +106,7 @@ void print_tag(const m5::uhf::Tag& tag)
     // which tells a lot about an unknown tag without reading any memory bank
     const uint8_t words  = m5::uhf::pcEPCLengthWords(tag.pc);
     const bool length_ok = (words * 2 == static_cast<int>(tag.epc.size));
-    const bool crc_ok    = m5::unit::m100::verify_tag_crc(tag);
+    const bool crc_ok    = m5::uhf::verify_tag_crc(tag);
 
     M5_LOGI("EPC : %s (%u bytes / %u bits)", epc.c_str(), (unsigned)tag.epc.size, (unsigned)(tag.epc.size * 8));
     M5_LOGI("PC  : %04X len=%uword UMI=%u XI=%u NSI=0x%03X -> length %s", tag.pc, words,
@@ -133,7 +147,7 @@ void dump_bank(const char* what, const m5::uhf::Bank bank, const uint16_t word_a
   in inventory, and writing Reserved would set the access and kill passwords, which is how a
   development tag stops being usable for development. Neither is worth it to prove a write works.
  */
-void write_roundtrip(const m5::uhf::Tag& detected)
+void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
 {
     if (!uhf.select(detected)) {
         M5_LOGE("write: failed to select the tag");
@@ -156,39 +170,49 @@ void write_roundtrip(const m5::uhf::Tag& detected)
         }
     }
 
+    const unsigned long read_began = m5::utility::millis();
     std::vector<uint8_t> original{};
-    if (!uhf.readBank(original, m5::uhf::Bank::User, 0, WRITE_TEST_WORDS)) {
-        M5_LOGE("write: this tag has no User memory to write to");
+    if (!uhf.readBank(original, m5::uhf::Bank::User, 0, words)) {
+        M5_LOGE("write %u words: this tag has no User memory to write to, or not that much of it", words);
         uhf.deselect();
         return;
     }
-    M5_LOGI("write: original %s", to_hex(original).c_str());
+    const unsigned long read_took = m5::utility::millis() - read_began;
 
-    const std::vector<uint8_t> pattern{0xA5, 0x5A, 0x12, 0x34};
+    // A pattern that says where in the bank each byte came from, so a mismatch points at the
+    // word it happened in rather than just failing
+    std::vector<uint8_t> pattern(static_cast<size_t>(words) * 2);
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        pattern[i] = static_cast<uint8_t>(0xA0 + (i & 0x0F));
+    }
+
+    const unsigned long began = m5::utility::millis();
     if (!uhf.writeBank(m5::uhf::Bank::User, 0, pattern)) {
-        M5_LOGE("write: failed");
+        M5_LOGE("write %u words: failed", words);
         uhf.deselect();
         return;
     }
+    const unsigned long took = m5::utility::millis() - began;
 
     std::vector<uint8_t> readback{};
-    if (!uhf.readBank(readback, m5::uhf::Bank::User, 0, WRITE_TEST_WORDS)) {
-        M5_LOGE("write: wrote but could not read back, so the tag now holds the pattern");
+    if (!uhf.readBank(readback, m5::uhf::Bank::User, 0, words)) {
+        M5_LOGE("write %u words: wrote but could not read back, so the tag now holds the pattern", words);
         uhf.deselect();
         return;
     }
-    M5_LOGI("write: read back %s -> %s", to_hex(readback).c_str(), readback == pattern ? "matches" : "MISMATCH");
+    M5_LOGI("write %2u words: read %lums, write %lums, read back %s", words, read_took, took,
+            readback == pattern ? "matches" : "MISMATCH");
 
     // Put it back the way it was, and say so loudly if that does not work: the tag is left
     // holding the pattern in that case
     if (!uhf.writeBank(m5::uhf::Bank::User, 0, original)) {
-        M5_LOGE("write: FAILED TO RESTORE; the tag still holds %s", to_hex(pattern).c_str());
+        M5_LOGE("write %u words: FAILED TO RESTORE; the tag still holds the pattern", words);
         uhf.deselect();
         return;
     }
     std::vector<uint8_t> restored{};
-    if (uhf.readBank(restored, m5::uhf::Bank::User, 0, WRITE_TEST_WORDS)) {
-        M5_LOGI("write: restored %s -> %s", to_hex(restored).c_str(), restored == original ? "matches" : "MISMATCH");
+    if (uhf.readBank(restored, m5::uhf::Bank::User, 0, words)) {
+        M5_LOGI("write %2u words: restored %s", words, restored == original ? "matches" : "MISMATCH");
     }
     uhf.deselect();
 }
@@ -372,7 +396,11 @@ void loop()
             lcd.println("write: need one tag");
             return;
         }
-        write_roundtrip(tags[0]);
+        // Two words to see it work, then the most a single command carries, which is what says
+        // how long a tag operation can legitimately take
+        write_roundtrip(tags[0], WRITE_TEST_WORDS);
+        write_roundtrip(tags[0], WRITE_TEST_MAX_WORDS);
+        write_roundtrip(tags[0], WRITE_TEST_BANK_WORDS);
         return;
     }
 
