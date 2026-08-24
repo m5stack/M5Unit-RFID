@@ -27,7 +27,7 @@ public:
     explicit UHFLayer(m5::unit::UHFRFIDComponent& u) : _u{u}
     {
     }
-    UHFLayer(const UHFLayer&)            = delete;
+    UHFLayer(const UHFLayer&) = delete;
     UHFLayer& operator=(const UHFLayer&) = delete;
 
     ///@name Detection
