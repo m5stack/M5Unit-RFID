@@ -189,8 +189,9 @@ void setup()
     // the module then queries for decides whether a selected tag is included or excluded
     m5::uhf::QueryParameters qp{};
     if (unit.readQueryParameters(qp)) {
-        M5_LOGI("Query: Q=%u session=S%u target=%c", qp.q, (unsigned)qp.session,
-                qp.target == m5::uhf::Target::A ? 'A' : 'B');
+        static const char* filters[] = {"All", "All", "NotSelected", "Selected"};
+        M5_LOGI("Query: Q=%u session=S%u target=%c sel=%s", qp.q, (unsigned)qp.session,
+                qp.target == m5::uhf::Target::A ? 'A' : 'B', filters[static_cast<uint8_t>(qp.filter) & 0x03]);
     }
 
     // Survey the band before reading anything. A tag that refuses to answer while the antenna

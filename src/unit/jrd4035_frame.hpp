@@ -433,6 +433,54 @@ inline bool parse_tag_operation(TagOperationResult& out, const uint8_t* param, c
     return true;
 }
 
+/*!
+  @name Bit positions of the Query parameter fields
+  @details The fields pack into the 16-bit word from the top down as DR(1) M(2) TRext(1) Sel(2)
+  Session(2) Target(1) Q(4), leaving the bottom three bits unused. The vendor documents the
+  layout by worked example: 0x1020 is spelled out as DR=8, M=1, TRext=use pilot tone, Sel=00,
+  Session=00, Target=A, Q=4, which only holds with the padding at the bottom
+ */
+///@{
+constexpr uint8_t QUERY_Q_SHIFT{3};
+constexpr uint8_t QUERY_TARGET_SHIFT{7};
+constexpr uint8_t QUERY_SESSION_SHIFT{8};
+constexpr uint8_t QUERY_SEL_SHIFT{10};
+///@}
+
+/*!
+  @brief Split a Query parameter word into its fields
+  @param[out] qp Query parameters
+  @param raw Query parameter word
+ */
+inline void parse_query_parameters(m5::uhf::QueryParameters& qp, const uint16_t raw)
+{
+    qp.q       = static_cast<uint8_t>((raw >> QUERY_Q_SHIFT) & 0x0F);
+    qp.target  = static_cast<m5::uhf::Target>((raw >> QUERY_TARGET_SHIFT) & 0x01);
+    qp.session = static_cast<m5::uhf::Session>((raw >> QUERY_SESSION_SHIFT) & 0x03);
+    qp.filter  = static_cast<m5::uhf::SelectFilter>((raw >> QUERY_SEL_SHIFT) & 0x03);
+}
+
+/*!
+  @brief Place the fields we expose into a Query parameter word
+  @param qp Query parameters
+  @param current Word the module currently holds
+  @return Word to write back
+  @details DR, M and TRext are carried over from the current word rather than being rebuilt.
+  The module supports exactly one value of each, so there is nothing to choose and nothing to
+  gain from letting a caller set them wrong
+ */
+inline uint16_t build_query_parameters(const m5::uhf::QueryParameters& qp, const uint16_t current)
+{
+    uint16_t raw = current;
+    raw &= static_cast<uint16_t>(~((0x03U << QUERY_SEL_SHIFT) | (0x03U << QUERY_SESSION_SHIFT) |
+                                   (0x01U << QUERY_TARGET_SHIFT) | (0x0FU << QUERY_Q_SHIFT)));
+    raw |= static_cast<uint16_t>((static_cast<uint8_t>(qp.filter) & 0x03) << QUERY_SEL_SHIFT);
+    raw |= static_cast<uint16_t>((static_cast<uint8_t>(qp.session) & 0x03) << QUERY_SESSION_SHIFT);
+    raw |= static_cast<uint16_t>((static_cast<uint8_t>(qp.target) & 0x01) << QUERY_TARGET_SHIFT);
+    raw |= static_cast<uint16_t>((qp.q & 0x0F) << QUERY_Q_SHIFT);
+    return raw;
+}
+
 //! @brief Command code used by every failure notification
 constexpr uint8_t COMMAND_ERROR{0xFF};
 

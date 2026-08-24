@@ -547,11 +547,7 @@ bool UnitJRD4035::readQueryParameters(m5::uhf::QueryParameters& qp)
     if (!send_and_wait(res, CMD_GET_QUERY, nullptr, 0) || res.parameter.size() < 2) {
         return false;
     }
-    // Query: DR(1) M(2) TRext(1) Sel(2) Session(2) Target(1) Q(4) as a 13-bit field
-    const uint16_t raw = static_cast<uint16_t>((res.parameter[0] << 8) | res.parameter[1]);
-    qp.q               = static_cast<uint8_t>((raw >> 0) & 0x0F);
-    qp.target          = static_cast<m5::uhf::Target>((raw >> 4) & 0x01);
-    qp.session         = static_cast<m5::uhf::Session>((raw >> 5) & 0x03);
+    parse_query_parameters(qp, static_cast<uint16_t>((res.parameter[0] << 8) | res.parameter[1]));
     return true;
 }
 
@@ -565,11 +561,7 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
     if (!send_and_wait(cur, CMD_GET_QUERY, nullptr, 0) || cur.parameter.size() < 2) {
         return false;
     }
-    uint16_t raw = static_cast<uint16_t>((cur.parameter[0] << 8) | cur.parameter[1]);
-    raw &= static_cast<uint16_t>(~0x00FF);
-    raw |= static_cast<uint16_t>(qp.q & 0x0F);
-    raw |= static_cast<uint16_t>((static_cast<uint8_t>(qp.target) & 0x01) << 4);
-    raw |= static_cast<uint16_t>((static_cast<uint8_t>(qp.session) & 0x03) << 5);
+    const uint16_t raw = build_query_parameters(qp, static_cast<uint16_t>((cur.parameter[0] << 8) | cur.parameter[1]));
 
     Frame res{};
     const uint8_t param[] = {static_cast<uint8_t>(raw >> 8), static_cast<uint8_t>(raw & 0xFF)};

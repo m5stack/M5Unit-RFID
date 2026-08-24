@@ -741,3 +741,51 @@ TEST(UHF, ErrorDescription)
     EXPECT_STREQ(m5::unit::jrd4035::error_description(0x16), "Access failed: wrong access password");
     EXPECT_STREQ(m5::unit::jrd4035::error_description(0x15), "No tag answered");
 }
+
+TEST(UHF, QueryParameters)
+{
+    // The vendor documents the layout by spelling this word out: DR=8, M=1, TRext=use pilot
+    // tone, Sel=00, Session=00, Target=A, Q=4. Only a top-down packing with the padding at the
+    // bottom produces those values, which is what the module was found to be set to
+    m5::uhf::QueryParameters qp{};
+    m5::unit::jrd4035::parse_query_parameters(qp, 0x1020);
+    EXPECT_EQ(qp.q, 4);
+    EXPECT_EQ(qp.target, m5::uhf::Target::A);
+    EXPECT_EQ(qp.session, m5::uhf::Session::S0);
+    EXPECT_EQ(qp.filter, m5::uhf::SelectFilter::All);
+
+    // Writing the same values back leaves the word alone, DR/M/TRext included
+    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(qp, 0x1020), 0x1020);
+
+    // Each field lands where the layout says, one at a time from a cleared word
+    m5::uhf::QueryParameters zero{};
+    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0000);
+    zero.q = 0x0F;
+    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0078);
+    zero        = m5::uhf::QueryParameters{};
+    zero.target = m5::uhf::Target::B;
+    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0080);
+    zero         = m5::uhf::QueryParameters{};
+    zero.session = m5::uhf::Session::S3;
+    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0300);
+    zero        = m5::uhf::QueryParameters{};
+    zero.filter = m5::uhf::SelectFilter::Selected;
+    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0C00);
+
+    // DR, M and TRext are carried over untouched, and the unused low bits are left as found
+    m5::uhf::QueryParameters all{};
+    all.q                  = 0x0F;
+    all.target             = m5::uhf::Target::B;
+    all.session            = m5::uhf::Session::S3;
+    all.filter             = m5::uhf::SelectFilter::Selected;
+    const uint16_t written = m5::unit::jrd4035::build_query_parameters(all, 0xF005);
+    EXPECT_EQ(written & 0xF000, 0xF000);
+    EXPECT_EQ(written & 0x0007, 0x0005);
+    // ...and reading it back yields what was asked for
+    m5::uhf::QueryParameters back{};
+    m5::unit::jrd4035::parse_query_parameters(back, written);
+    EXPECT_EQ(back.q, all.q);
+    EXPECT_EQ(back.target, all.target);
+    EXPECT_EQ(back.session, all.session);
+    EXPECT_EQ(back.filter, all.filter);
+}

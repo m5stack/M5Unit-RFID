@@ -60,6 +60,21 @@ enum class Session : uint8_t { S0, S1, S2, S3 };
  */
 enum class Target : uint8_t { A, B };
 
+/*!
+  @enum SelectFilter
+  @brief Which tags an inventory round invites, in terms of the SL flag
+  @details Decides whether a stored select mask narrows the field down at all. A reader left on
+  All ignores the SL flag outright, so a Select that acts on SL stores a mask that changes
+  nothing; one that acts on an inventoried flag still works because the round is qualified by
+  the session instead (EPC Gen2 v2.1 Table 6-25)
+ */
+enum class SelectFilter : uint8_t {
+    All,          //!< Every tag answers, whatever its SL flag says
+    AllAlias,     //!< Same as All; the standard leaves this encoding equivalent
+    NotSelected,  //!< Only tags whose SL flag is deasserted
+    Selected,     //!< Only tags whose SL flag is asserted
+};
+
 //! @brief Longest EPC the standard allows: the PC length field is 5 bits, so 31 words
 constexpr size_t EPC_MAX_BYTES{62};
 /*!
@@ -541,9 +556,15 @@ inline uint32_t buildLockPayload(const LockSetting* settings, const size_t count
   @brief EPC Gen2 query parameters
  */
 struct QueryParameters {
-    uint8_t q{};                   //!< Q value
-    Session session{Session::S0};  //!< Session
-    Target target{Target::A};      //!< Inventoried flag target
+    uint8_t q{};                   //!< Q value: a tag answers in one of 2^Q slots
+    Session session{Session::S0};  //!< Session whose inventoried flag qualifies the round
+    Target target{Target::A};      //!< Inventoried flag value that is invited to answer
+    /*!
+      Which tags the round invites in terms of SL. Reported so that a select mask can be aimed
+      at something the round actually looks at: aiming one at SL while this reads All stores a
+      mask that filters nothing
+     */
+    SelectFilter filter{SelectFilter::All};
 };
 
 /*!
