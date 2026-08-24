@@ -39,7 +39,8 @@ enum class Bank : uint8_t {
 /*!
   @enum Region
   @brief Operating region
-  @note Japan is not defined by the module; the 920-925MHz band overlaps China900MHz
+  @details The regions the module's firmware offers, mirrored as they are. Its own numbering
+  runs from 1 to 6 and leaves 5 unassigned, which is why there is no Japan setting here
  */
 enum class Region : uint8_t {
     Unspecified,  //!< Keep the module's factory setting
