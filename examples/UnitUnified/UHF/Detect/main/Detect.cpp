@@ -12,6 +12,7 @@
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
 #include <wiring/m5_unit_unified_wiring.hpp>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -60,10 +61,75 @@ void print_tag(const m5::uhf::Tag& tag)
             m5::uhf::pcNumberingSystemIdentifier(tag.pc), length_ok ? "matches" : "MISMATCH");
     M5_LOGI("CRC : %04X (%s)", tag.crc, crc_ok ? "valid" : "INVALID");
     M5_LOGI("RSSI: %d dBm", tag.rssi);
+}
 
-    lcd.printf("%s\n", epc.c_str());
-    lcd.printf("  %ddBm UMI=%u CRC=%s\n", tag.rssi, m5::uhf::pcUserMemoryIndicator(tag.pc) ? 1 : 0,
-               crc_ok ? "OK" : "NG");
+/*
+  Watching the field through the raw queue.
+
+  The queue is deliberately not deduplicated: a tag that stays put is reported once per inventory
+  round, about every 30ms, each time with a fresh RSSI. That repetition is the whole point of the
+  queue, and it is what tells an application that a tag is still there, how well it is coupling,
+  and when it has gone. Printing every report would say none of that and would saturate the serial
+  line while it failed to, so what is tracked here is the change rather than the reports.
+
+  RSSI wanders about 10dB on its own with the tag sitting still, so only a swing wider than that
+  is worth calling a change.
+*/
+//! @brief How long a tag has to go unreported before it counts as gone
+constexpr unsigned long GONE_AFTER_MS{1000};
+//! @brief How far RSSI has to move before it is a change rather than the usual wander
+constexpr int RSSI_REPORT_DB{10};
+
+// Members left without initialisers so that C++11 still treats this as an aggregate: every one
+// of them is given a value at the only place a Seen is made
+struct Seen {
+    m5::uhf::Epc epc;
+    int8_t rssi;
+    unsigned long at;
+};
+std::vector<Seen> seen{};
+
+void draw_field()
+{
+    lcd.fillScreen(TFT_DARKGREEN);
+    lcd.setCursor(0, 0);
+    lcd.printf("in field: %u\n", (unsigned)seen.size());
+    for (auto&& s : seen) {
+        lcd.printf("%s %ddBm\n", s.epc.toString().c_str(), s.rssi);
+    }
+}
+
+void note(const m5::uhf::Tag& tag)
+{
+    const unsigned long now = m5::utility::millis();
+    for (auto&& s : seen) {
+        if (s.epc == tag.epc) {
+            if (std::abs(static_cast<int>(tag.rssi) - static_cast<int>(s.rssi)) >= RSSI_REPORT_DB) {
+                M5_LOGI("~ %s %ddBm -> %ddBm", s.epc.toString().c_str(), s.rssi, tag.rssi);
+                s.rssi = tag.rssi;
+                draw_field();
+            }
+            s.at = now;
+            return;
+        }
+    }
+    M5_LOGI("+ %s %ddBm", tag.epc.toString().c_str(), tag.rssi);
+    seen.push_back(Seen{tag.epc, tag.rssi, now});
+    draw_field();
+}
+
+//! @brief Drop the tags that have stopped being reported
+void expire()
+{
+    const unsigned long now = m5::utility::millis();
+    for (size_t i = seen.size(); i > 0; --i) {
+        auto&& s = seen[i - 1];
+        if (now - s.at >= GONE_AFTER_MS) {
+            M5_LOGI("- %s gone", s.epc.toString().c_str());
+            seen.erase(seen.begin() + (i - 1));
+            draw_field();
+        }
+    }
 }
 }  // namespace
 
@@ -82,7 +148,7 @@ void setup()
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
     lcd.println("A: detect() once");
-    lcd.println("raw stream below");
+    draw_field();
 }
 
 void loop()
@@ -90,8 +156,8 @@ void loop()
     M5.update();
     Units.update();
 
-    // Button A asks UHFLayer for one deduplicated look at the field, which is what an
-    // application wants when it needs a list rather than a stream
+    // Button A asks UHFLayer for one deduplicated look at the field and spells each tag out in
+    // full, which is what an application wants when it needs a list rather than a stream
     if (M5.BtnA.wasClicked()) {
         std::vector<m5::uhf::Tag> tags{};
         lcd.fillScreen(TFT_DARKGREEN);
@@ -100,19 +166,24 @@ void loop()
             lcd.printf("detect: %u tag(s)\n", (unsigned)tags.size());
             for (auto&& tag : tags) {
                 print_tag(tag);
+                // detect() drains the queue itself and takes its whole window to do it, so the
+                // tags it found have to be handed to the tracker or they look like they left
+                note(tag);
             }
         } else {
             lcd.println("detect: no tag");
         }
+        draw_field();
         return;
     }
 
-    // The raw queue keeps every notification, so a tag that stays in the field appears again
-    // and again with a fresh RSSI each time
+    // Everything the module reports, turned into arrivals, departures and changes of coupling
     while (unit.available()) {
-        print_tag(unit.oldest());
+        note(unit.oldest());
         unit.discard();
     }
+    expire();
+
     if (unit.dropped()) {
         M5_LOGW("Dropped %u notifications; raise tag_queue_size or update() more often", unit.dropped());
         unit.clearDropped();
