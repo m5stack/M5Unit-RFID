@@ -48,13 +48,14 @@ void begin_unit()
   @brief Detect and hand back the one tag in the field
   @param[out] tag The tag that was found
   @return True when exactly one tag answered
-  @details Which tag an operation addresses is only unambiguous while there is one of them, so
-  anything that goes on to touch a tag insists on that
+  @details Writing to a tag has to know which tag, so this asks for the whole field rather than
+  the first answer and refuses when there is more than one in it. UHFLayer::detect also has a
+  form that hands back whichever tag answers first, which suits reading but not writing
  */
 bool detect_one(m5::uhf::Tag& tag)
 {
     std::vector<m5::uhf::Tag> tags{};
-    if (!uhf.detect(tags, 1000)) {
+    if (!uhf.detect(tags)) {
         M5_LOGI("No tag in the field");
         lcd.println("no tag");
         return false;

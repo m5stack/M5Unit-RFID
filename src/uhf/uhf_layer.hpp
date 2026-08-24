@@ -35,11 +35,30 @@ public:
     /*!
       @brief Detect tags
       @param[out] tags Detected tags, deduplicated by EPC
-      @param timeout_ms Timeout in milliseconds
+      @param timeout_ms How long to keep looking, in milliseconds
       @return True if at least one tag was detected
+      @details The timeout is how long the field is watched, not a deadline: this always looks
+      for the whole of it, because a tag that answers rarely is only found by looking again.
+      Shortening it returns sooner and finds fewer tags
       @note Starts polling internally and restores the previous polling state on return
      */
     bool detect(std::vector<Tag>& tags, const uint32_t timeout_ms = 1000U);
+    /*!
+      @brief Detect one tag
+      @param[out] tag The first tag that answers
+      @param timeout_ms How long to wait before giving up, in milliseconds
+      @return True if a tag was detected
+      @details Returns as soon as any tag answers rather than waiting the timeout out, so it
+      costs one inventory round instead of the whole window. Unlike the form taking a vector the
+      timeout is a deadline rather than a duration, and the default covers the longest a tag was
+      measured to take to answer
+      @note Which tag answers first is not something the caller decides: with several in the
+      field this is whichever one won that round. Anything that goes on to address a tag wants
+      to know there is only one of them, which the form taking a vector shows and this one
+      cannot
+      @note Starts polling internally and restores the previous polling state on return
+     */
+    bool detect(Tag& tag, const uint32_t timeout_ms = 500U);
     ///@}
 
     ///@name Target tag

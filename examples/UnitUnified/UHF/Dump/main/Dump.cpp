@@ -44,30 +44,6 @@ void begin_unit()
     }
 }
 
-/*!
-  @brief Detect and hand back the one tag in the field
-  @param[out] tag The tag that was found
-  @return True when exactly one tag answered
-  @details Which tag an operation addresses is only unambiguous while there is one of them, so
-  anything that goes on to touch a tag insists on that
- */
-bool detect_one(m5::uhf::Tag& tag)
-{
-    std::vector<m5::uhf::Tag> tags{};
-    if (!uhf.detect(tags, 1000)) {
-        M5_LOGI("No tag in the field");
-        lcd.println("no tag");
-        return false;
-    }
-    if (tags.size() != 1) {
-        M5_LOGI("%u tags in the field; leave one of them", (unsigned)tags.size());
-        lcd.printf("%u tags: leave one\n", (unsigned)tags.size());
-        return false;
-    }
-    tag = tags[0];
-    return true;
-}
-
 std::string to_hex(const std::vector<uint8_t>& data)
 {
     std::string s{};
@@ -167,9 +143,14 @@ void loop()
     if (M5.BtnA.wasClicked()) {
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
+        // Whichever tag answers first. Reading a bank of the wrong one costs nothing, so
+        // this does not insist on there being only one the way writing to a tag would
         m5::uhf::Tag tag{};
-        if (detect_one(tag)) {
+        if (uhf.detect(tag)) {
             identify_and_dump(tag);
+        } else {
+            M5_LOGI("No tag in the field");
+            lcd.println("no tag");
         }
     }
 }

@@ -96,7 +96,7 @@ void loop()
         std::vector<m5::uhf::Tag> tags{};
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
-        if (uhf.detect(tags, 1000)) {
+        if (uhf.detect(tags)) {
             lcd.printf("detect: %u tag(s)\n", (unsigned)tags.size());
             for (auto&& tag : tags) {
                 print_tag(tag);

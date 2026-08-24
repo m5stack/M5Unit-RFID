@@ -75,6 +75,35 @@ void UHFLayer::resume_polling()
     }
 }
 
+bool UHFLayer::detect(Tag& tag, const uint32_t timeout_ms)
+{
+    tag = Tag{};
+
+    const bool was_polling = _u.inPolling();
+    if (!was_polling && !_u.startPolling(_u.config().polling_count)) {
+        M5_LIB_LOGE("Failed to startPolling");
+        return false;
+    }
+    // Discard notifications that arrived before this call
+    _u.flush();
+
+    const unsigned long expire_at = m5::utility::millis() + timeout_ms;
+    while (m5::utility::millis() < expire_at && !tag.valid()) {
+        _u.update();
+        if (_u.available()) {
+            tag = _u.oldest();
+            _u.discard();
+        } else {
+            m5::utility::delay(1);
+        }
+    }
+
+    if (!was_polling) {
+        _u.stopPolling();
+    }
+    return tag.valid();
+}
+
 bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, const uint8_t* mask, const size_t mask_len,
                                const uint32_t access_password, const bool verify)
 {
