@@ -116,6 +116,23 @@ protected:
       tag actually did what it was told
      */
     bool tag_carried_it_out(const jrd4035::Frame& response, const char* what) const;
+    /*!
+      @brief Send a tag operation, trying again when the tag simply did not answer
+      @param[out] response Response frame
+      @param command Command to send
+      @param param Parameter
+      @param param_len Parameter length
+      @param what Name of the operation, used in the warnings
+      @return True when the module answered with a result rather than a failure
+      @details Only a failure that says the tag did not answer is tried again. One where the tag
+      answered with a reason of its own is reported at once, since asking again would produce
+      the same reason more slowly
+      @note A kill that is carried out but whose answer is lost reads as a failure here and on
+      every attempt after it, because a killed tag answers nothing. There is no way to tell that
+      apart from a kill that never happened
+     */
+    bool send_tag_operation(jrd4035::Frame& response, const uint8_t command, const uint8_t* param,
+                            const uint16_t param_len, const char* what);
 
     //! Frame header. Derived classes for the R200 family override this with 0xAA
     uint8_t _frame_header{jrd4035::FRAME_HEADER};

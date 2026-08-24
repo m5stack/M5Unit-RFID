@@ -789,3 +789,32 @@ TEST(UHF, QueryParameters)
     EXPECT_EQ(back.session, all.session);
     EXPECT_EQ(back.filter, all.filter);
 }
+
+TEST(UHF, WorthRetrying)
+{
+    using namespace m5::unit::jrd4035;
+    // "The tag did not answer" says nothing about the tag being unwilling, so ask again
+    EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::ReadFail)));
+    EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::WriteFail)));
+    EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::LockFail)));
+    EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::KillFail)));
+    EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::BlockPermalockFail)));
+
+    // A tag that gave a reason gives the same reason however often it is asked. The memory
+    // overrun a tag without user memory answers with is the one this was measured against
+    EXPECT_FALSE(is_worth_retrying(TAG_ERROR_READ | 0x03));
+    EXPECT_FALSE(is_worth_retrying(TAG_ERROR_READ | 0x04));
+    EXPECT_FALSE(is_worth_retrying(TAG_ERROR_WRITE | 0x04));
+    EXPECT_FALSE(is_worth_retrying(TAG_ERROR_LOCK | 0x04));
+    EXPECT_FALSE(is_worth_retrying(TAG_ERROR_KILL | 0x0B));
+    EXPECT_FALSE(is_worth_retrying(TAG_ERROR_BLOCK_PERMALOCK | 0x03));
+
+    // A wrong password stays wrong, and repeating it can start a security timeout on the tag
+    EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::AccessFail)));
+    // A malformed command frame is ours to fix, not the tag's
+    EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::CommandError)));
+    // Inventory Fail never reaches a tag operation; it belongs to polling
+    EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::InventoryFail)));
+    EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::FHSSFail)));
+    EXPECT_FALSE(is_worth_retrying(0x00));
+}

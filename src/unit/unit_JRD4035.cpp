@@ -78,8 +78,26 @@ constexpr uint8_t SELECT_ACTION_MATCH_TO_A{0x00};
  */
 constexpr uint32_t SELECT_SETTLE_MS{20};
 
-//! @brief A tag operation has to survive a frequency hop, which the module does on its own
+/*!
+  @brief How long the module is given to answer a tag operation
+  @details A one or two word access comes back in 25 to 160ms, measured over 416 of them. The
+  headroom is for a full 32-word write, where the module programs the words into the tag one at
+  a time and pays the tag's write time for each; that case has not been measured. A module that
+  has stopped answering altogether is the only thing this ever actually waits out
+ */
 constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
+
+/*!
+  @brief How many times a tag operation is attempted before it is reported as failed
+  @details A tag fails to complete about one exchange in fifty with the antenna and the tag
+  well placed, and about one in five with them not, whichever chip it is. Polling hides that by
+  running rounds continuously; a single addressed operation cannot. Three attempts put the
+  residual under a percent even in the poor case
+  @note No delay between attempts. Learning that an operation failed already takes 33 to 160ms,
+  which is longer than the 25ms an inventory round takes, so the retry lands in a fresh round
+  without being made to wait for one
+ */
+constexpr int TAG_OPERATION_ATTEMPTS{3};
 
 //! @brief Translate a bank to the code the module uses
 inline uint8_t membank_of(const m5::uhf::Bank bank)
@@ -664,6 +682,31 @@ bool UnitJRD4035::succeeded(const Frame& response, const char* what) const
     return false;
 }
 
+bool UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, const uint8_t* param,
+                                     const uint16_t param_len, const char* what)
+{
+    for (int attempt = 1; attempt <= TAG_OPERATION_ATTEMPTS; ++attempt) {
+        // A module saying nothing at all is not failing for a reason a repeat would fix, and
+        // each attempt would cost the whole timeout, so that case is left alone
+        if (!send_and_wait(response, command, param, param_len, TAG_OPERATION_TIMEOUT_MS)) {
+            return false;
+        }
+        if (!is_error_frame(response.command)) {
+            if (attempt > 1) {
+                M5_LIB_LOGD("%s answered on attempt %d", what, attempt);
+            }
+            return true;
+        }
+        const uint8_t code = response.parameter.empty() ? 0x00 : response.parameter[0];
+        if (!is_worth_retrying(code)) {
+            break;
+        }
+        M5_LIB_LOGD("%s: %02X %s (attempt %d of %d)", what, code, error_description(code), attempt,
+                    TAG_OPERATION_ATTEMPTS);
+    }
+    return succeeded(response, what);
+}
+
 bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
                                          const size_t mask_len)
 {
@@ -723,11 +766,8 @@ bool UnitJRD4035::read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_READ_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                       TAG_OPERATION_TIMEOUT_MS)) {
-        return false;
-    }
-    if (!succeeded(res, "read_tag_memory")) {
+    if (!send_tag_operation(res, CMD_READ_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                            "read_tag_memory")) {
         return false;
     }
 
@@ -762,11 +802,9 @@ bool UnitJRD4035::write_tag_memory(const m5::uhf::Bank bank, const uint16_t word
     // but the byte table on the same page reads BB 01 49 ... A9 7E, and that checksum only adds
     // up with 0x49 in the command byte; 0x39 would make it 0x99. Same kind of slip as the one
     // Set Select Mode carries, and the same resolution: follow the bytes
-    if (!send_and_wait(res, CMD_WRITE_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                       TAG_OPERATION_TIMEOUT_MS)) {
-        return false;
-    }
-    return succeeded(res, "write_tag_memory") && tag_carried_it_out(res, "write_tag_memory");
+    return send_tag_operation(res, CMD_WRITE_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                              "write_tag_memory") &&
+           tag_carried_it_out(res, "write_tag_memory");
 }
 
 bool UnitJRD4035::lock_tag_memory(const uint32_t payload, const uint32_t access_password)
@@ -780,11 +818,9 @@ bool UnitJRD4035::lock_tag_memory(const uint32_t payload, const uint32_t access_
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_LOCK_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                       TAG_OPERATION_TIMEOUT_MS)) {
-        return false;
-    }
-    return succeeded(res, "lock_tag_memory") && tag_carried_it_out(res, "lock_tag_memory");
+    return send_tag_operation(res, CMD_LOCK_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                              "lock_tag_memory") &&
+           tag_carried_it_out(res, "lock_tag_memory");
 }
 
 bool UnitJRD4035::kill_tag(const uint32_t kill_password)
@@ -798,11 +834,8 @@ bool UnitJRD4035::kill_tag(const uint32_t kill_password)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()),
-                       TAG_OPERATION_TIMEOUT_MS)) {
-        return false;
-    }
-    return succeeded(res, "kill_tag") && tag_carried_it_out(res, "kill_tag");
+    return send_tag_operation(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()), "kill_tag") &&
+           tag_carried_it_out(res, "kill_tag");
 }
 
 bool UnitJRD4035::tag_carried_it_out(const Frame& response, const char* what) const

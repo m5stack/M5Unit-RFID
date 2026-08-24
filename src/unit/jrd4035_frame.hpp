@@ -596,6 +596,33 @@ inline const char* error_description(const uint8_t error_code)
     }
 }
 
+/*!
+  @brief Is this failure worth sending the same command again for?
+  @param error_code Error code carried by the failure notification
+  @return True when a repeat has a chance of succeeding
+  @details The module reporting that the tag did not answer says nothing about the tag being
+  unwilling, only that this one exchange did not complete, and the next one may. A tag that
+  answered with a reason of its own will answer the same way however often it is asked, so
+  those are excluded, as is a wrong access password: repeating that cannot make it right and
+  may start a security timeout on the tag (EPC Gen2 v2.1 6.3.2.5)
+ */
+inline bool is_worth_retrying(const uint8_t error_code)
+{
+    if (is_tag_error(error_code)) {
+        return false;
+    }
+    switch (static_cast<Error>(error_code)) {
+        case Error::ReadFail:
+        case Error::WriteFail:
+        case Error::KillFail:
+        case Error::LockFail:
+        case Error::BlockPermalockFail:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace jrd4035
 }  // namespace unit
 }  // namespace m5
