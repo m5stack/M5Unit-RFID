@@ -292,6 +292,39 @@ inline bool build_select_parameter(std::vector<uint8_t>& out, const uint8_t sel_
 }
 
 /*!
+  @brief Parse the answer to Get Select Parameter (0x0B)
+  @param[out] out Select parameter
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True if successful
+ */
+inline bool parse_select_parameter(m5::uhf::SelectParameter& out, const uint8_t* param, const size_t len)
+{
+    // SelParam, a four byte pointer, the mask length, the truncate flag, then the mask itself
+    constexpr size_t HEADER_LENGTH{7};
+    if (param == nullptr || len < HEADER_LENGTH) {
+        return false;
+    }
+    const size_t mask_len = len - HEADER_LENGTH;
+    if (mask_len > m5::uhf::SELECT_MASK_MAX_BYTES) {
+        return false;
+    }
+    out.target       = static_cast<uint8_t>((param[0] >> 5) & 0x07);
+    out.action       = static_cast<uint8_t>((param[0] >> 2) & 0x07);
+    out.bank         = static_cast<m5::uhf::Bank>(param[0] & 0x03);
+    out.pointer_bits = (static_cast<uint32_t>(param[1]) << 24) | (static_cast<uint32_t>(param[2]) << 16) |
+                       (static_cast<uint32_t>(param[3]) << 8) | param[4];
+    out.mask_length_bits = param[5];
+    out.truncate         = param[6] != SELECT_TRUNCATE_OFF;
+    out.mask.fill(0);
+    for (size_t i = 0; i < mask_len; ++i) {
+        out.mask[i] = param[HEADER_LENGTH + i];
+    }
+    out.mask_size = static_cast<uint8_t>(mask_len);
+    return true;
+}
+
+/*!
   @brief Build the parameter of Read Tag Memory Area (0x39)
   @param[out] out Parameter
   @param access_password Access password, 0 when the tag has none

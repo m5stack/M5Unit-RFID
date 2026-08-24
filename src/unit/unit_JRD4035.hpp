@@ -51,6 +51,7 @@ public:
     virtual bool writeOperatingChannels(const std::vector<uint8_t>& channels) override;
     virtual bool readBlockingSignal(m5::uhf::ChannelLevels& levels) override;
     virtual bool readChannelRSSI(m5::uhf::ChannelLevels& levels) override;
+    virtual bool readSelectParameter(m5::uhf::SelectParameter& sp) override;
     ///@name Receiver tuning, specific to this chip
     ///@{
     //! @brief Read the receiver demodulator settings

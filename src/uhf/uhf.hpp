@@ -567,6 +567,30 @@ struct QueryParameters {
     SelectFilter filter{SelectFilter::All};
 };
 
+//! @brief Longest select mask the module accepts, the length field being 8 bits wide
+constexpr size_t SELECT_MASK_MAX_BYTES{32};
+
+/*!
+  @struct SelectParameter
+  @brief The mask the reader holds, and how it is matched
+  @details Reading it back is the only way to see what the reader is actually addressing. A
+  Select produces no reply from any tag (EPC Gen2 v2.1 Table 6-29), so nothing else confirms
+  that the reader and the caller agree on which tag is meant
+ */
+struct SelectParameter {
+    uint8_t target{};            //!< Target: which flag the action acts on, 100 being SL
+    uint8_t action{};            //!< Action: what matching and non-matching tags are set to
+    Bank bank{Bank::Epc};        //!< Bank the mask is matched against
+    uint32_t pointer_bits{};     //!< Where the mask starts, as a bit address inside the bank
+    uint8_t mask_length_bits{};  //!< Length of the mask in bits
+    bool truncate{};             //!< Whether a matching tag replies with only the bits past the mask
+    std::array<uint8_t, SELECT_MASK_MAX_BYTES> mask{};  //!< Mask bytes
+    uint8_t mask_size{};                                //!< Bytes of mask in use
+
+    //! @brief Mask as uppercase hex
+    std::string maskAsString() const;
+};
+
 /*!
   @struct ModuleInformation
   @brief Reader module information
@@ -658,6 +682,11 @@ inline bool Tid::operator==(const Tid& o) const
         }
     }
     return true;
+}
+
+inline std::string SelectParameter::maskAsString() const
+{
+    return detail::to_hex(mask.data(), mask_size);
 }
 
 inline std::string Tid::toString() const

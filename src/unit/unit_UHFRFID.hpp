@@ -196,6 +196,14 @@ public:
       @details Reveals other readers operating nearby
      */
     virtual bool readChannelRSSI(m5::uhf::ChannelLevels& levels) = 0;
+    /*!
+      @brief Read back the select mask the reader holds
+      @param[out] sp Select parameter
+      @return True if successful
+      @details No tag replies to a Select, so this is the only way to confirm that the reader is
+      addressing what the caller believes it is
+     */
+    virtual bool readSelectParameter(m5::uhf::SelectParameter& sp) = 0;
     ///@}
 
     virtual bool begin() override;

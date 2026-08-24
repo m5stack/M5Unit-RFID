@@ -862,3 +862,39 @@ TEST(UHF, DemodulatorParameters)
     out_of_range.if_gain = static_cast<m5::unit::m100::IFGain>(0x08);
     EXPECT_FALSE(build_demodulator_parameters(built, out_of_range));
 }
+
+TEST(UHF, ParseSelectParameter)
+{
+    // The answer the vendor spells out: SelParam 0x01, pointer 0x20, mask 96 bits, no truncation
+    const uint8_t answer[] = {0x01, 0x00, 0x00, 0x00, 0x20, 0x60, 0x00, 0x30, 0x75, 0x1F,
+                              0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70};
+    m5::uhf::SelectParameter sp{};
+    EXPECT_TRUE(m5::unit::m100::parse_select_parameter(sp, answer, sizeof(answer)));
+    EXPECT_EQ(sp.target, 0);
+    EXPECT_EQ(sp.action, 0);
+    EXPECT_EQ(sp.bank, m5::uhf::Bank::Epc);
+    EXPECT_EQ(sp.pointer_bits, 0x20U);
+    EXPECT_EQ(sp.mask_length_bits, 96);
+    EXPECT_FALSE(sp.truncate);
+    EXPECT_EQ(sp.mask_size, 12);
+    EXPECT_STREQ(sp.maskAsString().c_str(), "30751FEB705C5904E3D50D70");
+
+    // Target and action come out of the top of the same byte the bank sits in
+    const uint8_t sl[] = {0x82, 0x00, 0x00, 0x00, 0x00, 0x10, 0x80, 0xAB, 0xCD};
+    sp                 = m5::uhf::SelectParameter{};
+    EXPECT_TRUE(m5::unit::m100::parse_select_parameter(sp, sl, sizeof(sl)));
+    EXPECT_EQ(sp.target, 4);  // SL
+    EXPECT_EQ(sp.action, 0);
+    EXPECT_EQ(sp.bank, m5::uhf::Bank::Tid);
+    EXPECT_EQ(sp.pointer_bits, 0U);
+    EXPECT_EQ(sp.mask_length_bits, 16);
+    EXPECT_TRUE(sp.truncate);
+    EXPECT_STREQ(sp.maskAsString().c_str(), "ABCD");
+
+    // A frame too short to hold the fixed part, and one whose mask is longer than the module
+    // can hold, are both refused rather than read past
+    EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, answer, 6));
+    EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, nullptr, 19));
+    std::vector<uint8_t> too_long(7 + m5::uhf::SELECT_MASK_MAX_BYTES + 1, 0);
+    EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, too_long.data(), too_long.size()));
+}
