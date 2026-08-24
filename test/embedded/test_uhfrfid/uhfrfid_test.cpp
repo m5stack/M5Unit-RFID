@@ -25,8 +25,7 @@ protected:
     {
         auto ptr = new m5::unit::UnitJRD4035();
         if (ptr) {
-            auto cfg          = ptr->config();
-            cfg.start_polling = false;  // Tests control polling explicitly
+            auto cfg = ptr->config();
             ptr->config(cfg);
         }
         return ptr;

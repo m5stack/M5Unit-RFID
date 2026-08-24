@@ -58,11 +58,25 @@ constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
 
 /*!
   @brief Select target and action used to address a single tag
-  @details Target 000 sets inventoried flag S0 and action 000 asserts SL on a match while
-  deasserting it on everything else, which is what narrows the field down to one tag
+  @details Target 000 acts on the inventoried flag of session 0 and action 000 sets it to A on
+  a match while setting it to B on everything else, which is what narrows the field down to one
+  tag: the module then queries session 0 for the tags flagged A
+  @note The session has to be the one the module queries. This module leaves the Query set to
+  Sel=ALL, meaning it ignores the SL flag outright, so a Select aimed at SL would store a mask
+  that changes nothing. Session 0 is what the factory Query uses, it is what the vendor's own
+  example sends (SelParam 0x01), and it is what every working implementation of this protocol
+  sends
  */
 constexpr uint8_t SELECT_TARGET_S0{0x00};
-constexpr uint8_t SELECT_ACTION_ASSERT_SL{0x00};
+constexpr uint8_t SELECT_ACTION_MATCH_TO_A{0x00};
+
+/*!
+  @brief Settling time between storing the select mask and using it
+  @details The vendor's own host tool waits this long after Set Select Parameter before it
+  reads, and other working implementations wait longer still. Sending the read immediately, as
+  the response to the select arriving would allow, is not something any of them do
+ */
+constexpr uint32_t SELECT_SETTLE_MS{20};
 
 //! @brief A tag operation has to survive a frequency hop, which the module does on its own
 constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
@@ -223,10 +237,6 @@ bool UnitJRD4035::begin()
         return false;
     }
 
-    if (_cfg.start_polling && !startPolling(_cfg.polling_count)) {
-        M5_LIB_LOGE("Failed to startPolling");
-        return false;
-    }
     return true;
 }
 
@@ -244,13 +254,11 @@ bool UnitJRD4035::read_frame(Frame& out, const uint32_t timeout_ms)
     if (readWithTransaction(&b, 1) != m5::hal::error::error_t::OK) {
         return false;
     }
-    M5_LIB_LOGV("RX: %02X", b);
     while (b != _frame_header) {
         M5_LIB_LOGD("Skipping %02X while looking for header %02X", b, _frame_header);
         if (readWithTransaction(&b, 1) != m5::hal::error::error_t::OK) {
             return false;
         }
-        M5_LIB_LOGV("RX: %02X", b);
     }
 
     // 2. The remaining header bytes belong to the same frame, so a normal timeout is used
@@ -282,6 +290,7 @@ bool UnitJRD4035::read_frame(Frame& out, const uint32_t timeout_ms)
         M5_LIB_LOGW("Malformed frame: %s", to_hex(raw.data(), raw.size()).c_str());
         return false;
     }
+    M5_LIB_LOGD("RX: %s", to_hex(raw.data(), raw.size()).c_str());
     return true;
 }
 
@@ -311,10 +320,13 @@ void UnitJRD4035::route_frame(const Frame& f)
     // Failure notification
     if (is_error_frame(f.command)) {
         const uint8_t code = f.parameter.empty() ? 0x00 : f.parameter[0];
-        // While polling, this only means that no tag answered the round, and it arrives once per
-        // round. Outside polling the very same code means the tag being addressed did not answer,
-        // which is a genuine failure the caller has to see
-        if (is_no_tag(code) && _polling) {
+        // Inventory Fail answers a polling command and nothing else: every tag operation has a
+        // failure code of its own. It arrives once per empty round, and the rounds already under
+        // way keep arriving after a stop, so anywhere but in front of a polling command it is a
+        // leftover rather than the answer to whatever was sent last
+        const bool awaiting_inventory = _response_pending && (_awaiting_command == COMMAND_SINGLE_POLLING ||
+                                                              _awaiting_command == COMMAND_MULTIPLE_POLLING);
+        if (is_no_tag(code) && !awaiting_inventory) {
             return;
         }
         M5_LIB_LOGW("Error frame %02X", code);
@@ -329,7 +341,13 @@ void UnitJRD4035::route_frame(const Frame& f)
     if (_response_pending && f.command == _awaiting_command) {
         _response         = f;
         _response_pending = false;
+        return;
     }
+
+    // Nobody asked for this one. A module answering under a command code we are not expecting is
+    // exactly how an exchange slips by one frame, so it is said out loud rather than dropped
+    M5_LIB_LOGW("Unhandled frame: type=%02X cmd=%02X len=%u%s", f.type, f.command,
+                static_cast<unsigned>(f.parameter.size()), _response_pending ? ", while waiting for a response" : "");
 }
 
 bool UnitJRD4035::pump(const uint32_t timeout_ms)
@@ -646,7 +664,11 @@ bool UnitJRD4035::succeeded(const Frame& response, const char* what) const
         return true;
     }
     const uint8_t code = response.parameter.empty() ? 0x00 : response.parameter[0];
-    M5_LIB_LOGE("%s failed: %02X %s", what, code, error_description(code));
+    // The module appends the PC and EPC of the tag it was addressing when it had already got
+    // that far, which is what says whether the tag was seen at all before the failure
+    const std::string tail =
+        response.parameter.size() > 1 ? to_hex(response.parameter.data() + 1, response.parameter.size() - 1) : "";
+    M5_LIB_LOGE("%s failed: %02X %s %s", what, code, error_description(code), tail.c_str());
     return false;
 }
 
@@ -660,7 +682,7 @@ bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_
         M5_LIB_LOGE("Mask of %zu bytes is longer than a Select can carry", mask_len);
         return false;
     }
-    const uint8_t sel_param = select_parameter_byte(SELECT_TARGET_S0, SELECT_ACTION_ASSERT_SL, membank_of(bank));
+    const uint8_t sel_param = select_parameter_byte(SELECT_TARGET_S0, SELECT_ACTION_MATCH_TO_A, membank_of(bank));
 
     std::vector<uint8_t> param{};
     if (!build_select_parameter(param, sel_param, pointer_bits, static_cast<uint8_t>(mask_len * 8), SELECT_TRUNCATE_OFF,
@@ -672,7 +694,11 @@ bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_
     if (!send_and_wait(res, CMD_SET_SELECT_PARAMETER, param.data(), static_cast<uint16_t>(param.size()))) {
         return false;
     }
-    return succeeded(res, "write_select_parameter");
+    if (!succeeded(res, "write_select_parameter")) {
+        return false;
+    }
+    m5::utility::delay(SELECT_SETTLE_MS);
+    return true;
 }
 
 bool UnitJRD4035::write_select_enabled(const bool enable)
@@ -684,8 +710,9 @@ bool UnitJRD4035::write_select_enabled(const bool enable)
     // so this is only needed to turn the mask back off, and to put it back on afterwards
     const uint8_t param[] = {enable ? SELECT_MODE_NON_INVENTORY : SELECT_MODE_NEVER};
     Frame res{};
-    // Set Select Mode answers under the command code of Set Select Parameter
-    if (!send_and_wait_answered_as(res, CMD_SET_SELECT_MODE, CMD_SET_SELECT_PARAMETER, param, sizeof(param))) {
+    // The protocol document has Set Select Mode answering under the command code of Set Select
+    // Parameter, but an M100 running V2.3.5 answers under 0x12, its own. Measured, not read
+    if (!send_and_wait(res, CMD_SET_SELECT_MODE, param, sizeof(param))) {
         return false;
     }
     return succeeded(res, "write_select_enabled");

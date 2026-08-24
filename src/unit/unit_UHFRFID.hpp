@@ -38,8 +38,6 @@ public:
       @brief Settings for begin
      */
     struct config_t {
-        //! Start polling on begin
-        bool start_polling{false};
         //! Rounds requested per multiple polling command. Kept short deliberately: the module
         //! runs the rounds on its own and cannot be stopped once the host is gone, so a large
         //! count leaves it transmitting for minutes after an MCU reset. update() reissues the

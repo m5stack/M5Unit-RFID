@@ -23,35 +23,6 @@ constexpr uint32_t TID_MASK_POINTER_BITS{0x00};
 constexpr uint16_t EPC_FIRST_WORD{2};
 //! @brief Words of the TID that sit at a fixed address whatever the tag is
 constexpr uint16_t TID_FIXED_WORDS{2};
-
-/*!
-  @class PausePolling
-  @brief Stop polling for as long as a tag operation runs, then put it back
-  @details The module answers unreliably while it is running inventory rounds, so every tag
-  operation needs polling stopped. Doing it here keeps that off the caller, who would otherwise
-  have to remember it between a detect() and the select() that follows
- */
-class PausePolling {
-public:
-    explicit PausePolling(m5::unit::UHFRFIDComponent& u) : _u{u}, _was_polling{u.inPolling()}
-    {
-        if (_was_polling) {
-            _u.stopPolling();
-        }
-    }
-    ~PausePolling()
-    {
-        if (_was_polling && !_u.startPolling(_u.config().polling_count)) {
-            M5_LIB_LOGE("Failed to resume polling");
-        }
-    }
-    PausePolling(const PausePolling&)            = delete;
-    PausePolling& operator=(const PausePolling&) = delete;
-
-private:
-    m5::unit::UHFRFIDComponent& _u;
-    bool _was_polling{};
-};
 }  // namespace
 
 bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
@@ -82,6 +53,24 @@ bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
     return !tags.empty();
 }
 
+void UHFLayer::pause_polling()
+{
+    if (_u.inPolling()) {
+        _u.stopPolling();
+        _resume_polling = true;
+    }
+}
+
+void UHFLayer::resume_polling()
+{
+    if (_resume_polling) {
+        _resume_polling = false;
+        if (!_u.startPolling(_u.config().polling_count)) {
+            M5_LIB_LOGE("Failed to resume polling");
+        }
+    }
+}
+
 bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, const uint8_t* mask, const size_t mask_len,
                                const uint32_t access_password, const bool verify)
 {
@@ -89,14 +78,16 @@ bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, con
         M5_LIB_LOGE("An empty mask would match every tag, not one");
         return false;
     }
-    PausePolling pause{_u};
+    pause_polling();
 
     if (!_u.write_select_parameter(bank, pointer_bits, mask, mask_len)) {
+        resume_polling();
         return false;
     }
     // Storing the parameter is documented to switch the module over on its own, but saying so
     // explicitly is what makes the state the same whether or not a deselect() came before
     if (!_u.write_select_enabled(true)) {
+        resume_polling();
         return false;
     }
 
@@ -107,6 +98,7 @@ bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, con
     if (verify && !verify_selection()) {
         _has_selection = false;
         _u.write_select_enabled(false);
+        resume_polling();
         return false;
     }
     return true;
@@ -168,11 +160,12 @@ bool UHFLayer::select(const Tid& tid, const uint32_t access_password, const bool
 
 bool UHFLayer::deselect()
 {
-    PausePolling pause{_u};
-    _has_selection   = false;
-    _selected        = Tag{};
-    _access_password = 0;
-    return _u.write_select_enabled(false);
+    _has_selection      = false;
+    _selected           = Tag{};
+    _access_password    = 0;
+    const bool switched = _u.write_select_enabled(false);
+    resume_polling();
+    return switched;
 }
 
 bool UHFLayer::identify(Tag& tag)
@@ -181,7 +174,7 @@ bool UHFLayer::identify(Tag& tag)
         M5_LIB_LOGE("identify needs a tag to have been selected");
         return false;
     }
-    PausePolling pause{_u};
+    pause_polling();
 
     // The two fixed words name the chip and say whether an XTID follows them
     std::vector<uint8_t> tid{};
@@ -234,7 +227,7 @@ bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16
         M5_LIB_LOGE("readBank needs a tag to have been selected");
         return false;
     }
-    PausePolling pause{_u};
+    pause_polling();
     return _u.read_tag_memory(out, bank, word_address, word_count, _access_password);
 }
 
@@ -244,7 +237,7 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const std
         M5_LIB_LOGE("writeBank needs a tag to have been selected");
         return false;
     }
-    PausePolling pause{_u};
+    pause_polling();
     if (!_u.write_tag_memory(bank, word_address, data.data(), data.size(), _access_password)) {
         return false;
     }
@@ -276,7 +269,7 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
             }
         }
     }
-    PausePolling pause{_u};
+    pause_polling();
     return _u.lock_tag_memory(buildLockPayload(settings.data(), settings.size()), _access_password);
 }
 
@@ -302,7 +295,7 @@ bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
         return false;
     }
 
-    PausePolling pause{_u};
+    pause_polling();
     if (!_u.kill_tag(kill_password)) {
         return false;
     }
@@ -310,6 +303,7 @@ bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
     _has_selection = false;
     _selected      = Tag{};
     _u.write_select_enabled(false);
+    resume_polling();
     return true;
 }
 

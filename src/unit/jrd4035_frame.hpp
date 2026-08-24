@@ -466,7 +466,9 @@ inline bool is_error_frame(const uint8_t command)
   @brief Does the error code only mean "no tag was found this round"?
   @param error_code Error code carried by the failure notification
   @return True if no tag responded
-  @note During polling this is an expected condition, not a command failure
+  @note This answers a polling command and nothing else. Read, Write, Lock and Kill each report
+  their own failure, so anywhere but in front of a polling command this is a notification left
+  over from polling that has not finished draining
  */
 inline bool is_no_tag(const uint8_t error_code)
 {

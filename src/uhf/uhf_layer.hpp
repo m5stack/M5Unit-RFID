@@ -50,6 +50,8 @@ public:
       @param access_password Access password of the tag, 0 when it has none
       @param verify Read one word back to confirm that the tag answers
       @return True if successful
+      @note Polling stops here and stays stopped until deselect(), because an inventory round
+      leaves the tag flagged as already counted and it then answers nothing
       @note Selecting only stores a mask in the reader, so with verify off this succeeds even
       for a tag that is not in the field and the failure surfaces at the first access
       @note The password is not checked here: an unlocked bank answers whatever it is. A wrong
@@ -69,7 +71,7 @@ public:
       ever reveals an EPC
      */
     bool select(const Tid& tid, const uint32_t access_password = 0, const bool verify = true);
-    //! @brief Stop addressing a single tag
+    //! @brief Stop addressing a single tag, and put polling back the way select() found it
     bool deselect();
     //! @brief Is a tag being addressed?
     inline bool isSelected() const
@@ -140,6 +142,16 @@ private:
                          const uint32_t access_password, const bool verify);
     //! @brief Read one word of the EPC bank to prove the selected tag is there and answering
     bool verify_selection();
+    /*!
+      @brief Stop polling for as long as a tag is being addressed
+      @details An inventory round leaves every tag it saw flagged as already counted, and a tag
+      in that state answers nothing until the flag decays. Letting polling run between two tag
+      operations therefore breaks the second one, so it stays stopped from select() until
+      deselect() rather than being stopped and restarted around each operation
+     */
+    void pause_polling();
+    //! @brief Put polling back the way select() found it
+    void resume_polling();
 
     m5::unit::UHFRFIDComponent& _u;
     Tag _selected{};
@@ -147,6 +159,8 @@ private:
     //! Bank the stored mask matches against, which decides whether an EPC rewrite invalidates it
     Bank _mask_bank{Bank::Epc};
     bool _has_selection{};
+    //! Was polling running when the tag currently being addressed was selected?
+    bool _resume_polling{};
 };
 
 }  // namespace uhf
