@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: MIT
  */
 /*!
-  @file jrd4035_frame.hpp
+  @file m100_frame.hpp
   @brief Frame codec for the magicRF M100 family (JRD-4035 / JRD-100 / R200)
   @note Intentionally free of M5UnitComponent so that it can be built and tested
   without the ESP32 toolchain
 */
-#ifndef M5_UNIT_RFID_UNIT_JRD4035_FRAME_HPP
-#define M5_UNIT_RFID_UNIT_JRD4035_FRAME_HPP
+#ifndef M5_UNIT_RFID_UNIT_M100_FRAME_HPP
+#define M5_UNIT_RFID_UNIT_M100_FRAME_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -23,10 +23,13 @@
 namespace m5 {
 namespace unit {
 /*!
-  @namespace jrd4035
-  @brief JRD-4035 (magicRF M100) specific definitions
+  @namespace m100
+  @brief magicRF M100 chip specific definitions
+  @details The frame format, command codes and receiver settings belong to the chip, not to any
+  one module built around it. JRD-4035, JRD-100, R200 and YRM100 all carry an M100 and speak
+  this, differing only in the two bytes that delimit a frame
  */
-namespace jrd4035 {
+namespace m100 {
 
 //! @brief Frame header of the JRD-4035 / JRD-100
 constexpr uint8_t FRAME_HEADER{0xBB};
@@ -623,7 +626,7 @@ inline bool is_worth_retrying(const uint8_t error_code)
     }
 }
 
-}  // namespace jrd4035
+}  // namespace m100
 }  // namespace unit
 }  // namespace m5
 #endif

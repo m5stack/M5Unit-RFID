@@ -7,13 +7,13 @@
   UnitTest for UHF-RFID
 */
 #include <gtest/gtest.h>
-#include <unit/jrd4035_frame.hpp>
+#include <unit/m100_frame.hpp>
 #include <uhf/uhf.hpp>
 #include <cstdint>
 #include <vector>
 #include <cstring>
 
-using namespace m5::unit::jrd4035;
+using namespace m5::unit::m100;
 
 TEST(UHF, Checksum)
 {
@@ -697,8 +697,8 @@ TEST(UHF, ParseTagOperation)
         0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
         0x12, 0x34, 0x56, 0x78,                                                  // data
     };
-    m5::unit::jrd4035::TagOperationResult r{};
-    EXPECT_TRUE(m5::unit::jrd4035::parse_tag_operation(r, read_answer, sizeof(read_answer)));
+    m5::unit::m100::TagOperationResult r{};
+    EXPECT_TRUE(m5::unit::m100::parse_tag_operation(r, read_answer, sizeof(read_answer)));
     EXPECT_EQ(r.pc, 0x3400);
     EXPECT_EQ(r.epc.size, 12);
     EXPECT_STREQ(r.epc.toString().c_str(), "30751FEB705C5904E3D50D70");
@@ -709,37 +709,37 @@ TEST(UHF, ParseTagOperation)
     const uint8_t write_answer[] = {
         0x0E, 0x34, 0x00, 0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70, 0x00,
     };
-    r = m5::unit::jrd4035::TagOperationResult{};
-    EXPECT_TRUE(m5::unit::jrd4035::parse_tag_operation(r, write_answer, sizeof(write_answer)));
+    r = m5::unit::m100::TagOperationResult{};
+    EXPECT_TRUE(m5::unit::m100::parse_tag_operation(r, write_answer, sizeof(write_answer)));
     EXPECT_EQ(r.data_len, 1U);
-    EXPECT_EQ(r.data[0], m5::unit::jrd4035::TAG_OPERATION_SUCCESS);
+    EXPECT_EQ(r.data[0], m5::unit::m100::TAG_OPERATION_SUCCESS);
 
     // A count that runs past the frame, a count too small to hold the PC, and nothing at all
     const uint8_t overrun[] = {0x40, 0x34, 0x00, 0x30};
-    r                       = m5::unit::jrd4035::TagOperationResult{};
-    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, overrun, sizeof(overrun)));
+    r                       = m5::unit::m100::TagOperationResult{};
+    EXPECT_FALSE(m5::unit::m100::parse_tag_operation(r, overrun, sizeof(overrun)));
     const uint8_t too_small[] = {0x01, 0x34, 0x00, 0x30};
-    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, too_small, sizeof(too_small)));
-    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, nullptr, 16));
-    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, read_answer, 3));
+    EXPECT_FALSE(m5::unit::m100::parse_tag_operation(r, too_small, sizeof(too_small)));
+    EXPECT_FALSE(m5::unit::m100::parse_tag_operation(r, nullptr, 16));
+    EXPECT_FALSE(m5::unit::m100::parse_tag_operation(r, read_answer, 3));
 }
 
 TEST(UHF, ErrorDescription)
 {
     // The high nibble says which command failed and the low one says why, so the same Gen2
     // code has to read the same whichever operation provoked it
-    EXPECT_TRUE(m5::unit::jrd4035::is_tag_error(m5::unit::jrd4035::TAG_ERROR_READ | 0x04));
-    EXPECT_TRUE(m5::unit::jrd4035::is_tag_error(m5::unit::jrd4035::TAG_ERROR_KILL));
-    EXPECT_STREQ(m5::unit::jrd4035::error_description(m5::unit::jrd4035::TAG_ERROR_READ | 0x04),
-                 m5::unit::jrd4035::error_description(m5::unit::jrd4035::TAG_ERROR_WRITE | 0x04));
-    EXPECT_STREQ(m5::unit::jrd4035::error_description(0xA3), "Tag: memory overrun");
-    EXPECT_STREQ(m5::unit::jrd4035::error_description(0xD0), "Tag: other error");
+    EXPECT_TRUE(m5::unit::m100::is_tag_error(m5::unit::m100::TAG_ERROR_READ | 0x04));
+    EXPECT_TRUE(m5::unit::m100::is_tag_error(m5::unit::m100::TAG_ERROR_KILL));
+    EXPECT_STREQ(m5::unit::m100::error_description(m5::unit::m100::TAG_ERROR_READ | 0x04),
+                 m5::unit::m100::error_description(m5::unit::m100::TAG_ERROR_WRITE | 0x04));
+    EXPECT_STREQ(m5::unit::m100::error_description(0xA3), "Tag: memory overrun");
+    EXPECT_STREQ(m5::unit::m100::error_description(0xD0), "Tag: other error");
 
     // Module-level failures are not tag errors and keep their own meanings
-    EXPECT_FALSE(m5::unit::jrd4035::is_tag_error(0x15));
-    EXPECT_FALSE(m5::unit::jrd4035::is_tag_error(0x16));
-    EXPECT_STREQ(m5::unit::jrd4035::error_description(0x16), "Access failed: wrong access password");
-    EXPECT_STREQ(m5::unit::jrd4035::error_description(0x15), "No tag answered");
+    EXPECT_FALSE(m5::unit::m100::is_tag_error(0x15));
+    EXPECT_FALSE(m5::unit::m100::is_tag_error(0x16));
+    EXPECT_STREQ(m5::unit::m100::error_description(0x16), "Access failed: wrong access password");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x15), "No tag answered");
 }
 
 TEST(UHF, QueryParameters)
@@ -748,29 +748,29 @@ TEST(UHF, QueryParameters)
     // tone, Sel=00, Session=00, Target=A, Q=4. Only a top-down packing with the padding at the
     // bottom produces those values, which is what the module was found to be set to
     m5::uhf::QueryParameters qp{};
-    m5::unit::jrd4035::parse_query_parameters(qp, 0x1020);
+    m5::unit::m100::parse_query_parameters(qp, 0x1020);
     EXPECT_EQ(qp.q, 4);
     EXPECT_EQ(qp.target, m5::uhf::Target::A);
     EXPECT_EQ(qp.session, m5::uhf::Session::S0);
     EXPECT_EQ(qp.filter, m5::uhf::SelectFilter::All);
 
     // Writing the same values back leaves the word alone, DR/M/TRext included
-    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(qp, 0x1020), 0x1020);
+    EXPECT_EQ(m5::unit::m100::build_query_parameters(qp, 0x1020), 0x1020);
 
     // Each field lands where the layout says, one at a time from a cleared word
     m5::uhf::QueryParameters zero{};
-    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0000);
+    EXPECT_EQ(m5::unit::m100::build_query_parameters(zero, 0x0000), 0x0000);
     zero.q = 0x0F;
-    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0078);
+    EXPECT_EQ(m5::unit::m100::build_query_parameters(zero, 0x0000), 0x0078);
     zero        = m5::uhf::QueryParameters{};
     zero.target = m5::uhf::Target::B;
-    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0080);
+    EXPECT_EQ(m5::unit::m100::build_query_parameters(zero, 0x0000), 0x0080);
     zero         = m5::uhf::QueryParameters{};
     zero.session = m5::uhf::Session::S3;
-    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0300);
+    EXPECT_EQ(m5::unit::m100::build_query_parameters(zero, 0x0000), 0x0300);
     zero        = m5::uhf::QueryParameters{};
     zero.filter = m5::uhf::SelectFilter::Selected;
-    EXPECT_EQ(m5::unit::jrd4035::build_query_parameters(zero, 0x0000), 0x0C00);
+    EXPECT_EQ(m5::unit::m100::build_query_parameters(zero, 0x0000), 0x0C00);
 
     // DR, M and TRext are carried over untouched, and the unused low bits are left as found
     m5::uhf::QueryParameters all{};
@@ -778,12 +778,12 @@ TEST(UHF, QueryParameters)
     all.target             = m5::uhf::Target::B;
     all.session            = m5::uhf::Session::S3;
     all.filter             = m5::uhf::SelectFilter::Selected;
-    const uint16_t written = m5::unit::jrd4035::build_query_parameters(all, 0xF005);
+    const uint16_t written = m5::unit::m100::build_query_parameters(all, 0xF005);
     EXPECT_EQ(written & 0xF000, 0xF000);
     EXPECT_EQ(written & 0x0007, 0x0005);
     // ...and reading it back yields what was asked for
     m5::uhf::QueryParameters back{};
-    m5::unit::jrd4035::parse_query_parameters(back, written);
+    m5::unit::m100::parse_query_parameters(back, written);
     EXPECT_EQ(back.q, all.q);
     EXPECT_EQ(back.target, all.target);
     EXPECT_EQ(back.session, all.session);
@@ -792,7 +792,7 @@ TEST(UHF, QueryParameters)
 
 TEST(UHF, WorthRetrying)
 {
-    using namespace m5::unit::jrd4035;
+    using namespace m5::unit::m100;
     // "The tag did not answer" says nothing about the tag being unwilling, so ask again
     EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::ReadFail)));
     EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::WriteFail)));

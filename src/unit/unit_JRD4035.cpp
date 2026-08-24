@@ -13,7 +13,7 @@
 
 #include <M5Utility.hpp>
 
-using namespace m5::unit::jrd4035;
+using namespace m5::unit::m100;
 using namespace m5::unit::types;
 using namespace m5::utility::mmh3;
 

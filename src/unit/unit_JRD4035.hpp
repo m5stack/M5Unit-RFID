@@ -12,7 +12,7 @@
 
 #include <string>
 
-#include "jrd4035_frame.hpp"
+#include "m100_frame.hpp"
 #include "unit_UHFRFID.hpp"
 
 namespace m5 {
@@ -71,7 +71,7 @@ protected:
     //! @brief Send a command frame
     bool send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len);
     //! @brief Send a command and wait for its response, routing notifications to the tag queue
-    inline bool send_and_wait(jrd4035::Frame& response, const uint8_t command, const uint8_t* param,
+    inline bool send_and_wait(m100::Frame& response, const uint8_t command, const uint8_t* param,
                               const uint16_t param_len, const uint32_t timeout_ms = 1000U)
     {
         return send_and_wait_answered_as(response, command, command, param, param_len, timeout_ms);
@@ -88,12 +88,12 @@ protected:
       @details Write (0x49) is answered as 0x39 and Set Select Mode (0x12) as 0x0C. Waiting on
       the code that was sent would simply time out for those two
      */
-    bool send_and_wait_answered_as(jrd4035::Frame& response, const uint8_t command, const uint8_t answered_as,
+    bool send_and_wait_answered_as(m100::Frame& response, const uint8_t command, const uint8_t answered_as,
                                    const uint8_t* param, const uint16_t param_len, const uint32_t timeout_ms = 1000U);
     //! @brief Read one frame from the stream. Returns false when nothing is pending
-    bool read_frame(jrd4035::Frame& out, const uint32_t timeout_ms);
+    bool read_frame(m100::Frame& out, const uint32_t timeout_ms);
     //! @brief Route a received frame
-    void route_frame(const jrd4035::Frame& f);
+    void route_frame(const m100::Frame& f);
     //! @brief Read the module information for one kind (0x00 hardware / 0x01 software / 0x02 manufacturer)
     bool read_module_information_kind(std::string& out, const uint8_t kind);
     //! @brief Run one of the channel scans and decode its contiguous range of levels
@@ -106,7 +106,7 @@ protected:
       @details send_and_wait also returns true for a failure notification, since the module
       answering at all is what it waits for. Every tag operation has to tell the two apart
      */
-    bool succeeded(const jrd4035::Frame& response, const char* what) const;
+    bool succeeded(const m100::Frame& response, const char* what) const;
     /*!
       @brief Did the tag report that it carried the operation out?
       @param response Response frame of a Write, Lock or Kill
@@ -115,7 +115,7 @@ protected:
       @details The module answering says the tag was reached; the status byte inside says the
       tag actually did what it was told
      */
-    bool tag_carried_it_out(const jrd4035::Frame& response, const char* what) const;
+    bool tag_carried_it_out(const m100::Frame& response, const char* what) const;
     /*!
       @brief Send a tag operation, trying again when the tag simply did not answer
       @param[out] response Response frame
@@ -131,16 +131,16 @@ protected:
       every attempt after it, because a killed tag answers nothing. There is no way to tell that
       apart from a kill that never happened
      */
-    bool send_tag_operation(jrd4035::Frame& response, const uint8_t command, const uint8_t* param,
+    bool send_tag_operation(m100::Frame& response, const uint8_t command, const uint8_t* param,
                             const uint16_t param_len, const char* what);
 
     //! Frame header. Derived classes for the R200 family override this with 0xAA
-    uint8_t _frame_header{jrd4035::FRAME_HEADER};
+    uint8_t _frame_header{m100::FRAME_HEADER};
     //! Frame end. Derived classes for the R200 family override this with 0xDD
-    uint8_t _frame_end{jrd4035::FRAME_END};
+    uint8_t _frame_end{m100::FRAME_END};
 
     //! Response slot filled by route_frame while send_and_wait is pumping
-    jrd4035::Frame _response{};
+    m100::Frame _response{};
     bool _response_pending{};
     uint8_t _awaiting_command{};
 };

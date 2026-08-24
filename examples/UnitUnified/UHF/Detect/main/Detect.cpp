@@ -64,7 +64,7 @@ void print_tag(const m5::uhf::Tag& tag)
     // which tells a lot about an unknown tag without reading any memory bank
     const uint8_t words  = m5::uhf::pcEPCLengthWords(tag.pc);
     const bool length_ok = (words * 2 == static_cast<int>(tag.epc.size));
-    const bool crc_ok    = m5::unit::jrd4035::verify_tag_crc(tag);
+    const bool crc_ok    = m5::unit::m100::verify_tag_crc(tag);
 
     M5_LOGI("EPC : %s (%u bytes / %u bits)", epc.c_str(), (unsigned)tag.epc.size, (unsigned)(tag.epc.size * 8));
     M5_LOGI("PC  : %04X len=%uword UMI=%u XI=%u NSI=0x%03X -> length %s", tag.pc, words,
