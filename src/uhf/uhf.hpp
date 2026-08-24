@@ -393,9 +393,9 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                 case 0x412:
                     return Chip::AlienHiggs3;  // Higgs 3 IC datasheet, Table 1
                 case 0x821:
-                    // Neither Alien nor the GS1 registry publishes this one. Six independent
-                    // third-party tables agree on it, and it is consistent with the datasheet
-                    // saying Higgs 9 carries an XTID, but it has yet to be read off a real tag
+                    // Neither Alien nor the GS1 registry publishes this one; it comes from
+                    // third-party tables. Read off a real Higgs 9, whose TID is
+                    // E2803821 2000 6820042E3E3B, so it is measured rather than taken on trust
                     return Chip::AlienHiggs9;
                 default:
                     return Chip::Unknown;
