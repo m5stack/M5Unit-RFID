@@ -638,9 +638,12 @@ TEST(UHF, DecodeXtidSegments)
     EXPECT_TRUE(m5::uhf::decodeTid(tag, ocs_only, sizeof(ocs_only)));
     EXPECT_TRUE(tag.has_xtid);
     EXPECT_EQ(tag.serial_bits, 48);
+    // The segment says how large an EPC this tag takes, so that is what is reported rather than
+    // the 128 bits the chip is otherwise known for
     EXPECT_EQ(tag.epc_max_bits, 15U * 16U);
     EXPECT_TRUE(tag.supports_block_permalock);
-    EXPECT_EQ(tag.user_memory_bits, 0U);
+    // Nothing said how much user memory, so what the chip is known to hold stands in
+    EXPECT_EQ(tag.user_memory_bits, 512U);
 
     // The same tag with the User Memory and BlockPermaLock segment as well. The lower address
     // carries the block size and the higher one the user memory size, which is the order that
@@ -670,14 +673,15 @@ TEST(UHF, DecodeXtidSegments)
     EXPECT_EQ(tag.permalock_block_bits, 4U * 16U);
     EXPECT_EQ(tag.user_memory_bits, 43U * 16U);
 
-    // Reading only as far as the header still yields the chip and the serial length, and leaves
-    // the sizes at zero rather than inventing them out of bytes that were never read
+    // Reading only as far as the header still yields the chip and the serial length. Nothing is
+    // invented out of the bytes that were never read: the sizes here are the ones the chip is
+    // known for, not the ones the unread segments would have carried
     tag = m5::uhf::Tag{};
     EXPECT_TRUE(m5::uhf::decodeTid(tag, with_blockwrite, 6));
     EXPECT_EQ(tag.chip, m5::uhf::Chip::ImpinjMonza4QT);
     EXPECT_EQ(tag.serial_bits, 48);
-    EXPECT_EQ(tag.epc_max_bits, 0U);
-    EXPECT_EQ(tag.user_memory_bits, 0U);
+    EXPECT_EQ(tag.epc_max_bits, 128U);
+    EXPECT_EQ(tag.user_memory_bits, 512U);
 
     // A tag with no XTID reports no serial and no sizes
     const uint8_t plain[] = {0xE2, 0x00, 0x34, 0x12, 0x30, 0x00};
@@ -897,4 +901,54 @@ TEST(UHF, ParseSelectParameter)
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, nullptr, 19));
     std::vector<uint8_t> too_long(7 + m5::uhf::SELECT_MASK_MAX_BYTES + 1, 0);
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, too_long.data(), too_long.size()));
+}
+
+TEST(UHF, ChipSizeFallback)
+{
+    // Every chip met so far carries an XTID with a serial number and nothing else, so the sizes
+    // have to come from what the chip is known to hold. These three TIDs were read off tags
+    struct Case {
+        const char* what;
+        uint8_t tid[6];
+        m5::uhf::Chip chip;
+        uint32_t user_bits;
+        uint32_t epc_max_bits;
+    };
+    const Case cases[] = {
+        {"Alien Higgs 9", {0xE2, 0x80, 0x38, 0x21, 0x20, 0x00}, m5::uhf::Chip::AlienHiggs9, 688, 496},
+        {"Impinj Monza 4QT", {0xE2, 0x80, 0x11, 0x05, 0x20, 0x00}, m5::uhf::Chip::ImpinjMonza4QT, 512, 128},
+        // No datasheet to hand for this one, so it stays unknown rather than being guessed at
+        {"NXP UCODE 8", {0xE2, 0x80, 0x68, 0x94, 0x20, 0x00}, m5::uhf::Chip::NxpUcode8, 0, 0},
+    };
+    for (auto&& c : cases) {
+        m5::uhf::Tag tag{};
+        EXPECT_TRUE(m5::uhf::decodeTid(tag, c.tid, sizeof(c.tid))) << c.what;
+        EXPECT_EQ(tag.chip, c.chip) << c.what;
+        EXPECT_EQ(tag.serial_bits, 48) << c.what;
+        EXPECT_EQ(tag.user_memory_bits, c.user_bits) << c.what;
+        EXPECT_EQ(tag.epc_max_bits, c.epc_max_bits) << c.what;
+    }
+
+    // What the tag says about itself wins: a chip whose table entry says 512 but whose XTID
+    // reports 43 words is taken at its word
+    const uint8_t with_segment[] = {
+        0xE2, 0x80, 0x11, 0x05,              // Impinj Monza 4QT, table says 512 bits
+        0x34, 0x00,                          // serial + Optional Command Support + User Memory
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66,  // 48-bit serial
+        0x10, 0x0F,                          // Optional Command Support: max EPC 15 words
+        0x00, 0x04,                          // BlockPermaLock block size
+        0x00, 0x2B,                          // User memory: 43 words
+    };
+    m5::uhf::Tag tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, with_segment, sizeof(with_segment)));
+    EXPECT_EQ(tag.user_memory_bits, 43U * 16U);
+    EXPECT_EQ(tag.epc_max_bits, 15U * 16U);
+
+    // A chip nobody listed reports nothing rather than something wrong
+    const uint8_t unlisted[] = {0xE2, 0x01, 0x23, 0x45, 0x20, 0x00};
+    tag                      = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, unlisted, sizeof(unlisted)));
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::Unknown);
+    EXPECT_EQ(tag.user_memory_bits, 0U);
+    EXPECT_EQ(tag.epc_max_bits, 0U);
 }

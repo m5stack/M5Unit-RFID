@@ -12,6 +12,7 @@
 #include <M5Utility.hpp>
 
 #include <algorithm>
+#include <cstdio>
 
 #include "unit/m100_frame.hpp"
 
@@ -250,6 +251,88 @@ bool UHFLayer::identify(Tag& tag)
     tag       = identified;
     _selected = identified;
     return true;
+}
+
+uint16_t UHFLayer::bank_words(const Bank bank)
+{
+    switch (bank) {
+        case Bank::Reserved:
+            // Kill password then access password, two words each. Fixed by EPC Gen2
+            return 4;
+        case Bank::Epc:
+            // The stored CRC and the PC, then as much EPC as the PC says there is
+            return static_cast<uint16_t>(2 + pcEPCLengthWords(_selected.pc));
+        case Bank::Tid:
+            // Whatever identify() ended up keeping, which is the whole of the TID
+            return static_cast<uint16_t>(_selected.tid.size / 2);
+        default:
+            // Only the tag or the chip can say, and often neither does
+            return static_cast<uint16_t>(_selected.user_memory_bits / 16);
+    }
+}
+
+bool UHFLayer::dump_words(const char* what, const Bank bank, const uint16_t words)
+{
+    printf("== %s ==\n", what);
+    if (words == 0) {
+        // Saying nothing here would read as an empty bank, which is a different thing
+        printf("(size not known)\n");
+        return false;
+    }
+
+    // Eight words to a line, which is the sixteen bytes the sister NFC dump puts on one
+    constexpr uint16_t PER_LINE{8};
+    for (uint16_t at = 0; at < words; at += PER_LINE) {
+        const uint16_t n = std::min<uint16_t>(PER_LINE, words - at);
+        std::vector<uint8_t> data{};
+        if (!readBank(data, bank, at, n)) {
+            printf("[%03u/%03X] ERROR\n", at, at);
+            return false;
+        }
+        printf("[%03u/%03X]:", at, at);
+        for (size_t i = 0; i + 1 < data.size(); i += 2) {
+            printf("%02X%02X ", data[i], data[i + 1]);
+        }
+        printf("\n");
+    }
+    return true;
+}
+
+bool UHFLayer::dump(const Bank bank)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("dump needs a tag to have been selected");
+        return false;
+    }
+    static const char* names[] = {"Reserved", "EPC", "TID", "User"};
+    return dump_words(names[static_cast<uint8_t>(bank) & 0x03], bank, bank_words(bank));
+}
+
+bool UHFLayer::dump()
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("dump needs a tag to have been selected");
+        return false;
+    }
+    // The TID says which chip this is, and the chip is what says how much User memory there is
+    // when the tag itself does not. Without it the last bank would always be skipped
+    if (_selected.tid.empty()) {
+        Tag identified{};
+        if (!identify(identified)) {
+            M5_LIB_LOGW("Could not identify the tag; its TID and User bank stay unread");
+        }
+    }
+
+    bool ok = dump(Bank::Reserved);
+    ok &= dump(Bank::Epc);
+    ok &= dump(Bank::Tid);
+    // A tag with no user memory at all is not a failure to read one
+    if (bank_words(Bank::User) == 0 && !pcUserMemoryIndicator(_selected.pc)) {
+        printf("== User ==\n(the tag reports none)\n");
+    } else {
+        ok &= dump(Bank::User);
+    }
+    return ok;
 }
 
 bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address,

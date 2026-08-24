@@ -44,30 +44,68 @@ void begin_unit()
     }
 }
 
-std::string to_hex(const std::vector<uint8_t>& data)
+//! @brief Name the XTID segments a header says are there
+std::string xtid_segments(const uint16_t header)
 {
     std::string s{};
-    for (auto&& b : data) {
-        s += m5::utility::formatString("%02X", b);
+    if (header & m5::uhf::XTID_OPTIONAL_COMMAND_SUPPORT) {
+        s += "cmdsupport ";
     }
-    return s;
+    if (header & m5::uhf::XTID_BLOCKWRITE_BLOCKERASE) {
+        s += "blockwrite ";
+    }
+    if (header & m5::uhf::XTID_USER_MEMORY_BLOCKPERMALOCK) {
+        s += "usermem ";
+    }
+    if (header & m5::uhf::XTID_LOCK_BIT) {
+        s += "lockbit ";
+    }
+    return s.empty() ? "none" : s;
 }
 
-//! @brief Words to read when the tag holds user memory but never says how much
-constexpr uint16_t USER_PROBE_WORDS{2};
-//! @brief Enough of the User bank to see what is in it without filling the log with it
-constexpr uint16_t USER_DUMP_MAX_WORDS{16};
-
-void dump_bank(const char* what, const m5::uhf::Bank bank, const uint16_t word_address, const uint16_t words)
+//! @brief Say how big something is, or that nobody said
+std::string bits_or_unknown(const uint32_t bits)
 {
-    std::vector<uint8_t> data{};
-    if (!uhf.readBank(data, bank, word_address, words)) {
-        // A refusal is worth as much as the data here: a Reserved bank that will not be read is
-        // how a tag says its access password has already been set
-        M5_LOGW("%s: could not be read", what);
-        return;
+    return bits ? m5::utility::formatString("%ubit", bits) : std::string{"unknown"};
+}
+
+/*!
+  @brief Say how much user memory there is
+  @details A size of zero means nothing said how much, which is not the same as there being
+  none. The PC carries an indicator that settles that one way, so a tag stating it has no user
+  memory reads as none rather than as unknown
+ */
+std::string user_memory_size(const m5::uhf::Tag& tag)
+{
+    if (tag.user_memory_bits == 0 && !m5::uhf::pcUserMemoryIndicator(tag.pc)) {
+        return "none";
     }
-    M5_LOGI("%s: %s", what, to_hex(data).c_str());
+    return bits_or_unknown(tag.user_memory_bits);
+}
+
+void print_identity(const m5::uhf::Tag& tag)
+{
+    M5_LOGI("TID   : %s", tag.tid.toString().c_str());
+    M5_LOGI("Vendor: %s (MDID 0x%03X)", tag.vendorAsString().c_str(), tag.mdid);
+    M5_LOGI("Chip  : %s (TMN 0x%03X)", tag.chipAsString().c_str(), tag.model_number);
+
+    // "XTID: yes" only says the indicator bit is set. What it carries is another matter, and on
+    // every chip tried so far it carries a serial number and nothing else, which is why the
+    // sizes below come from the chip rather than from the tag
+    if (tag.has_xtid && tag.tid.size >= 6) {
+        const uint16_t header = static_cast<uint16_t>((tag.tid[4] << 8) | tag.tid[5]);
+        M5_LOGI("XTID  : header=0x%04X serial=%ubit segments=%s", header, tag.serial_bits,
+                xtid_segments(header).c_str());
+    } else {
+        M5_LOGI("XTID  : no");
+    }
+    M5_LOGI("Flags : security=%u file=%u blockPermalock=%s", tag.supports_security ? 1 : 0, tag.supports_file ? 1 : 0,
+            tag.supports_block_permalock ? "yes" : "no");
+    M5_LOGI("Sizes : user=%s maxEPC=%s permalockBlock=%s", user_memory_size(tag).c_str(),
+            bits_or_unknown(tag.epc_max_bits).c_str(), bits_or_unknown(tag.permalock_block_bits).c_str());
+
+    lcd.printf("%s / %s\n", tag.vendorAsString().c_str(), tag.chipAsString().c_str());
+    lcd.printf("user %s\n", user_memory_size(tag).c_str());
 }
 
 void identify_and_dump(const m5::uhf::Tag& detected)
@@ -87,39 +125,8 @@ void identify_and_dump(const m5::uhf::Tag& detected)
         uhf.deselect();
         return;
     }
-
-    M5_LOGI("TID   : %s", tag.tid.toString().c_str());
-    M5_LOGI("Vendor: %s (MDID 0x%03X)", tag.vendorAsString().c_str(), tag.mdid);
-    M5_LOGI("Chip  : %s (TMN 0x%03X)", tag.chipAsString().c_str(), tag.model_number);
-    M5_LOGI("XTID  : %s serial=%ubit security=%u file=%u", tag.has_xtid ? "yes" : "no", tag.serial_bits,
-            tag.supports_security ? 1 : 0, tag.supports_file ? 1 : 0);
-    // Zero means the tag never said, not that the tag has none of it. Every chip tried so far
-    // carries an XTID with nothing in it but a serial number, so these stay zero in practice
-    M5_LOGI("Sizes : user=%ubit maxEPC=%ubit permalockBlock=%ubit blockPermalock=%s", tag.user_memory_bits,
-            tag.epc_max_bits, tag.permalock_block_bits, tag.supports_block_permalock ? "yes" : "no");
-
-    lcd.printf("%s / %s\n", tag.vendorAsString().c_str(), tag.chipAsString().c_str());
-
-    // Kill password then access password. All zeros is the state a tag leaves the factory in,
-    // and it is also what keeps the tag from ever being killed by accident
-    dump_bank("Reserved", m5::uhf::Bank::Reserved, 0, 4);
-
-    // The XTID says how big the User bank is when it says anything at all. When it stays silent
-    // the PC still carries an indicator, so a short probe read is worth trying before giving up
-    uint16_t user_words = static_cast<uint16_t>(tag.user_memory_bits / 16);
-    if (user_words == 0 && m5::uhf::pcUserMemoryIndicator(tag.pc)) {
-        user_words = USER_PROBE_WORDS;
-        M5_LOGI("User  : size unknown, probing %u words", user_words);
-    }
-    if (user_words > USER_DUMP_MAX_WORDS) {
-        user_words = USER_DUMP_MAX_WORDS;
-    }
-    if (user_words) {
-        dump_bank("User", m5::uhf::Bank::User, 0, user_words);
-    } else {
-        M5_LOGI("User  : the tag reports none");
-    }
-
+    print_identity(tag);
+    uhf.dump();
     uhf.deselect();
 }
 }  // namespace

@@ -113,6 +113,26 @@ public:
     bool identify(Tag& tag);
     ///@}
 
+    ///@name Dump
+    ///@{
+    /*!
+      @brief Dump every memory bank of the selected tag
+      @return True when every bank was read
+      @details Prints the Reserved, EPC, TID and User banks. How much of each there is comes
+      from the tag where it says so and from what its chip is known to hold where it does not;
+      a bank whose size is not known either way is skipped and said to be so
+      @pre A tag must have been selected
+     */
+    bool dump();
+    /*!
+      @brief Dump one memory bank
+      @param bank Memory bank
+      @return True if successful
+      @pre A tag must have been selected
+     */
+    bool dump(const Bank bank);
+    ///@}
+
     ///@name Tag memory, addressed to the selected tag
     ///@{
     /*!
@@ -164,6 +184,10 @@ private:
                          const uint32_t access_password, const bool verify);
     //! @brief Read one word of the EPC bank to prove the selected tag is there and answering
     bool verify_selection();
+    //! @brief How many words of a bank there are to read, 0 when that is not known
+    uint16_t bank_words(const Bank bank);
+    //! @brief Print one bank's worth of words, sixteen bytes to a line
+    bool dump_words(const char* what, const Bank bank, const uint16_t words);
     /*!
       @brief Stop polling for as long as a tag is being addressed
       @details An inventory round leaves every tag it saw flagged as already counted, and a tag

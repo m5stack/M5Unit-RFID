@@ -302,6 +302,54 @@ struct Tag {
     std::string chipAsString() const;
 };
 
+/*!
+  @brief User memory a chip is known to hold, in bits
+  @param chip Chip
+  @return Size in bits, 0 when this library does not know
+  @details Where a tag says nothing about itself this is what is left. Only chips whose size
+  comes from a datasheet are listed: a wrong size reported confidently is worse than none at
+  all, so anything unverified is left out rather than guessed at
+  @note Zero means unknown, not empty. A tag with no user memory at all says so through the
+  user memory indicator of its PC, which is a separate thing
+ */
+inline uint32_t chipUserMemoryBits(const Chip chip)
+{
+    switch (chip) {
+        case Chip::AlienHiggs9:
+            return 688;  // ALC-390: "688 bit user memory". 43 words, confirmed on a tag
+        case Chip::ImpinjMonza4QT:
+            return 512;  // Monza 4 Rev8.0 2.3.1: "512 bits of user memory". 32 words, confirmed
+        case Chip::NxpUcodeG2iM:
+        case Chip::NxpUcodeG2iMPlus:
+            return 640;  // G2iM Rev3.7: "640 bit configurable User Memory"
+        default:
+            return 0;
+    }
+}
+
+/*!
+  @brief Largest EPC a chip is known to accept, in bits
+  @param chip Chip
+  @return Size in bits, 0 when this library does not know
+  @details Sourced the same way as chipUserMemoryBits, and left out for the same reason when it
+  cannot be sourced
+ */
+inline uint32_t chipEpcMaxBits(const Chip chip)
+{
+    switch (chip) {
+        case Chip::AlienHiggs9:
+            return 496;  // ALC-390: "Supports EPC size up to 496b"
+        case Chip::ImpinjMonza4QT:
+            return 128;  // Monza 4 Rev8.0 2.3.1: "128 bits of EPC memory"
+        case Chip::NxpUcodeG2iM:
+            return 256;  // G2iM Rev3.7: "256 bit of EPC memory"
+        case Chip::NxpUcodeG2iMPlus:
+            return 448;  // G2iM Rev3.7: "up to 448 bit EPC for UCODE G2iM+"
+        default:
+            return 0;
+    }
+}
+
 //! @brief ISO/IEC 15963 allocation class identifier used by EPCglobal tags
 constexpr uint8_t TID_CLASS_EPCGLOBAL{0xE2};
 
@@ -424,6 +472,24 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
 }
 
 /*!
+  @brief Fill in what the tag left unsaid from what its chip is known to hold
+  @param[in,out] tag Tag whose TID has been decoded
+  @details The XTID is where a tag states its own memory sizes, and hardly any tag does: three
+  chips from three designers were all found carrying an XTID with nothing in it but a serial
+  number. What the chip is known to hold is the only thing left, and the mask designer and model
+  number are what name the chip
+ */
+inline void fillSizesFromChip(Tag& tag)
+{
+    if (tag.user_memory_bits == 0) {
+        tag.user_memory_bits = chipUserMemoryBits(tag.chip);
+    }
+    if (tag.epc_max_bits == 0) {
+        tag.epc_max_bits = chipEpcMaxBits(tag.chip);
+    }
+}
+
+/*!
   @brief Decode the fixed part of a TID into a tag
   @param[in,out] tag Tag to fill
   @param tid TID bytes starting at word 0
@@ -452,6 +518,7 @@ inline bool decodeTid(Tag& tag, const uint8_t* tid, const size_t len)
     tag.permalock_block_bits     = 0;
     tag.supports_block_permalock = false;
     if (!tag.has_xtid || len < XTID_FIXED_WORDS * 2) {
+        fillSizesFromChip(tag);
         return true;
     }
 
@@ -483,6 +550,7 @@ inline bool decodeTid(Tag& tag, const uint8_t* tid, const size_t len)
         }
         word += 2;
     }
+    fillSizesFromChip(tag);
     return true;
 }
 
