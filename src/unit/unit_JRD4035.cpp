@@ -83,10 +83,13 @@ constexpr uint32_t SELECT_SETTLE_MS{20};
 
 /*!
   @brief How long the module is given to answer a tag operation
-  @details A one or two word access comes back in 25 to 160ms, measured over 416 of them. The
-  headroom is for a full 32-word write, where the module programs the words into the tag one at
-  a time and pays the tag's write time for each; that case has not been measured. A module that
-  has stopped answering altogether is the only thing this ever actually waits out
+  @details A write costs about 37ms of overhead plus 10ms for every word, measured on an Alien
+  Higgs 9 and an Impinj Monza 4QT: a two word write comes back in 51 to 72ms and the longest a
+  single command can be, 32 words, in 307 to 394ms. Reads are an order of magnitude cheaper per
+  word, about 1.2ms, because Gen2 returns the whole of a read in one backscatter while a write
+  programs the words one at a time and pays the tag's write time for each. Five times the worst
+  measured leaves room for a chip slower to program than either of those. A module that has
+  stopped answering altogether is the only thing this ever actually waits out
  */
 constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
 
