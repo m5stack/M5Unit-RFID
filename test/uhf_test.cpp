@@ -606,3 +606,138 @@ TEST(UHF, DecodeTid)
     EXPECT_FALSE(m5::uhf::decodeTid(tag, g2im, 3));
     EXPECT_FALSE(m5::uhf::decodeTid(tag, nullptr, 4));
 }
+
+TEST(UHF, XtidTotalWords)
+{
+    // Two fixed words plus the header, and nothing else
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0x0000), 3U);
+    // The 48-bit serial of the worked example in TDS Table 16-2
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0x2000), 6U);
+    // Serialisation 111 is the longest the field can say: 144 bits, nine words
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0xE000), 12U);
+    // The fully populated XTID of TDS Table 16-2: 48-bit serial and all four segments
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0x3E00), 6U + 1U + 4U + 2U + 1U);
+    // The largest TID the standard can describe still fits in what identify() keeps
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0xFE00) * 2, m5::uhf::TID_MAX_BYTES);
+}
+
+TEST(UHF, DecodeXtidSegments)
+{
+    m5::uhf::Tag tag{};
+
+    // A tag with a 48-bit serial and the Optional Command Support segment only. The header
+    // therefore reads 0011 0000 0000 0000, and the segment sits right after the three serial
+    // words. Max EPC Size counts words, so 0x0F means a 240-bit EPC, and bit 12 claims
+    // BlockPermaLock support
+    const uint8_t ocs_only[] = {
+        0xE2, 0x80, 0x11, 0x05,              // Impinj Monza 4QT
+        0x30, 0x00,                          // XTID header
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66,  // 48-bit serial
+        0x10, 0x0F,                          // Optional Command Support
+    };
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, ocs_only, sizeof(ocs_only)));
+    EXPECT_TRUE(tag.has_xtid);
+    EXPECT_EQ(tag.serial_bits, 48);
+    EXPECT_EQ(tag.epc_max_bits, 15U * 16U);
+    EXPECT_TRUE(tag.supports_block_permalock);
+    EXPECT_EQ(tag.user_memory_bits, 0U);
+
+    // The same tag with the User Memory and BlockPermaLock segment as well. The lower address
+    // carries the block size and the higher one the user memory size, which is the order that
+    // reads backwards from the field numbering (TDS Table 16-2)
+    const uint8_t with_user[] = {
+        0xE2, 0x80, 0x11, 0x05, 0x34, 0x00,              // header: serial + Optional Command Support + User Memory
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x10, 0x0F,  // Optional Command Support
+        0x00, 0x04,                                      // BlockPermaLock block size: 4 words
+        0x00, 0x2B,                                      // User memory size: 43 words
+    };
+    tag = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, with_user, sizeof(with_user)));
+    EXPECT_EQ(tag.permalock_block_bits, 4U * 16U);
+    EXPECT_EQ(tag.user_memory_bits, 43U * 16U);
+
+    // The four-word BlockWrite segment in between has to be stepped over, or the two words
+    // after it are read as the user memory sizes
+    const uint8_t with_blockwrite[] = {
+        0xE2, 0x80, 0x11, 0x05, 0x3C, 0x00,              // header: serial + all three of the segments above bit 9
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x10, 0x0F,  // Optional Command Support
+        0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC, 0xDD, 0xDD,  // BlockWrite and BlockErase
+        0x00, 0x04,                                      // BlockPermaLock block size
+        0x00, 0x2B,                                      // User memory size
+    };
+    tag = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, with_blockwrite, sizeof(with_blockwrite)));
+    EXPECT_EQ(tag.permalock_block_bits, 4U * 16U);
+    EXPECT_EQ(tag.user_memory_bits, 43U * 16U);
+
+    // Reading only as far as the header still yields the chip and the serial length, and leaves
+    // the sizes at zero rather than inventing them out of bytes that were never read
+    tag = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, with_blockwrite, 6));
+    EXPECT_EQ(tag.chip, m5::uhf::Chip::ImpinjMonza4QT);
+    EXPECT_EQ(tag.serial_bits, 48);
+    EXPECT_EQ(tag.epc_max_bits, 0U);
+    EXPECT_EQ(tag.user_memory_bits, 0U);
+
+    // A tag with no XTID reports no serial and no sizes
+    const uint8_t plain[] = {0xE2, 0x00, 0x34, 0x12, 0x30, 0x00};
+    tag                   = m5::uhf::Tag{};
+    EXPECT_TRUE(m5::uhf::decodeTid(tag, plain, sizeof(plain)));
+    EXPECT_FALSE(tag.has_xtid);
+    EXPECT_EQ(tag.serial_bits, 0);
+    EXPECT_EQ(tag.epc_max_bits, 0U);
+}
+
+TEST(UHF, ParseTagOperation)
+{
+    // The answer to a Read: the count covers PC and EPC, and the words read follow them
+    const uint8_t read_answer[] = {
+        0x0E,                                                                    // UL
+        0x34, 0x00,                                                              // PC
+        0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70,  // EPC
+        0x12, 0x34, 0x56, 0x78,                                                  // data
+    };
+    m5::unit::jrd4035::TagOperationResult r{};
+    EXPECT_TRUE(m5::unit::jrd4035::parse_tag_operation(r, read_answer, sizeof(read_answer)));
+    EXPECT_EQ(r.pc, 0x3400);
+    EXPECT_EQ(r.epc.size, 12);
+    EXPECT_STREQ(r.epc.toString().c_str(), "30751FEB705C5904E3D50D70");
+    EXPECT_EQ(r.data_len, 4U);
+    EXPECT_EQ(r.data[0], 0x12);
+
+    // The answer to a Write, Lock or Kill is the same shape with a single status byte
+    const uint8_t write_answer[] = {
+        0x0E, 0x34, 0x00, 0x30, 0x75, 0x1F, 0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70, 0x00,
+    };
+    r = m5::unit::jrd4035::TagOperationResult{};
+    EXPECT_TRUE(m5::unit::jrd4035::parse_tag_operation(r, write_answer, sizeof(write_answer)));
+    EXPECT_EQ(r.data_len, 1U);
+    EXPECT_EQ(r.data[0], m5::unit::jrd4035::TAG_OPERATION_SUCCESS);
+
+    // A count that runs past the frame, a count too small to hold the PC, and nothing at all
+    const uint8_t overrun[] = {0x40, 0x34, 0x00, 0x30};
+    r                       = m5::unit::jrd4035::TagOperationResult{};
+    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, overrun, sizeof(overrun)));
+    const uint8_t too_small[] = {0x01, 0x34, 0x00, 0x30};
+    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, too_small, sizeof(too_small)));
+    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, nullptr, 16));
+    EXPECT_FALSE(m5::unit::jrd4035::parse_tag_operation(r, read_answer, 3));
+}
+
+TEST(UHF, ErrorDescription)
+{
+    // The high nibble says which command failed and the low one says why, so the same Gen2
+    // code has to read the same whichever operation provoked it
+    EXPECT_TRUE(m5::unit::jrd4035::is_tag_error(m5::unit::jrd4035::TAG_ERROR_READ | 0x04));
+    EXPECT_TRUE(m5::unit::jrd4035::is_tag_error(m5::unit::jrd4035::TAG_ERROR_KILL));
+    EXPECT_STREQ(m5::unit::jrd4035::error_description(m5::unit::jrd4035::TAG_ERROR_READ | 0x04),
+                 m5::unit::jrd4035::error_description(m5::unit::jrd4035::TAG_ERROR_WRITE | 0x04));
+    EXPECT_STREQ(m5::unit::jrd4035::error_description(0xA3), "Tag: memory overrun");
+    EXPECT_STREQ(m5::unit::jrd4035::error_description(0xD0), "Tag: other error");
+
+    // Module-level failures are not tag errors and keep their own meanings
+    EXPECT_FALSE(m5::unit::jrd4035::is_tag_error(0x15));
+    EXPECT_FALSE(m5::unit::jrd4035::is_tag_error(0x16));
+    EXPECT_STREQ(m5::unit::jrd4035::error_description(0x16), "Access failed: wrong access password");
+    EXPECT_STREQ(m5::unit::jrd4035::error_description(0x15), "No tag answered");
+}

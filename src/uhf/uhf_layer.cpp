@@ -14,6 +14,46 @@
 namespace m5 {
 namespace uhf {
 
+namespace {
+//! @brief Bit address of the first EPC bit, past the CRC-16 and the PC (EPC Gen2 6.3.2.1.2)
+constexpr uint32_t EPC_MASK_POINTER_BITS{0x20};
+//! @brief Bit address of the first TID bit
+constexpr uint32_t TID_MASK_POINTER_BITS{0x00};
+//! @brief Word holding the first half of the EPC, past the CRC-16 and the PC
+constexpr uint16_t EPC_FIRST_WORD{2};
+//! @brief Words of the TID that sit at a fixed address whatever the tag is
+constexpr uint16_t TID_FIXED_WORDS{2};
+
+/*!
+  @class PausePolling
+  @brief Stop polling for as long as a tag operation runs, then put it back
+  @details The module answers unreliably while it is running inventory rounds, so every tag
+  operation needs polling stopped. Doing it here keeps that off the caller, who would otherwise
+  have to remember it between a detect() and the select() that follows
+ */
+class PausePolling {
+public:
+    explicit PausePolling(m5::unit::UHFRFIDComponent& u) : _u{u}, _was_polling{u.inPolling()}
+    {
+        if (_was_polling) {
+            _u.stopPolling();
+        }
+    }
+    ~PausePolling()
+    {
+        if (_was_polling && !_u.startPolling(_u.config().polling_count)) {
+            M5_LIB_LOGE("Failed to resume polling");
+        }
+    }
+    PausePolling(const PausePolling&)            = delete;
+    PausePolling& operator=(const PausePolling&) = delete;
+
+private:
+    m5::unit::UHFRFIDComponent& _u;
+    bool _was_polling{};
+};
+}  // namespace
+
 bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
 {
     tags.clear();
@@ -40,6 +80,237 @@ bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
         _u.stopPolling();
     }
     return !tags.empty();
+}
+
+bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, const uint8_t* mask, const size_t mask_len,
+                               const uint32_t access_password, const bool verify)
+{
+    if (mask == nullptr || mask_len == 0) {
+        M5_LIB_LOGE("An empty mask would match every tag, not one");
+        return false;
+    }
+    PausePolling pause{_u};
+
+    if (!_u.write_select_parameter(bank, pointer_bits, mask, mask_len)) {
+        return false;
+    }
+    // Storing the parameter is documented to switch the module over on its own, but saying so
+    // explicitly is what makes the state the same whether or not a deselect() came before
+    if (!_u.write_select_enabled(true)) {
+        return false;
+    }
+
+    _access_password = access_password;
+    _mask_bank       = bank;
+    _has_selection   = true;
+
+    if (verify && !verify_selection()) {
+        _has_selection = false;
+        _u.write_select_enabled(false);
+        return false;
+    }
+    return true;
+}
+
+bool UHFLayer::verify_selection()
+{
+    // One word of the EPC bank, which every tag has. Reading it goes down the same path as the
+    // Read and Write that follow, so it proves the selection the way the caller will use it
+    std::vector<uint8_t> word{};
+    if (!_u.read_tag_memory(word, Bank::Epc, EPC_FIRST_WORD, 1, _access_password)) {
+        M5_LIB_LOGW("The selected tag did not answer");
+        return false;
+    }
+    return true;
+}
+
+bool UHFLayer::select(const Tag& tag, const uint32_t access_password, const bool verify)
+{
+    if (tag.epc.empty()) {
+        M5_LIB_LOGE("The tag carries no EPC to build a mask from");
+        return false;
+    }
+    if (!apply_selection(Bank::Epc, EPC_MASK_POINTER_BITS, tag.epc.begin(), tag.epc.size, access_password, verify)) {
+        return false;
+    }
+    _selected = tag;
+    return true;
+}
+
+bool UHFLayer::select(const Epc& epc, const uint32_t access_password, const bool verify)
+{
+    if (epc.empty()) {
+        M5_LIB_LOGE("The tag carries no EPC to build a mask from");
+        return false;
+    }
+    if (!apply_selection(Bank::Epc, EPC_MASK_POINTER_BITS, epc.begin(), epc.size, access_password, verify)) {
+        return false;
+    }
+    _selected     = Tag{};
+    _selected.epc = epc;
+    return true;
+}
+
+bool UHFLayer::select(const Tid& tid, const uint32_t access_password, const bool verify)
+{
+    if (tid.empty()) {
+        M5_LIB_LOGE("The tag carries no TID to build a mask from");
+        return false;
+    }
+    if (!apply_selection(Bank::Tid, TID_MASK_POINTER_BITS, tid.begin(), tid.size, access_password, verify)) {
+        return false;
+    }
+    _selected     = Tag{};
+    _selected.tid = tid;
+    decodeTid(_selected, tid.begin(), tid.size);
+    return true;
+}
+
+bool UHFLayer::deselect()
+{
+    PausePolling pause{_u};
+    _has_selection   = false;
+    _selected        = Tag{};
+    _access_password = 0;
+    return _u.write_select_enabled(false);
+}
+
+bool UHFLayer::identify(Tag& tag)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("identify needs a tag to have been selected");
+        return false;
+    }
+    PausePolling pause{_u};
+
+    // The two fixed words name the chip and say whether an XTID follows them
+    std::vector<uint8_t> tid{};
+    if (!_u.read_tag_memory(tid, Bank::Tid, 0, TID_FIXED_WORDS, _access_password)) {
+        return false;
+    }
+    Tag identified = _selected;
+    if (!decodeTid(identified, tid.data(), tid.size())) {
+        M5_LIB_LOGE("Not an EPCglobal TID: %02X", tid.empty() ? 0 : tid[0]);
+        return false;
+    }
+
+    if (identified.has_xtid) {
+        // Only the header says how long the rest is, so it has to be read before the rest can be
+        std::vector<uint8_t> header{};
+        if (!_u.read_tag_memory(header, Bank::Tid, TID_FIXED_WORDS, 1, _access_password)) {
+            return false;
+        }
+        tid.insert(tid.end(), header.begin(), header.end());
+
+        const size_t total = xtidTotalWords(static_cast<uint16_t>((header[0] << 8) | header[1]));
+        if (total * 2 > TID_MAX_BYTES) {
+            M5_LIB_LOGE("XTID of %zu words does not fit; the header reads %02X%02X", total, header[0], header[1]);
+            return false;
+        }
+        if (total > XTID_FIXED_WORDS) {
+            std::vector<uint8_t> rest{};
+            if (!_u.read_tag_memory(rest, Bank::Tid, XTID_FIXED_WORDS, static_cast<uint16_t>(total - XTID_FIXED_WORDS),
+                                    _access_password)) {
+                return false;
+            }
+            tid.insert(tid.end(), rest.begin(), rest.end());
+        }
+        if (!decodeTid(identified, tid.data(), tid.size())) {
+            return false;
+        }
+    }
+
+    identified.tid.assign(tid.data(), tid.size());
+    tag       = identified;
+    _selected = identified;
+    return true;
+}
+
+bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address,
+                        const uint16_t word_count)
+{
+    out.clear();
+    if (!_has_selection) {
+        M5_LIB_LOGE("readBank needs a tag to have been selected");
+        return false;
+    }
+    PausePolling pause{_u};
+    return _u.read_tag_memory(out, bank, word_address, word_count, _access_password);
+}
+
+bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const std::vector<uint8_t>& data)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("writeBank needs a tag to have been selected");
+        return false;
+    }
+    PausePolling pause{_u};
+    if (!_u.write_tag_memory(bank, word_address, data.data(), data.size(), _access_password)) {
+        return false;
+    }
+
+    // An EPC mask matches on the bytes that were just replaced, so it no longer picks this tag
+    // out. Dropping the selection turns a silent mis-address into an explicit "select again"
+    if (bank == Bank::Epc && _mask_bank == Bank::Epc) {
+        M5_LIB_LOGW("The EPC the selection matched on has been rewritten; select the tag again");
+        deselect();
+    }
+    return true;
+}
+
+bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_permanent)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("lock needs a tag to have been selected");
+        return false;
+    }
+    if (settings.empty()) {
+        M5_LIB_LOGE("lock was given nothing to change");
+        return false;
+    }
+    if (!allow_permanent) {
+        for (auto&& setting : settings) {
+            if (isPermanent(setting.action)) {
+                M5_LIB_LOGE("A permanent lock cannot be undone; pass allow_permanent to mean it");
+                return false;
+            }
+        }
+    }
+    PausePolling pause{_u};
+    return _u.lock_tag_memory(buildLockPayload(settings.data(), settings.size()), _access_password);
+}
+
+bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("kill needs a tag to have been selected");
+        return false;
+    }
+    if (kill_password == 0) {
+        // A tag whose kill password is zero refuses to be killed (Gen2 v2.1 6.3.2.12.3.4), so
+        // sending zero can only fail. Refusing it here keeps a forgotten password from reading
+        // as a tag that cannot be killed
+        M5_LIB_LOGE("A kill password of zero is refused by every tag");
+        return false;
+    }
+    // Killing the wrong tag cannot be undone, so the caller has to name the tag it means and it
+    // has to be the one the mask picks out
+    const bool same_epc = !tag.epc.empty() && !_selected.epc.empty() && tag.epc == _selected.epc;
+    const bool same_tid = !tag.tid.empty() && !_selected.tid.empty() && tag.tid == _selected.tid;
+    if (!same_epc && !same_tid) {
+        M5_LIB_LOGE("kill was given a tag that is not the selected one");
+        return false;
+    }
+
+    PausePolling pause{_u};
+    if (!_u.kill_tag(kill_password)) {
+        return false;
+    }
+    // Nothing answers to the mask any more
+    _has_selection = false;
+    _selected      = Tag{};
+    _u.write_select_enabled(false);
+    return true;
 }
 
 }  // namespace uhf

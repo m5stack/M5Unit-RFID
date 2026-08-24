@@ -36,6 +36,12 @@ constexpr uint8_t CMD_SET_AUTO_SLEEP_TIME{0x1D};
 constexpr uint8_t CMD_INSERT_CHANNEL{0xA9};
 constexpr uint8_t CMD_SCAN_JAMMER{0xF2};
 constexpr uint8_t CMD_SCAN_RSSI{0xF3};
+constexpr uint8_t CMD_SET_SELECT_PARAMETER{0x0C};
+constexpr uint8_t CMD_SET_SELECT_MODE{0x12};
+constexpr uint8_t CMD_READ_TAG_MEMORY{0x39};
+constexpr uint8_t CMD_WRITE_TAG_MEMORY{0x49};
+constexpr uint8_t CMD_LOCK_TAG_MEMORY{0x82};
+constexpr uint8_t CMD_KILL_TAG{0x65};
 
 // The channel count of the insert command is a single byte
 constexpr size_t CHANNEL_LIST_MAX{255};
@@ -49,6 +55,32 @@ constexpr uint8_t AUTO_SLEEP_MAX_MINUTES{30};
 
 // Reserved byte of the multiple polling parameter
 constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
+
+/*!
+  @brief Select target and action used to address a single tag
+  @details Target 000 sets inventoried flag S0 and action 000 asserts SL on a match while
+  deasserting it on everything else, which is what narrows the field down to one tag
+ */
+constexpr uint8_t SELECT_TARGET_S0{0x00};
+constexpr uint8_t SELECT_ACTION_ASSERT_SL{0x00};
+
+//! @brief A tag operation has to survive a frequency hop, which the module does on its own
+constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
+
+//! @brief Translate a bank to the code the module uses
+inline uint8_t membank_of(const m5::uhf::Bank bank)
+{
+    switch (bank) {
+        case m5::uhf::Bank::Reserved:
+            return MEMBANK_RESERVED;
+        case m5::uhf::Bank::Epc:
+            return MEMBANK_EPC;
+        case m5::uhf::Bank::Tid:
+            return MEMBANK_TID;
+        default:
+            return MEMBANK_USER;
+    }
+}
 
 // Render a byte buffer as hex for the diagnostic logs
 std::string to_hex(const uint8_t* data, const size_t len)
@@ -606,6 +638,163 @@ bool UnitJRD4035::readChannelRSSI(m5::uhf::ChannelLevels& levels)
         return false;
     }
     return read_channel_levels(levels, CMD_SCAN_RSSI);
+}
+
+bool UnitJRD4035::succeeded(const Frame& response, const char* what) const
+{
+    if (!is_error_frame(response.command)) {
+        return true;
+    }
+    const uint8_t code = response.parameter.empty() ? 0x00 : response.parameter[0];
+    M5_LIB_LOGE("%s failed: %02X %s", what, code, error_description(code));
+    return false;
+}
+
+bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
+                                         const size_t mask_len)
+{
+    if (reject_while_polling("write_select_parameter")) {
+        return false;
+    }
+    if (mask_len * 8 > SELECT_MASK_MAX_BITS) {
+        M5_LIB_LOGE("Mask of %zu bytes is longer than a Select can carry", mask_len);
+        return false;
+    }
+    const uint8_t sel_param = select_parameter_byte(SELECT_TARGET_S0, SELECT_ACTION_ASSERT_SL, membank_of(bank));
+
+    std::vector<uint8_t> param{};
+    if (!build_select_parameter(param, sel_param, pointer_bits, static_cast<uint8_t>(mask_len * 8), SELECT_TRUNCATE_OFF,
+                                mask, mask_len)) {
+        M5_LIB_LOGE("Failed to build the select parameter");
+        return false;
+    }
+    Frame res{};
+    if (!send_and_wait(res, CMD_SET_SELECT_PARAMETER, param.data(), static_cast<uint16_t>(param.size()))) {
+        return false;
+    }
+    return succeeded(res, "write_select_parameter");
+}
+
+bool UnitJRD4035::write_select_enabled(const bool enable)
+{
+    if (reject_while_polling("write_select_enabled")) {
+        return false;
+    }
+    // Setting the parameter already switches the module to SELECT_MODE_NON_INVENTORY on its own,
+    // so this is only needed to turn the mask back off, and to put it back on afterwards
+    const uint8_t param[] = {enable ? SELECT_MODE_NON_INVENTORY : SELECT_MODE_NEVER};
+    Frame res{};
+    // Set Select Mode answers under the command code of Set Select Parameter
+    if (!send_and_wait_answered_as(res, CMD_SET_SELECT_MODE, CMD_SET_SELECT_PARAMETER, param, sizeof(param))) {
+        return false;
+    }
+    return succeeded(res, "write_select_enabled");
+}
+
+bool UnitJRD4035::read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                  const uint16_t word_count, const uint32_t access_password)
+{
+    out.clear();
+    if (reject_while_polling("read_tag_memory")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_read_tag_memory(param, access_password, membank_of(bank), word_address, word_count)) {
+        M5_LIB_LOGE("Failed to build the read parameter");
+        return false;
+    }
+    Frame res{};
+    if (!send_and_wait(res, CMD_READ_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                       TAG_OPERATION_TIMEOUT_MS)) {
+        return false;
+    }
+    if (!succeeded(res, "read_tag_memory")) {
+        return false;
+    }
+
+    TagOperationResult result{};
+    if (!parse_tag_operation(result, res.parameter.data(), res.parameter.size())) {
+        M5_LIB_LOGE("Malformed read response");
+        return false;
+    }
+    // A short answer would leave the caller reading fewer words than it asked for without ever
+    // being told, so it is refused rather than truncated
+    if (result.data_len != static_cast<size_t>(word_count) * 2) {
+        M5_LIB_LOGE("Asked for %u words but got %zu bytes", word_count, result.data_len);
+        return false;
+    }
+    out.assign(result.data, result.data + result.data_len);
+    return true;
+}
+
+bool UnitJRD4035::write_tag_memory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                   const size_t len, const uint32_t access_password)
+{
+    if (reject_while_polling("write_tag_memory")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_write_tag_memory(param, access_password, membank_of(bank), word_address, data, len)) {
+        M5_LIB_LOGE("Failed to build the write parameter");
+        return false;
+    }
+    Frame res{};
+    // Write answers under the command code of Read
+    if (!send_and_wait_answered_as(res, CMD_WRITE_TAG_MEMORY, CMD_READ_TAG_MEMORY, param.data(),
+                                   static_cast<uint16_t>(param.size()), TAG_OPERATION_TIMEOUT_MS)) {
+        return false;
+    }
+    return succeeded(res, "write_tag_memory") && tag_carried_it_out(res, "write_tag_memory");
+}
+
+bool UnitJRD4035::lock_tag_memory(const uint32_t payload, const uint32_t access_password)
+{
+    if (reject_while_polling("lock_tag_memory")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_lock_tag(param, access_password, payload)) {
+        M5_LIB_LOGE("Failed to build the lock parameter");
+        return false;
+    }
+    Frame res{};
+    if (!send_and_wait(res, CMD_LOCK_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                       TAG_OPERATION_TIMEOUT_MS)) {
+        return false;
+    }
+    return succeeded(res, "lock_tag_memory") && tag_carried_it_out(res, "lock_tag_memory");
+}
+
+bool UnitJRD4035::kill_tag(const uint32_t kill_password)
+{
+    if (reject_while_polling("kill_tag")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_kill_tag(param, kill_password)) {
+        M5_LIB_LOGE("Failed to build the kill parameter");
+        return false;
+    }
+    Frame res{};
+    if (!send_and_wait(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()),
+                       TAG_OPERATION_TIMEOUT_MS)) {
+        return false;
+    }
+    return succeeded(res, "kill_tag") && tag_carried_it_out(res, "kill_tag");
+}
+
+bool UnitJRD4035::tag_carried_it_out(const Frame& response, const char* what) const
+{
+    TagOperationResult result{};
+    if (!parse_tag_operation(result, response.parameter.data(), response.parameter.size())) {
+        M5_LIB_LOGE("Malformed %s response", what);
+        return false;
+    }
+    if (result.data_len != 1 || result.data[0] != TAG_OPERATION_SUCCESS) {
+        M5_LIB_LOGE("%s reported status %02X", what, result.data_len ? result.data[0] : 0xFF);
+        return false;
+    }
+    return true;
 }
 
 }  // namespace unit

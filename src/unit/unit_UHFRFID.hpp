@@ -215,6 +215,40 @@ protected:
     //! @brief Issue the stop polling command
     virtual bool stop_polling_command() = 0;
 
+    ///@name Tag operations, driven by m5::uhf::UHFLayer
+    ///@{
+    /*!
+      @brief Store the mask that picks out one tag
+      @param bank Bank the mask is matched against; Reserved is not selectable
+      @param pointer_bits Where the mask starts, as a bit address inside the bank
+      @param mask Mask bytes
+      @param mask_len Length of mask in bytes
+      @return True if successful
+      @note Storing a mask does not talk to any tag, so this succeeds for a tag that is not in
+      the field
+     */
+    virtual bool write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
+                                        const size_t mask_len) = 0;
+    /*!
+      @brief Apply the stored mask to tag operations, or stop applying it
+      @param enable True to address only the selected tag, false to address any tag
+      @return True if successful
+      @note Inventory is left unfiltered either way, so polling keeps reporting every tag in
+      the field while Read, Write, Lock and Kill are narrowed down to the selected one
+     */
+    virtual bool write_select_enabled(const bool enable) = 0;
+    //! @brief Read word_count 16-bit words from bank, starting at word_address
+    virtual bool read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                 const uint16_t word_count, const uint32_t access_password) = 0;
+    //! @brief Write len bytes to bank, starting at word_address. len must be even
+    virtual bool write_tag_memory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                  const size_t len, const uint32_t access_password) = 0;
+    //! @brief Apply a 20-bit Gen2 lock payload, see m5::uhf::buildLockPayload
+    virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) = 0;
+    //! @brief Kill the addressed tag permanently
+    virtual bool kill_tag(const uint32_t kill_password) = 0;
+    ///@}
+
     /*!
       @brief Refuse a reader setting while polling is running
       @param what Name of the operation, used in the warning

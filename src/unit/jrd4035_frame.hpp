@@ -269,7 +269,9 @@ inline bool build_select_parameter(std::vector<uint8_t>& out, const uint8_t sel_
     if (mask_len == 0 || mask == nullptr || mask_length_bits == 0) {
         return false;
     }
-    if (mask_length_bits > SELECT_MASK_MAX_BITS || (mask_length_bits + 7U) / 8U > mask_len) {
+    // SELECT_MASK_MAX_BITS is the whole range of the length field, so the type already keeps
+    // the mask inside it; only the mask actually being that long still has to be checked
+    if ((mask_length_bits + 7U) / 8U > mask_len) {
         return false;
     }
 
@@ -386,6 +388,51 @@ inline bool build_kill_tag(std::vector<uint8_t>& out, const uint32_t kill_passwo
     return true;
 }
 
+/*!
+  @struct TagOperationResult
+  @brief What a tag answered to Read, Write, Lock or Kill
+  @details All four answer in the same shape: the PC and EPC of the tag that responded, then
+  either the words that were read or a single status byte
+  @warning data points into the frame it was parsed from and is only valid while that lives
+ */
+struct TagOperationResult {
+    uint16_t pc{};          //!< Protocol Control of the tag that answered
+    m5::uhf::Epc epc{};     //!< EPC of the tag that answered
+    const uint8_t* data{};  //!< Words read, or the one status byte
+    size_t data_len{};      //!< Length of data in bytes
+};
+
+//! @brief Status byte a tag returns after a Write, Lock or Kill it carried out
+constexpr uint8_t TAG_OPERATION_SUCCESS{0x00};
+
+/*!
+  @brief Parse the answer to a tag operation
+  @param[out] out Parsed result
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True if successful
+  @details The leading byte counts the PC and EPC that follow it, so what comes after them is
+  the payload however long the EPC happened to be
+ */
+inline bool parse_tag_operation(TagOperationResult& out, const uint8_t* param, const size_t len)
+{
+    if (param == nullptr || len < 4) {
+        return false;
+    }
+    const size_t ul = param[0];
+    // The count covers the two PC bytes as well, so anything smaller cannot be a valid answer
+    if (ul < 2 || ul + 1U > len) {
+        return false;
+    }
+    out.pc = static_cast<uint16_t>((param[1] << 8) | param[2]);
+    if (!out.epc.assign(param + 3, ul - 2)) {
+        return false;
+    }
+    out.data     = param + 1 + ul;
+    out.data_len = len - 1 - ul;
+    return true;
+}
+
 //! @brief Command code used by every failure notification
 constexpr uint8_t COMMAND_ERROR{0xFF};
 
@@ -424,6 +471,79 @@ inline bool is_error_frame(const uint8_t command)
 inline bool is_no_tag(const uint8_t error_code)
 {
     return error_code == static_cast<uint8_t>(Error::InventoryFail);
+}
+
+/*!
+  @name Masks the module ORs onto an error the tag itself reported
+  @details Only the low four bits of an EPC Gen2 error code carry meaning, so the module fills
+  the high nibble with a marker for the operation that provoked it. The marker therefore says
+  which command failed, and the low nibble says why
+ */
+///@{
+constexpr uint8_t TAG_ERROR_READ{0xA0};
+constexpr uint8_t TAG_ERROR_WRITE{0xB0};
+constexpr uint8_t TAG_ERROR_LOCK{0xC0};
+constexpr uint8_t TAG_ERROR_KILL{0xD0};
+constexpr uint8_t TAG_ERROR_BLOCK_PERMALOCK{0xE0};
+///@}
+
+/*!
+  @brief Did the tag itself report this error, rather than the module?
+  @param error_code Error code carried by the failure notification
+  @return True when the code is a Gen2 error the tag returned
+ */
+inline bool is_tag_error(const uint8_t error_code)
+{
+    return error_code >= TAG_ERROR_READ && error_code <= (TAG_ERROR_BLOCK_PERMALOCK | 0x0F);
+}
+
+/*!
+  @brief Describe an error code in one word
+  @param error_code Error code carried by the failure notification
+  @return Description, never null
+  @details A tag error is named by its Gen2 meaning (v1.2.0 Annex I), everything else by the
+  module-level failure it stands for
+ */
+inline const char* error_description(const uint8_t error_code)
+{
+    if (is_tag_error(error_code)) {
+        switch (error_code & 0x0F) {
+            case 0x00:
+                return "Tag: other error";
+            case 0x03:
+                return "Tag: memory overrun";
+            case 0x04:
+                return "Tag: memory locked";
+            case 0x0B:
+                return "Tag: insufficient power";
+            case 0x0F:
+                return "Tag: non-specific error";
+            default:
+                return "Tag: unlisted error";
+        }
+    }
+    switch (static_cast<Error>(error_code)) {
+        case Error::ReadFail:
+            return "Read failed: no answer from the tag";
+        case Error::WriteFail:
+            return "Write failed: no answer from the tag";
+        case Error::KillFail:
+            return "Kill failed: no answer from the tag";
+        case Error::LockFail:
+            return "Lock failed: no answer from the tag";
+        case Error::BlockPermalockFail:
+            return "BlockPermalock failed: no answer from the tag";
+        case Error::InventoryFail:
+            return "No tag answered";
+        case Error::AccessFail:
+            return "Access failed: wrong access password";
+        case Error::CommandError:
+            return "Command error";
+        case Error::FHSSFail:
+            return "No free channel to hop to";
+        default:
+            return "Unlisted error";
+    }
 }
 
 }  // namespace jrd4035

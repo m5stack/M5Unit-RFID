@@ -65,8 +65,8 @@ constexpr size_t EPC_MAX_BYTES{62};
 /*!
   @brief How much of the TID identify() keeps
   @details The longest XTID the standard can describe: the two fixed words, the header, a
-  144-bit serial and every optional segment through the one that carries the User memory size
-  (TDS 16.2). Twenty words in all
+  144-bit serial and all four optional segments (TDS Table 16-2). Twenty words in all, so a
+  fully populated XTID always fits
  */
 constexpr size_t TID_MAX_BYTES{40};
 
@@ -183,6 +183,12 @@ enum class Vendor : uint16_t {
 };
 
 namespace detail {
+//! @brief Read one big-endian 16-bit word out of a byte buffer
+inline uint16_t word_at(const uint8_t* data, const size_t word_index)
+{
+    return static_cast<uint16_t>((data[word_index * 2] << 8) | data[word_index * 2 + 1]);
+}
+
 /*!
   @struct VendorEntry
   @brief A named mask designer paired with the name the registry spells it out as
@@ -260,21 +266,22 @@ struct Tag {
     uint16_t mdid{};                  //!< Raw mask-designer identifier (9 bits)
     uint16_t model_number{};          //!< Tag model number (12 bits)
     uint16_t serial_bits{};           //!< Length of the XTID serial, 0 when the tag has none
-    uint16_t user_memory_bits{};      //!< Size of the User bank, 0 when unknown
-    uint16_t epc_max_bits{};          //!< Largest EPC the chip accepts, 0 when unknown
-    uint16_t permalock_block_bits{};  //!< BlockPermalock granularity, 0 when unknown
+    uint32_t user_memory_bits{};      //!< Size of the User bank, 0 when unknown
+    uint32_t epc_max_bits{};          //!< Largest EPC the chip accepts, 0 when unknown
+    uint32_t permalock_block_bits{};  //!< BlockPermalock granularity, 0 when unknown
     bool has_xtid{};                  //!< XTID indicator (TID bit 08h)
     bool supports_security{};         //!< Security indicator (TID bit 09h)
     bool supports_file{};             //!< File indicator (TID bit 0Ah)
+    bool supports_block_permalock{};  //!< BlockPermaLock support, as the XTID reports it
 
     //! @brief Holds a usable EPC?
     inline bool valid() const
     {
         return !epc.empty();
     }
-    //! @brief Chip name, "Unknown" until the tag has been identified
     //! @brief Mask designer as a printable name, "Unknown" when the identifier is not one we list
     std::string vendorAsString() const;
+    //! @brief Chip name, "Unknown" until the tag has been identified
     std::string chipAsString() const;
 };
 
@@ -292,6 +299,47 @@ inline uint16_t xtidSerialBits(const uint16_t xtid_header)
 {
     const uint8_t v = static_cast<uint8_t>((xtid_header >> 13) & 0x07);
     return v == 0 ? 0U : static_cast<uint16_t>(48 + (v - 1) * 16);
+}
+
+/*!
+  @name XTID header bits announcing an optional segment (TDS Table 16-3)
+  @details The segments follow the serial in the order the bits are listed here, from the most
+  significant down, and a segment that is absent moves the ones below it to lower addresses
+ */
+///@{
+constexpr uint16_t XTID_OPTIONAL_COMMAND_SUPPORT{0x1000};    //!< bit 12, one word
+constexpr uint16_t XTID_BLOCKWRITE_BLOCKERASE{0x0800};       //!< bit 11, four words
+constexpr uint16_t XTID_USER_MEMORY_BLOCKPERMALOCK{0x0400};  //!< bit 10, two words
+constexpr uint16_t XTID_LOCK_BIT{0x0200};                    //!< bit 9, one word
+constexpr uint16_t XTID_EXTENDED_HEADER{0x0001};             //!< bit 0, header continues
+///@}
+
+//! @brief Words the two fixed TID words and the XTID header take up
+constexpr size_t XTID_FIXED_WORDS{3};
+
+/*!
+  @brief Length of the whole TID an XTID header describes, in 16-bit words
+  @param xtid_header XTID header word
+  @return Words from TID word 0 through the end of the last segment the header announces
+  @details Reading the TID takes two passes because of this: the header has to be in hand
+  before the length of what follows it is known (TDS 16.2)
+ */
+inline size_t xtidTotalWords(const uint16_t xtid_header)
+{
+    size_t words = XTID_FIXED_WORDS + xtidSerialBits(xtid_header) / 16;
+    if (xtid_header & XTID_OPTIONAL_COMMAND_SUPPORT) {
+        words += 1;
+    }
+    if (xtid_header & XTID_BLOCKWRITE_BLOCKERASE) {
+        words += 4;
+    }
+    if (xtid_header & XTID_USER_MEMORY_BLOCKPERMALOCK) {
+        words += 2;
+    }
+    if (xtid_header & XTID_LOCK_BIT) {
+        words += 1;
+    }
+    return words;
 }
 
 /*!
@@ -380,9 +428,43 @@ inline bool decodeTid(Tag& tag, const uint8_t* tid, const size_t len)
     tag.vendor            = resolveVendor(tag.mdid);
     tag.model_number      = static_cast<uint16_t>(((tid[2] & 0x0F) << 8) | tid[3]);
     tag.chip              = resolveChip(tag.vendor, tag.model_number);
-    tag.serial_bits       = 0;
-    if (tag.has_xtid && len >= 6) {
-        tag.serial_bits = xtidSerialBits(static_cast<uint16_t>((tid[4] << 8) | tid[5]));
+
+    tag.serial_bits              = 0;
+    tag.epc_max_bits             = 0;
+    tag.user_memory_bits         = 0;
+    tag.permalock_block_bits     = 0;
+    tag.supports_block_permalock = false;
+    if (!tag.has_xtid || len < XTID_FIXED_WORDS * 2) {
+        return true;
+    }
+
+    const uint16_t header = detail::word_at(tid, 2);
+    tag.serial_bits       = xtidSerialBits(header);
+
+    // The segments sit past the serial, in the order the header lists them. Each one is stepped
+    // over whether or not the caller read far enough to hold it, so the offsets of the segments
+    // below it stay right even when only part of the TID is in hand
+    size_t word = XTID_FIXED_WORDS + tag.serial_bits / 16;
+    if (header & XTID_OPTIONAL_COMMAND_SUPPORT) {
+        if ((word + 1) * 2 <= len) {
+            const uint16_t ocs = detail::word_at(tid, word);
+            // Max EPC Size is what fits in the length field of the PC, so it counts words
+            tag.epc_max_bits             = static_cast<uint32_t>(ocs & 0x1F) * 16U;
+            tag.supports_block_permalock = (ocs & 0x1000) != 0;
+        }
+        word += 1;
+    }
+    if (header & XTID_BLOCKWRITE_BLOCKERASE) {
+        word += 4;
+    }
+    if (header & XTID_USER_MEMORY_BLOCKPERMALOCK) {
+        if ((word + 2) * 2 <= len) {
+            // The lower address holds bits 31 to 16 and the higher one bits 15 to 0, so the
+            // block size comes first and the user memory size second (TDS Table 16-2)
+            tag.permalock_block_bits = static_cast<uint32_t>(detail::word_at(tid, word)) * 16U;
+            tag.user_memory_bits     = static_cast<uint32_t>(detail::word_at(tid, word + 1)) * 16U;
+        }
+        word += 2;
     }
     return true;
 }
@@ -414,6 +496,13 @@ enum class LockAction : uint8_t {
 struct LockSetting {
     LockTarget target{};
     LockAction action{};
+
+    LockSetting() = default;
+    // Written out because the members carry defaults, which stops C++11 from treating the
+    // struct as an aggregate and so rules out LockSetting{target, action} without it
+    LockSetting(const LockTarget t, const LockAction a) : target{t}, action{a}
+    {
+    }
 };
 
 //! @brief Is this action one of the two that cannot be undone?

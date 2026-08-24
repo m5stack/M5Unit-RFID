@@ -58,6 +58,16 @@ protected:
     virtual bool start_polling_command(const uint16_t count) override;
     virtual bool stop_polling_command() override;
 
+    virtual bool write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
+                                        const size_t mask_len) override;
+    virtual bool write_select_enabled(const bool enable) override;
+    virtual bool read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                 const uint16_t word_count, const uint32_t access_password) override;
+    virtual bool write_tag_memory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                  const size_t len, const uint32_t access_password) override;
+    virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) override;
+    virtual bool kill_tag(const uint32_t kill_password) override;
+
     //! @brief Send a command frame
     bool send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len);
     //! @brief Send a command and wait for its response, routing notifications to the tag queue
@@ -88,6 +98,24 @@ protected:
     bool read_module_information_kind(std::string& out, const uint8_t kind);
     //! @brief Run one of the channel scans and decode its contiguous range of levels
     bool read_channel_levels(m5::uhf::ChannelLevels& levels, const uint8_t command);
+    /*!
+      @brief Did the module answer with a result rather than a failure?
+      @param response Response frame
+      @param what Name of the operation, used in the warning
+      @return True when the response carries a result
+      @details send_and_wait also returns true for a failure notification, since the module
+      answering at all is what it waits for. Every tag operation has to tell the two apart
+     */
+    bool succeeded(const jrd4035::Frame& response, const char* what) const;
+    /*!
+      @brief Did the tag report that it carried the operation out?
+      @param response Response frame of a Write, Lock or Kill
+      @param what Name of the operation, used in the warning
+      @return True when the tag answered with a success status
+      @details The module answering says the tag was reached; the status byte inside says the
+      tag actually did what it was told
+     */
+    bool tag_carried_it_out(const jrd4035::Frame& response, const char* what) const;
 
     //! Frame header. Derived classes for the R200 family override this with 0xAA
     uint8_t _frame_header{jrd4035::FRAME_HEADER};
