@@ -353,7 +353,10 @@ void UnitJRD4035::route_frame(const Frame& f)
         if (is_no_tag(code) && !awaiting_inventory) {
             return;
         }
-        M5_LIB_LOGW("Error frame %02X", code);
+        // Whether this matters is not known here: most of them are retried and succeed on the
+        // next attempt. Saying so is left to succeeded(), which is reached only once the
+        // operation has actually given up
+        M5_LIB_LOGD("Error frame %02X", code);
         if (_response_pending) {
             _response         = f;
             _response_pending = false;

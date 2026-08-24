@@ -271,7 +271,7 @@ uint16_t UHFLayer::bank_words(const Bank bank)
     }
 }
 
-bool UHFLayer::dump_words(const char* what, const Bank bank, const uint16_t words)
+bool UHFLayer::dump_words(const char* what, const Bank bank, const uint16_t word_address, const uint16_t words)
 {
     printf("== %s ==\n", what);
     if (words == 0) {
@@ -282,8 +282,9 @@ bool UHFLayer::dump_words(const char* what, const Bank bank, const uint16_t word
 
     // Eight words to a line, which is the sixteen bytes the sister NFC dump puts on one
     constexpr uint16_t PER_LINE{8};
-    for (uint16_t at = 0; at < words; at += PER_LINE) {
-        const uint16_t n = std::min<uint16_t>(PER_LINE, words - at);
+    for (uint16_t off = 0; off < words; off += PER_LINE) {
+        const uint16_t at = static_cast<uint16_t>(word_address + off);
+        const uint16_t n  = std::min<uint16_t>(PER_LINE, words - off);
         std::vector<uint8_t> data{};
         if (!readBank(data, bank, at, n)) {
             printf("[%03u/%03X] ERROR\n", at, at);
@@ -298,14 +299,19 @@ bool UHFLayer::dump_words(const char* what, const Bank bank, const uint16_t word
     return true;
 }
 
-bool UHFLayer::dump(const Bank bank)
+bool UHFLayer::dump(const Bank bank, const uint16_t word_address, const uint16_t words)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("dump needs a tag to have been selected");
         return false;
     }
     static const char* names[] = {"Reserved", "EPC", "TID", "User"};
-    return dump_words(names[static_cast<uint8_t>(bank) & 0x03], bank, bank_words(bank));
+    return dump_words(names[static_cast<uint8_t>(bank) & 0x03], bank, word_address, words);
+}
+
+bool UHFLayer::dump(const Bank bank)
+{
+    return dump(bank, 0, bank_words(bank));
 }
 
 bool UHFLayer::dump()

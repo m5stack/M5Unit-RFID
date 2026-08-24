@@ -131,6 +131,15 @@ public:
       @pre A tag must have been selected
      */
     bool dump(const Bank bank);
+    /*!
+      @brief Dump part of one memory bank
+      @param bank Memory bank
+      @param word_address Start address in 16-bit words
+      @param words Number of 16-bit words
+      @return True if successful
+      @pre A tag must have been selected
+     */
+    bool dump(const Bank bank, const uint16_t word_address, const uint16_t words);
     ///@}
 
     ///@name Tag memory, addressed to the selected tag
@@ -186,8 +195,8 @@ private:
     bool verify_selection();
     //! @brief How many words of a bank there are to read, 0 when that is not known
     uint16_t bank_words(const Bank bank);
-    //! @brief Print one bank's worth of words, sixteen bytes to a line
-    bool dump_words(const char* what, const Bank bank, const uint16_t words);
+    //! @brief Print a stretch of one bank, sixteen bytes to a line
+    bool dump_words(const char* what, const Bank bank, const uint16_t word_address, const uint16_t words);
     /*!
       @brief Stop polling for as long as a tag is being addressed
       @details An inventory round leaves every tag it saw flagged as already counted, and a tag

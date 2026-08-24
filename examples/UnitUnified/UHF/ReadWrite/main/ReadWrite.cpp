@@ -12,6 +12,7 @@
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
 #include <wiring/m5_unit_unified_wiring.hpp>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -81,19 +82,12 @@ std::string to_hex(const std::vector<uint8_t>& data)
 //! @brief Words the short write test replaces and then puts back
 constexpr uint16_t WRITE_TEST_WORDS{2};
 /*!
-  @brief Words the long write test replaces and then puts back
-  @details The most a single Write command carries. The module programs the words into the tag
-  one at a time and waits out the tag's write time for each, so this is the longest a single
-  command legitimately takes. Monza 4QT holds exactly this much user memory
+  @brief The most a single Write command carries
+  @details The module programs the words into the tag one at a time and waits out the tag's
+  write time for each, so a write of this many words is the longest a single command
+  legitimately takes. Anything longer is split by writeBank into several
  */
 constexpr uint16_t WRITE_TEST_MAX_WORDS{32};
-/*!
-  @brief Words the whole-bank write test replaces and then puts back
-  @details The full User bank of an Alien Higgs 9, 688 bits of it. More than a single Write
-  command carries, so writeBank splits it, which is the thing worth exercising here. A tag with
-  less user memory than this answers with a memory overrun and nothing is written
- */
-constexpr uint16_t WRITE_TEST_BANK_WORDS{43};
 
 /*!
   Write a stretch of User memory, read it back and put the original contents back.
@@ -128,7 +122,9 @@ void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
     const unsigned long read_began = m5::utility::millis();
     std::vector<uint8_t> original{};
     if (!uhf.readBank(original, m5::uhf::Bank::User, 0, words)) {
-        M5_LOGE("write %u words: this tag has no User memory to write to, or not that much of it", words);
+        // The caller sized this from what the tag holds, so a refusal here is not the bank being
+        // too small; it is the read itself failing
+        M5_LOGE("write %u words: could not read what is there now, so nothing is written", words);
         uhf.deselect();
         return;
     }
@@ -158,6 +154,7 @@ void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
     M5_LOGI("write %2u words: read %lums, write %lums, read back %s", words, read_took, took,
             readback == pattern ? "matches" : "MISMATCH");
     lcd.printf("%2u words %lums %s\n", words, took, readback == pattern ? "ok" : "NG");
+    uhf.dump(m5::uhf::Bank::User, 0, words);
 
     // Put it back the way it was, and say so loudly if that does not work: the tag is left
     // holding the pattern in that case
@@ -170,6 +167,7 @@ void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
     if (uhf.readBank(restored, m5::uhf::Bank::User, 0, words)) {
         M5_LOGI("write %2u words: restored %s", words, restored == original ? "matches" : "MISMATCH");
     }
+    uhf.dump(m5::uhf::Bank::User, 0, words);
     uhf.deselect();
 }
 }  // namespace
@@ -193,15 +191,48 @@ void loop()
     if (M5.BtnA.wasClicked()) {
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
-        m5::uhf::Tag tag{};
-        if (!detect_one(tag)) {
+        m5::uhf::Tag detected{};
+        if (!detect_one(detected)) {
             return;
         }
-        // Two words to see it work, then the most a single command carries, then more than that
-        // so writeBank has to split it across two
+        // How much user memory there is decides what is worth writing, and only the TID says
+        // which chip this is
+        if (!uhf.select(detected)) {
+            M5_LOGE("Failed to select the tag");
+            lcd.println("select: failed");
+            return;
+        }
+        m5::uhf::Tag tag{};
+        const bool identified = uhf.identify(tag);
+        uhf.deselect();
+        if (!identified) {
+            M5_LOGE("Failed to identify the tag");
+            lcd.println("identify: failed");
+            return;
+        }
+
+        const uint16_t bank = static_cast<uint16_t>(tag.user_memory_bits / 16);
+        M5_LOGI("%s: user memory %s", tag.chipAsString().c_str(),
+                bank ? m5::utility::formatString("%u words", bank).c_str()
+                     : (m5::uhf::pcUserMemoryIndicator(tag.pc) ? "size not known" : "none"));
+        lcd.printf("%s\n", tag.chipAsString().c_str());
+
+        if (bank == 0 && !m5::uhf::pcUserMemoryIndicator(tag.pc)) {
+            M5_LOGI("Nothing to write to on this tag");
+            lcd.println("no user memory");
+            return;
+        }
+
+        // Two words to see it work at all
         write_roundtrip(tag, WRITE_TEST_WORDS);
-        write_roundtrip(tag, WRITE_TEST_MAX_WORDS);
-        write_roundtrip(tag, WRITE_TEST_BANK_WORDS);
+        // Then the most a single command carries, or the whole bank if that is smaller
+        write_roundtrip(tag, bank ? std::min<uint16_t>(WRITE_TEST_MAX_WORDS, bank) : WRITE_TEST_MAX_WORDS);
+        // Then the whole bank, which only tells us anything when it takes more than one command
+        if (bank > WRITE_TEST_MAX_WORDS) {
+            write_roundtrip(tag, bank);
+        } else if (bank) {
+            M5_LOGI("The whole bank fits in one command, so there is no split to exercise");
+        }
     }
 }
 
