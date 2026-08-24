@@ -28,6 +28,8 @@ constexpr uint16_t USER_PROBE_WORDS{2};
 constexpr uint16_t USER_DUMP_MAX_WORDS{16};
 //! @brief Words the write test replaces and then puts back
 constexpr uint16_t WRITE_TEST_WORDS{2};
+//! @brief Transmit power in 1/100 dBm. The module accepts 1700 to 2600
+constexpr int16_t TX_POWER_DBM100{2000};
 
 const char* region_to_string(const m5::uhf::Region r)
 {
@@ -243,6 +245,13 @@ void setup()
         M5_LOGI("HW:%s SW:%s MFR:%s", info.hardware_version.c_str(), info.software_version.c_str(),
                 info.manufacturer.c_str());
     }
+    // A reader left at its default 26dBm is set up to reach about a metre and a half. A tag
+    // resting on the antenna is nowhere near that, and the reader then misses most inventory
+    // rounds even though the tag is as close as it can get. The vendor's own tuning guide says
+    // to lower the power for close work, over a range of 17 to 26dBm
+    if (!unit.writeTransmitPower(TX_POWER_DBM100)) {
+        M5_LOGE("Failed to set the transmit power");
+    }
     int16_t dbm100{};
     if (unit.readTransmitPower(dbm100)) {
         M5_LOGI("TxPower: %d.%02d dBm", dbm100 / 100, dbm100 % 100);
@@ -257,6 +266,13 @@ void setup()
     }
     // Select acts on the inventoried flag of one session, so which session and which flag value
     // the module then queries for decides whether a selected tag is included or excluded
+    // How far the reader listens, as against how far it reaches. Lowering these shortens the
+    // range further still, which is the vendor's next step after transmit power for close work
+    m5::unit::m100::DemodulatorParameters dp{};
+    if (unit.readDemodulatorParameters(dp)) {
+        M5_LOGI("Demodulator: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
+                m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
+    }
     m5::uhf::QueryParameters qp{};
     if (unit.readQueryParameters(qp)) {
         static const char* filters[] = {"All", "All", "NotSelected", "Selected"};

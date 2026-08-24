@@ -818,3 +818,47 @@ TEST(UHF, WorthRetrying)
     EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::FHSSFail)));
     EXPECT_FALSE(is_worth_retrying(0x00));
 }
+
+TEST(UHF, DemodulatorParameters)
+{
+    using namespace m5::unit::m100;
+    // The payload the vendor spells out: mixer 9dB, IF 36dB, threshold 0x01B0
+    const uint8_t factory[] = {0x03, 0x06, 0x01, 0xB0};
+    m5::unit::m100::DemodulatorParameters dp{};
+    EXPECT_TRUE(parse_demodulator_parameters(dp, factory, sizeof(factory)));
+    EXPECT_EQ(dp.mixer_gain, m5::unit::m100::MixerGain::dB9);
+    EXPECT_EQ(dp.if_gain, m5::unit::m100::IFGain::dB36);
+    EXPECT_EQ(dp.threshold, m5::unit::m100::DEMODULATOR_THRESHOLD_DEFAULT);
+    // Which is also what the struct defaults to, so a caller that touches nothing writes back
+    // exactly what the module already holds
+    EXPECT_EQ(dp.mixer_gain, m5::unit::m100::DemodulatorParameters{}.mixer_gain);
+    EXPECT_EQ(dp.if_gain, m5::unit::m100::DemodulatorParameters{}.if_gain);
+    EXPECT_EQ(dp.threshold, m5::unit::m100::DemodulatorParameters{}.threshold);
+
+    std::vector<uint8_t> built{};
+    EXPECT_TRUE(build_demodulator_parameters(built, dp));
+    EXPECT_EQ(built, std::vector<uint8_t>(factory, factory + sizeof(factory)));
+
+    // The gain codes are indices into the tables, not the decibels themselves
+    EXPECT_EQ(m5::unit::m100::mixerGainDb(m5::unit::m100::MixerGain::dB0), 0);
+    EXPECT_EQ(m5::unit::m100::mixerGainDb(m5::unit::m100::MixerGain::dB9), 9);
+    EXPECT_EQ(m5::unit::m100::mixerGainDb(m5::unit::m100::MixerGain::dB16), 16);
+    EXPECT_EQ(m5::unit::m100::ifGainDb(m5::unit::m100::IFGain::dB12), 12);
+    EXPECT_EQ(m5::unit::m100::ifGainDb(m5::unit::m100::IFGain::dB36), 36);
+    EXPECT_EQ(m5::unit::m100::ifGainDb(m5::unit::m100::IFGain::dB40), 40);
+
+    // A code past the end of either table is not something the module accepts
+    const uint8_t bad_mixer[] = {0x07, 0x06, 0x01, 0xB0};
+    EXPECT_FALSE(parse_demodulator_parameters(dp, bad_mixer, sizeof(bad_mixer)));
+    const uint8_t bad_if[] = {0x03, 0x08, 0x01, 0xB0};
+    EXPECT_FALSE(parse_demodulator_parameters(dp, bad_if, sizeof(bad_if)));
+    EXPECT_FALSE(parse_demodulator_parameters(dp, factory, 3));
+    EXPECT_FALSE(parse_demodulator_parameters(dp, nullptr, 4));
+
+    m5::unit::m100::DemodulatorParameters out_of_range{};
+    out_of_range.mixer_gain = static_cast<m5::unit::m100::MixerGain>(0x07);
+    EXPECT_FALSE(build_demodulator_parameters(built, out_of_range));
+    out_of_range         = m5::unit::m100::DemodulatorParameters{};
+    out_of_range.if_gain = static_cast<m5::unit::m100::IFGain>(0x08);
+    EXPECT_FALSE(build_demodulator_parameters(built, out_of_range));
+}

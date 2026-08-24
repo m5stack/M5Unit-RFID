@@ -36,6 +36,8 @@ constexpr uint8_t CMD_SET_AUTO_SLEEP_TIME{0x1D};
 constexpr uint8_t CMD_INSERT_CHANNEL{0xA9};
 constexpr uint8_t CMD_SCAN_JAMMER{0xF2};
 constexpr uint8_t CMD_SCAN_RSSI{0xF3};
+constexpr uint8_t CMD_GET_DEMODULATOR{0xF1};
+constexpr uint8_t CMD_SET_DEMODULATOR{0xF0};
 constexpr uint8_t CMD_SET_SELECT_PARAMETER{0x0C};
 constexpr uint8_t CMD_SET_SELECT_MODE{0x12};
 constexpr uint8_t CMD_READ_TAG_MEMORY{0x39};
@@ -680,6 +682,36 @@ bool UnitJRD4035::succeeded(const Frame& response, const char* what) const
         response.parameter.size() > 1 ? to_hex(response.parameter.data() + 1, response.parameter.size() - 1) : "";
     M5_LIB_LOGE("%s failed: %02X %s %s", what, code, error_description(code), tail.c_str());
     return false;
+}
+
+bool UnitJRD4035::readDemodulatorParameters(m100::DemodulatorParameters& dp)
+{
+    if (reject_while_polling("readDemodulatorParameters")) {
+        return false;
+    }
+    Frame res{};
+    if (!send_and_wait(res, CMD_GET_DEMODULATOR, nullptr, 0)) {
+        return false;
+    }
+    if (!parse_demodulator_parameters(dp, res.parameter.data(), res.parameter.size())) {
+        M5_LIB_LOGE("Malformed demodulator parameters");
+        return false;
+    }
+    return true;
+}
+
+bool UnitJRD4035::writeDemodulatorParameters(const m100::DemodulatorParameters& dp)
+{
+    if (reject_while_polling("writeDemodulatorParameters")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_demodulator_parameters(param, dp)) {
+        M5_LIB_LOGE("Illegal demodulator parameters");
+        return false;
+    }
+    Frame res{};
+    return send_and_wait(res, CMD_SET_DEMODULATOR, param.data(), static_cast<uint16_t>(param.size()));
 }
 
 bool UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, const uint8_t* param,

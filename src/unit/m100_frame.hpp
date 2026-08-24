@@ -484,6 +484,129 @@ inline uint16_t build_query_parameters(const m5::uhf::QueryParameters& qp, const
     return raw;
 }
 
+/*!
+  @enum MixerGain
+  @brief Gain of the receiver's mixer
+  @details These are the gain steps the M100 receiver offers, not anything the EPC Gen2 standard
+  defines, so they live with the chip rather than in the portable vocabulary. Lowering the gain
+  shortens the distance the reader works over, which is what makes a tag sitting on the antenna
+  readable
+ */
+enum class MixerGain : uint8_t {
+    dB0,   //!< 0dB
+    dB3,   //!< 3dB
+    dB6,   //!< 6dB
+    dB9,   //!< 9dB, the value the module leaves the factory with
+    dB12,  //!< 12dB
+    dB15,  //!< 15dB
+    dB16,  //!< 16dB
+};
+
+/*!
+  @enum IFGain
+  @brief Gain of the receiver's intermediate frequency amplifier
+  @details Lowering it shortens the distance the reader works over, as with MixerGain
+ */
+enum class IFGain : uint8_t {
+    dB12,  //!< 12dB
+    dB18,  //!< 18dB
+    dB21,  //!< 21dB
+    dB24,  //!< 24dB
+    dB27,  //!< 27dB
+    dB30,  //!< 30dB
+    dB36,  //!< 36dB, the value the module leaves the factory with
+    dB40,  //!< 40dB
+};
+
+/*!
+  @brief Demodulation threshold the module leaves the factory with
+  @details Documented as the lowest value worth using, not as the best one
+ */
+constexpr uint16_t DEMODULATOR_THRESHOLD_DEFAULT{0x01B0};
+
+/*!
+  @struct DemodulatorParameters
+  @brief Receiver settings that decide how weak a reply the reader can still make sense of
+  @details Where transmit power sets how far the reader reaches, these set how far it listens.
+  Both are worth lowering for a tag that sits on the antenna: a reader configured for a metre
+  and a half misses most inventory rounds at contact, however strong the reply is
+ */
+struct DemodulatorParameters {
+    MixerGain mixer_gain{MixerGain::dB9};
+    IFGain if_gain{IFGain::dB36};
+    /*!
+      Demodulation threshold. A lower one reaches replies of lower RSSI but is less stable, and
+      below some point nothing demodulates at all; a higher one only reaches stronger replies,
+      which means shorter range, and is more stable
+     */
+    uint16_t threshold{DEMODULATOR_THRESHOLD_DEFAULT};
+};
+
+//! @brief Mixer gain in dB
+inline uint8_t mixerGainDb(const MixerGain gain)
+{
+    static const uint8_t db[] = {0, 3, 6, 9, 12, 15, 16};
+    const uint8_t i           = static_cast<uint8_t>(gain);
+    return i < sizeof(db) ? db[i] : 0;
+}
+
+//! @brief Intermediate frequency amplifier gain in dB
+inline uint8_t ifGainDb(const IFGain gain)
+{
+    static const uint8_t db[] = {12, 18, 21, 24, 27, 30, 36, 40};
+    const uint8_t i           = static_cast<uint8_t>(gain);
+    return i < sizeof(db) ? db[i] : 0;
+}
+//! @brief Highest mixer gain the module accepts
+constexpr uint8_t MIXER_GAIN_MAX{0x06};
+//! @brief Highest intermediate frequency gain the module accepts
+constexpr uint8_t IF_GAIN_MAX{0x07};
+//! @brief Length of the demodulator parameter payload
+constexpr size_t DEMODULATOR_PARAMETER_LENGTH{4};
+
+/*!
+  @brief Split a demodulator parameter payload into its fields
+  @param[out] dp Demodulator parameters
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True if successful
+ */
+inline bool parse_demodulator_parameters(DemodulatorParameters& dp, const uint8_t* param, const size_t len)
+{
+    if (param == nullptr || len < DEMODULATOR_PARAMETER_LENGTH) {
+        return false;
+    }
+    if (param[0] > MIXER_GAIN_MAX || param[1] > IF_GAIN_MAX) {
+        return false;
+    }
+    dp.mixer_gain = static_cast<MixerGain>(param[0]);
+    dp.if_gain    = static_cast<IFGain>(param[1]);
+    dp.threshold  = static_cast<uint16_t>((param[2] << 8) | param[3]);
+    return true;
+}
+
+/*!
+  @brief Build the parameter of Set Demodulator Parameter (0xF0)
+  @param[out] out Parameter
+  @param dp Demodulator parameters
+  @return True if successful
+ */
+inline bool build_demodulator_parameters(std::vector<uint8_t>& out, const DemodulatorParameters& dp)
+{
+    const uint8_t mixer = static_cast<uint8_t>(dp.mixer_gain);
+    const uint8_t amp   = static_cast<uint8_t>(dp.if_gain);
+    if (mixer > MIXER_GAIN_MAX || amp > IF_GAIN_MAX) {
+        return false;
+    }
+    out.clear();
+    out.reserve(DEMODULATOR_PARAMETER_LENGTH);
+    out.push_back(mixer);
+    out.push_back(amp);
+    out.push_back(static_cast<uint8_t>(dp.threshold >> 8));
+    out.push_back(static_cast<uint8_t>(dp.threshold));
+    return true;
+}
+
 //! @brief Command code used by every failure notification
 constexpr uint8_t COMMAND_ERROR{0xFF};
 

@@ -51,6 +51,21 @@ public:
     virtual bool writeOperatingChannels(const std::vector<uint8_t>& channels) override;
     virtual bool readBlockingSignal(m5::uhf::ChannelLevels& levels) override;
     virtual bool readChannelRSSI(m5::uhf::ChannelLevels& levels) override;
+    ///@name Receiver tuning, specific to this chip
+    ///@{
+    //! @brief Read the receiver demodulator settings
+    bool readDemodulatorParameters(m100::DemodulatorParameters& dp);
+    /*!
+      @brief Write the receiver demodulator settings
+      @param dp Demodulator parameters
+      @return True if successful
+      @details Transmit power decides how far the reader reaches and these decide how far it
+      listens. Lowering both is what makes a tag resting on the antenna readable: left at the
+      factory settings, which reach about a metre and a half, the reader misses most inventory
+      rounds at contact however strong the reply is
+     */
+    bool writeDemodulatorParameters(const m100::DemodulatorParameters& dp);
+    ///@}
     ///@}
 
 protected:
