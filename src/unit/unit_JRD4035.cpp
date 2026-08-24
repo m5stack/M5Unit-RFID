@@ -151,24 +151,6 @@ constexpr uint32_t BEGIN_PROBE_WINDOW_MS{3000};
 constexpr int MODULE_INFORMATION_RETRY{3};
 constexpr uint32_t MODULE_INFORMATION_RETRY_INTERVAL_MS{50};
 
-uint8_t to_region_code(const m5::uhf::Region region)
-{
-    switch (region) {
-        case m5::uhf::Region::China900MHz:
-            return 0x01;
-        case m5::uhf::Region::America:
-            return 0x02;
-        case m5::uhf::Region::Europe:
-            return 0x03;
-        case m5::uhf::Region::China800MHz:
-            return 0x04;
-        case m5::uhf::Region::SouthKorea:
-            return 0x06;
-        default:
-            return 0x00;
-    }
-}
-
 m5::uhf::Region from_region_code(const uint8_t code)
 {
     switch (code) {
@@ -185,6 +167,15 @@ m5::uhf::Region from_region_code(const uint8_t code)
         default:
             return m5::uhf::Region::Unspecified;
     }
+}
+
+//! @brief The code the module uses for a region, or 0x00 when it is not one of them
+uint8_t to_region_code(const m5::uhf::Region region)
+{
+    // The enumerators carry the module's own codes, so the round trip through the table above
+    // is what says whether the caller named a region the module knows
+    const uint8_t code = static_cast<uint8_t>(region);
+    return from_region_code(code) == region ? code : 0x00;
 }
 }  // namespace
 
