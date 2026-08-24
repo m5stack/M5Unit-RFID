@@ -34,8 +34,8 @@ constexpr uint16_t WRITE_TEST_WORDS{2};
   A reader as it ships reaches about a metre and a half. At contact the reply overwhelms the
   receiver: most inventory rounds find nothing and about half of every read fails, however strong
   the reply is. Bringing the working distance in fixes it, either by lowering the transmit power or
-  by lowering the receiver gain. Measured at contact over 256 reads each: as shipped 49% of reads
-  succeed, with the gain lowered 97%, with the power lowered instead 98%.
+  by lowering the receiver gain. Lowering the gain is the better of the two, since the transmit
+  power is what energises the tag in the first place.
 
   WARNING: the module keeps these settings when it loses power, so running this sketch changes the
   unit until something changes it back. What this unit was found set to is spelled out below; assign

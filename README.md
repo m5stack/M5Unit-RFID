@@ -95,9 +95,8 @@ dp.threshold  = 0x01B0;                          // the lowest value the chip do
 unit.writeDemodulatorParameters(dp);
 ```
 
-Measured at contact, over 256 read attempts each: as shipped, 49% of reads succeed; with the
-receiver gain lowered, 97%; with the transmit power lowered instead, 98%. Lowering the receiver gain
-is the better of the two, since the transmit power is what energises the tag in the first place.
+Lowering the receiver gain is the better of the two, since the transmit power is what energises the
+tag in the first place. Either way the reader stops reaching as far, which is the point.
 
 > **Note:** The module keeps these settings when it loses power. Writing them changes the unit until
 > something writes them back, so an application that wants the shipped behaviour has to restore it.
