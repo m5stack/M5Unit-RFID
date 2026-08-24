@@ -5,8 +5,7 @@
  */
 /*
   Example using M5UnitUnified for M5Unit-RFID
-  Detect UHF-RFID tags with Unit UHF-RFID (U107), identify a single tag by its TID, and write
-  to its User memory
+  Detect UHF-RFID tags with Unit UHF-RFID (U107)
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -22,88 +21,35 @@ m5::unit::UnitUnified Units;
 m5::unit::UnitUHFRFID unit{};
 m5::uhf::UHFLayer uhf{unit};
 
-//! @brief Words to read when the tag holds user memory but never says how much
-constexpr uint16_t USER_PROBE_WORDS{2};
-//! @brief Enough of the User bank to see what is in it without filling the log with it
-constexpr uint16_t USER_DUMP_MAX_WORDS{16};
-//! @brief Words the short write test replaces and then puts back
-constexpr uint16_t WRITE_TEST_WORDS{2};
-/*!
-  @brief Words the long write test replaces and then puts back
-  @details The most a single Write command carries. The module programs the words into the tag
-  one at a time and waits out the tag's write time for each, so this is the longest a tag
-  operation legitimately takes. Higgs 9 holds 43 words of user memory and Monza 4QT exactly 32
- */
-constexpr uint16_t WRITE_TEST_MAX_WORDS{32};
-/*!
-  @brief Words the whole-bank write test replaces and then puts back
-  @details The full User bank of a Higgs 9, 688 bits of it. More than a single Write command
-  carries, so writeBank splits it, which is the thing worth exercising. A tag with less user
-  memory than this answers with a memory overrun and the test stops before writing anything
- */
-constexpr uint16_t WRITE_TEST_BANK_WORDS{43};
-/*
-  Reader settings tuned for a tag resting on the antenna.
-
-  A reader as it ships reaches about a metre and a half. At contact the reply overwhelms the
-  receiver: most inventory rounds find nothing and about half of every read fails, however strong
-  the reply is. Bringing the working distance in fixes it, either by lowering the transmit power or
-  by lowering the receiver gain. Lowering the gain is the better of the two, since the transmit
-  power is what energises the tag in the first place.
-
-  WARNING: the module keeps these settings when it loses power, so running this sketch changes the
-  unit until something changes it back. What this unit was found set to is spelled out below; assign
-  those to the three constants in use to put it back the way it was.
-
-  Those are not the values the chip's own documentation calls the defaults, which are a mixer gain
-  of 9dB and a threshold of 0x01B0. This unit came set for distance rather than for stability.
-*/
-namespace as_shipped {
-constexpr int16_t TX_POWER_DBM100{2600};
-constexpr m5::unit::m100::MixerGain MIXER_GAIN{m5::unit::m100::MixerGain::dB6};
-constexpr uint16_t THRESHOLD{0x00B0};
-}  // namespace as_shipped
-
-//! @brief Transmit power in 1/100 dBm. The module accepts 1700 to 2600
-constexpr int16_t TX_POWER_DBM100{2600};
-//! @brief Demodulation threshold. 0x01B0 is the lowest the chip documents as worth using
-constexpr uint16_t DEMODULATOR_THRESHOLD{0x01B0};
-//! @brief Mixer gain, a step below what this unit shipped with
-constexpr m5::unit::m100::MixerGain DEMODULATOR_MIXER_GAIN{m5::unit::m100::MixerGain::dB3};
-
-const char* region_to_string(const m5::uhf::Region r)
+//! @brief Bring the display and the unit up, or stop
+void begin_unit()
 {
-    switch (r) {
-        case m5::uhf::Region::China900MHz:
-            return "China900MHz";
-        case m5::uhf::Region::America:
-            return "America";
-        case m5::uhf::Region::Europe:
-            return "Europe";
-        case m5::uhf::Region::China800MHz:
-            return "China800MHz";
-        case m5::uhf::Region::SouthKorea:
-            return "SouthKorea";
-        default:
-            return "Unspecified";
+    M5.begin();
+    M5.setTouchButtonHeightByRatio(100);
+    if (lcd.height() > lcd.width()) {
+        lcd.setRotation(1);
     }
-}
+    // Unit UHF-RFID is a UART unit; PortC is preferred and PortA is the fallback
+    if (!(m5::unit::wiring::addUART(Units, unit, 115200) && Units.begin())) {
+        M5_LOGE("Failed to begin");
+        m5::unit::wiring::failStop();
+    }
+    M5_LOGI("M5UnitUnified has been begun");
+    M5_LOGI("%s", Units.debugInfo().c_str());
 
-void print_channel_levels(const char* what, const m5::uhf::ChannelLevels& levels)
-{
-    std::string s{};
-    for (size_t i = 0; i < levels.dbm.size(); ++i) {
-        s += m5::utility::formatString("%u:%d ", (unsigned)(levels.first_channel + i), levels.dbm[i]);
+    m5::uhf::ModuleInformation info{};
+    if (unit.readModuleInformation(info)) {
+        M5_LOGI("HW:%s SW:%s MFR:%s", info.hardware_version.c_str(), info.software_version.c_str(),
+                info.manufacturer.c_str());
     }
-    M5_LOGI("%s per channel (dBm): %s", what, s.c_str());
 }
 
 void print_tag(const m5::uhf::Tag& tag)
 {
     const std::string epc = tag.epc.toString();
 
-    // The PC carries the EPC length, the user memory indicator and the numbering system,
-    // which tells a lot about an unknown tag without reading any memory bank
+    // The PC carries the EPC length, the user memory indicator and the numbering system, which
+    // tells a lot about an unknown tag without reading any memory bank
     const uint8_t words  = m5::uhf::pcEPCLengthWords(tag.pc);
     const bool length_ok = (words * 2 == static_cast<int>(tag.epc.size));
     const bool crc_ok    = m5::uhf::verify_tag_crc(tag);
@@ -119,243 +65,24 @@ void print_tag(const m5::uhf::Tag& tag)
     lcd.printf("  %ddBm UMI=%u CRC=%s\n", tag.rssi, m5::uhf::pcUserMemoryIndicator(tag.pc) ? 1 : 0,
                crc_ok ? "OK" : "NG");
 }
-std::string to_hex(const std::vector<uint8_t>& data)
-{
-    std::string s{};
-    for (auto&& b : data) {
-        s += m5::utility::formatString("%02X", b);
-    }
-    return s;
-}
-
-void dump_bank(const char* what, const m5::uhf::Bank bank, const uint16_t word_address, const uint16_t words)
-{
-    std::vector<uint8_t> data{};
-    if (!uhf.readBank(data, bank, word_address, words)) {
-        // A refusal is worth as much as the data here: a Reserved bank that will not be read is
-        // how a tag says its access password has already been set
-        M5_LOGW("%s: could not be read", what);
-        return;
-    }
-    M5_LOGI("%s: %s", what, to_hex(data).c_str());
-}
-
-/*!
-  Write two words of User memory, read them back and put the original contents back.
-
-  User memory is the only bank this touches. Rewriting EPC would change what the tag answers to
-  in inventory, and writing Reserved would set the access and kill passwords, which is how a
-  development tag stops being usable for development. Neither is worth it to prove a write works.
- */
-void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
-{
-    if (!uhf.select(detected)) {
-        M5_LOGE("write: failed to select the tag");
-        return;
-    }
-
-    // A tag whose passwords have been set can refuse the write halfway, which would leave the
-    // original contents already gone. Checking first keeps that from happening quietly
-    std::vector<uint8_t> reserved{};
-    if (!uhf.readBank(reserved, m5::uhf::Bank::Reserved, 0, 4)) {
-        M5_LOGE("write: Reserved could not be read, so the passwords are unknown");
-        uhf.deselect();
-        return;
-    }
-    for (auto&& b : reserved) {
-        if (b != 0x00) {
-            M5_LOGW("write: this tag has a password set (%s); leaving it alone", to_hex(reserved).c_str());
-            uhf.deselect();
-            return;
-        }
-    }
-
-    const unsigned long read_began = m5::utility::millis();
-    std::vector<uint8_t> original{};
-    if (!uhf.readBank(original, m5::uhf::Bank::User, 0, words)) {
-        M5_LOGE("write %u words: this tag has no User memory to write to, or not that much of it", words);
-        uhf.deselect();
-        return;
-    }
-    const unsigned long read_took = m5::utility::millis() - read_began;
-
-    // A pattern that says where in the bank each byte came from, so a mismatch points at the
-    // word it happened in rather than just failing
-    std::vector<uint8_t> pattern(static_cast<size_t>(words) * 2);
-    for (size_t i = 0; i < pattern.size(); ++i) {
-        pattern[i] = static_cast<uint8_t>(0xA0 + (i & 0x0F));
-    }
-
-    const unsigned long began = m5::utility::millis();
-    if (!uhf.writeBank(m5::uhf::Bank::User, 0, pattern)) {
-        M5_LOGE("write %u words: failed", words);
-        uhf.deselect();
-        return;
-    }
-    const unsigned long took = m5::utility::millis() - began;
-
-    std::vector<uint8_t> readback{};
-    if (!uhf.readBank(readback, m5::uhf::Bank::User, 0, words)) {
-        M5_LOGE("write %u words: wrote but could not read back, so the tag now holds the pattern", words);
-        uhf.deselect();
-        return;
-    }
-    M5_LOGI("write %2u words: read %lums, write %lums, read back %s", words, read_took, took,
-            readback == pattern ? "matches" : "MISMATCH");
-
-    // Put it back the way it was, and say so loudly if that does not work: the tag is left
-    // holding the pattern in that case
-    if (!uhf.writeBank(m5::uhf::Bank::User, 0, original)) {
-        M5_LOGE("write %u words: FAILED TO RESTORE; the tag still holds the pattern", words);
-        uhf.deselect();
-        return;
-    }
-    std::vector<uint8_t> restored{};
-    if (uhf.readBank(restored, m5::uhf::Bank::User, 0, words)) {
-        M5_LOGI("write %2u words: restored %s", words, restored == original ? "matches" : "MISMATCH");
-    }
-    uhf.deselect();
-}
-
-void identify_and_dump(const m5::uhf::Tag& detected)
-{
-    // Reading one word back is what proves the mask actually picks this tag out, so the failure
-    // shows up here rather than halfway through the dump below
-    if (!uhf.select(detected)) {
-        M5_LOGE("Failed to select the tag");
-        lcd.println("select: failed");
-        return;
-    }
-
-    m5::uhf::Tag tag{};
-    if (!uhf.identify(tag)) {
-        M5_LOGE("Failed to identify the tag");
-        lcd.println("identify: failed");
-        uhf.deselect();
-        return;
-    }
-
-    M5_LOGI("TID   : %s", tag.tid.toString().c_str());
-    M5_LOGI("Vendor: %s (MDID 0x%03X)", tag.vendorAsString().c_str(), tag.mdid);
-    M5_LOGI("Chip  : %s (TMN 0x%03X)", tag.chipAsString().c_str(), tag.model_number);
-    M5_LOGI("XTID  : %s serial=%ubit security=%u file=%u", tag.has_xtid ? "yes" : "no", tag.serial_bits,
-            tag.supports_security ? 1 : 0, tag.supports_file ? 1 : 0);
-    // Zero means the tag never said, not that the tag has none of it
-    M5_LOGI("Sizes : user=%ubit maxEPC=%ubit permalockBlock=%ubit blockPermalock=%s", tag.user_memory_bits,
-            tag.epc_max_bits, tag.permalock_block_bits, tag.supports_block_permalock ? "yes" : "no");
-
-    lcd.printf("%s / %s\n", tag.vendorAsString().c_str(), tag.chipAsString().c_str());
-
-    // Kill password then access password. All zeros is the state a tag leaves the factory in,
-    // and it is also what keeps the tag from ever being killed by accident
-    dump_bank("Reserved", m5::uhf::Bank::Reserved, 0, 4);
-
-    // The XTID says how big the User bank is. When it stays silent the PC still carries an
-    // indicator, so a short probe read is worth trying before giving up on the bank
-    uint16_t user_words = static_cast<uint16_t>(tag.user_memory_bits / 16);
-    if (user_words == 0 && m5::uhf::pcUserMemoryIndicator(tag.pc)) {
-        user_words = USER_PROBE_WORDS;
-        M5_LOGI("User  : size unknown, probing %u words", user_words);
-    }
-    if (user_words > USER_DUMP_MAX_WORDS) {
-        user_words = USER_DUMP_MAX_WORDS;
-    }
-    if (user_words) {
-        dump_bank("User", m5::uhf::Bank::User, 0, user_words);
-    } else {
-        M5_LOGI("User  : the tag reports none");
-    }
-
-    uhf.deselect();
-}
 }  // namespace
 
 void setup()
 {
-    M5.begin();
-    M5.setTouchButtonHeightByRatio(100);
-    if (lcd.height() > lcd.width()) {
-        lcd.setRotation(1);
-    }
+    begin_unit();
 
-    // Unit UHF-RFID is a UART unit; PortC is preferred and PortA is the fallback
-    if (!(m5::unit::wiring::addUART(Units, unit, 115200) && Units.begin())) {
-        M5_LOGE("Failed to begin");
-        m5::unit::wiring::failStop();
-    }
-    M5_LOGI("M5UnitUnified has been begun");
-    M5_LOGI("%s", Units.debugInfo().c_str());
-
-    // Reader settings are rejected while polling, so stop it first
-    unit.stopPolling();
-
-    // Show the module settings
-    m5::uhf::ModuleInformation info{};
-    if (unit.readModuleInformation(info)) {
-        M5_LOGI("HW:%s SW:%s MFR:%s", info.hardware_version.c_str(), info.software_version.c_str(),
-                info.manufacturer.c_str());
-    }
-    // A reader left at its default 26dBm is set up to reach about a metre and a half. A tag
-    // resting on the antenna is nowhere near that, and the reader then misses most inventory
-    // rounds even though the tag is as close as it can get. The vendor's own tuning guide says
-    // to lower the power for close work, over a range of 17 to 26dBm
-    if (!unit.writeTransmitPower(TX_POWER_DBM100)) {
-        M5_LOGE("Failed to set the transmit power");
-    }
-    int16_t dbm100{};
-    if (unit.readTransmitPower(dbm100)) {
-        M5_LOGI("TxPower: %d.%02d dBm", dbm100 / 100, dbm100 % 100);
-    }
-    m5::uhf::Region region{};
-    if (unit.readRegion(region)) {
-        M5_LOGI("Region: %s", region_to_string(region));
-    }
-    uint8_t channel{};
-    if (unit.readChannel(channel)) {
-        M5_LOGI("Channel: %u", channel);
-    }
-    // Select acts on the inventoried flag of one session, so which session and which flag value
-    // the module then queries for decides whether a selected tag is included or excluded
-    // How far the reader listens, as against how far it reaches. Lowering these shortens the
-    // range further still, which is the vendor's next step after transmit power for close work
-    m5::unit::m100::DemodulatorParameters dp{};
-    if (unit.readDemodulatorParameters(dp)) {
-        M5_LOGI("Demodulator as found: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
-                m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
-        dp.mixer_gain = DEMODULATOR_MIXER_GAIN;
-        dp.threshold  = DEMODULATOR_THRESHOLD;
-        if (!unit.writeDemodulatorParameters(dp) || !unit.readDemodulatorParameters(dp)) {
-            M5_LOGE("Failed to set the demodulation threshold");
-        }
-        M5_LOGI("Demodulator now    : mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
-                m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
-        M5_LOGW("These settings survive a power cycle. As shipped: mixer=%udB threshold=0x%04X, power %d.%02ddBm",
-                m5::unit::m100::mixerGainDb(as_shipped::MIXER_GAIN), as_shipped::THRESHOLD,
-                as_shipped::TX_POWER_DBM100 / 100, as_shipped::TX_POWER_DBM100 % 100);
-    }
-    m5::uhf::QueryParameters qp{};
-    if (unit.readQueryParameters(qp)) {
-        static const char* filters[] = {"All", "All", "NotSelected", "Selected"};
-        M5_LOGI("Query: Q=%u session=S%u target=%c sel=%s", qp.q, (unsigned)qp.session,
-                qp.target == m5::uhf::Target::A ? 'A' : 'B', filters[static_cast<uint8_t>(qp.filter) & 0x03]);
-    }
-
-    // Survey the band before reading anything. A tag that refuses to answer while the antenna
-    // and the transmit power are both fine is usually drowned out by something on the air, and
-    // these two scans are what tells that apart from a problem with the tag
-    m5::uhf::ChannelLevels levels{};
-    if (unit.readBlockingSignal(levels)) {
-        print_channel_levels("Blocking", levels);
-    }
-    if (unit.readChannelRSSI(levels)) {
-        print_channel_levels("RSSI", levels);
+    // Polling makes the module run inventory rounds continuously and report every tag it sees.
+    // The queue those reports land in is not deduplicated, which is what lets an application
+    // watch a tag's RSSI change or notice that it has gone
+    if (!unit.startPolling(unit.config().polling_count)) {
+        M5_LOGE("Failed to start polling");
     }
 
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
-    lcd.println("A: detect + identify");
-    lcd.println("B: write User memory (restores it)");
+    lcd.println("A: detect() once");
+    lcd.println("raw stream below");
 }
 
 void loop()
@@ -363,21 +90,16 @@ void loop()
     M5.update();
     Units.update();
 
-    // Button A runs the blocking, deduplicated detection of UHFLayer
+    // Button A asks UHFLayer for one deduplicated look at the field, which is what an
+    // application wants when it needs a list rather than a stream
     if (M5.BtnA.wasClicked()) {
         std::vector<m5::uhf::Tag> tags{};
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
         if (uhf.detect(tags, 1000)) {
             lcd.printf("detect: %u tag(s)\n", (unsigned)tags.size());
-            for (size_t i = 0; i < tags.size(); ++i) {
-                print_tag(tags[i]);
-            }
-            // Which tag to address is only unambiguous while there is exactly one in the field
-            if (tags.size() == 1) {
-                identify_and_dump(tags[0]);
-            } else {
-                M5_LOGI("Put a single tag in the field to identify it");
+            for (auto&& tag : tags) {
+                print_tag(tag);
             }
         } else {
             lcd.println("detect: no tag");
@@ -385,32 +107,14 @@ void loop()
         return;
     }
 
-    // Button B writes to User memory and puts the original contents back. Kept off button A so
-    // that nothing is written just by looking at a tag
-    if (M5.BtnB.wasClicked()) {
-        std::vector<m5::uhf::Tag> tags{};
-        lcd.fillScreen(TFT_DARKGREEN);
-        lcd.setCursor(0, 0);
-        if (!uhf.detect(tags, 1000) || tags.size() != 1) {
-            M5_LOGI("write: put a single tag in the field");
-            lcd.println("write: need one tag");
-            return;
-        }
-        // Two words to see it work, then the most a single command carries, which is what says
-        // how long a tag operation can legitimately take
-        write_roundtrip(tags[0], WRITE_TEST_WORDS);
-        write_roundtrip(tags[0], WRITE_TEST_MAX_WORDS);
-        write_roundtrip(tags[0], WRITE_TEST_BANK_WORDS);
-        return;
-    }
-
-    // The raw queue keeps every notification, so the same tag appears repeatedly
+    // The raw queue keeps every notification, so a tag that stays in the field appears again
+    // and again with a fresh RSSI each time
     while (unit.available()) {
         print_tag(unit.oldest());
         unit.discard();
     }
     if (unit.dropped()) {
-        M5_LOGW("Dropped %u notifications; raise tag_queue_size", unit.dropped());
+        M5_LOGW("Dropped %u notifications; raise tag_queue_size or update() more often", unit.dropped());
         unit.clearDropped();
     }
 }

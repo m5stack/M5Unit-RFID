@@ -116,6 +116,20 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          # UHF sketches other than Detect (Core only). Detect carries the board axis above,
+          # which is what covers the other compile configurations for this family
+          - example: UHF_Dump
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_ReadWrite
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_ReaderSettings
+            board: Core
+            framework: Arduino
+            espressif32: latest
 
     steps:
       - name: Checkout
