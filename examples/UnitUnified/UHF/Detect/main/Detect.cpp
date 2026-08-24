@@ -5,7 +5,7 @@
  */
 /*
   Example using M5UnitUnified for M5Unit-RFID
-  Detect UHF-RFID tags with Unit UHF-RFID (U107)
+  Detect UHF-RFID tags with Unit UHF-RFID (U107), and identify a single tag by its TID
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -20,6 +20,11 @@ auto& lcd = M5.Display;
 m5::unit::UnitUnified Units;
 m5::unit::UnitUHFRFID unit{};
 m5::uhf::UHFLayer uhf{unit};
+
+//! @brief Words to read when the tag holds user memory but never says how much
+constexpr uint16_t USER_PROBE_WORDS{2};
+//! @brief Enough of the User bank to see what is in it without filling the log with it
+constexpr uint16_t USER_DUMP_MAX_WORDS{16};
 
 const char* region_to_string(const m5::uhf::Region r)
 {
@@ -69,6 +74,78 @@ void print_tag(const m5::uhf::Tag& tag)
     lcd.printf("  %ddBm UMI=%u CRC=%s\n", tag.rssi, m5::uhf::pcUserMemoryIndicator(tag.pc) ? 1 : 0,
                crc_ok ? "OK" : "NG");
 }
+std::string to_hex(const std::vector<uint8_t>& data)
+{
+    std::string s{};
+    for (auto&& b : data) {
+        s += m5::utility::formatString("%02X", b);
+    }
+    return s;
+}
+
+void dump_bank(const char* what, const m5::uhf::Bank bank, const uint16_t word_address, const uint16_t words)
+{
+    std::vector<uint8_t> data{};
+    if (!uhf.readBank(data, bank, word_address, words)) {
+        // A refusal is worth as much as the data here: a Reserved bank that will not be read is
+        // how a tag says its access password has already been set
+        M5_LOGW("%s: could not be read", what);
+        return;
+    }
+    M5_LOGI("%s: %s", what, to_hex(data).c_str());
+}
+
+void identify_and_dump(const m5::uhf::Tag& detected)
+{
+    // Reading one word back is what proves the mask actually picks this tag out, so the failure
+    // shows up here rather than halfway through the dump below
+    if (!uhf.select(detected)) {
+        M5_LOGE("Failed to select the tag");
+        lcd.println("select: failed");
+        return;
+    }
+
+    m5::uhf::Tag tag{};
+    if (!uhf.identify(tag)) {
+        M5_LOGE("Failed to identify the tag");
+        lcd.println("identify: failed");
+        uhf.deselect();
+        return;
+    }
+
+    M5_LOGI("TID   : %s", tag.tid.toString().c_str());
+    M5_LOGI("Vendor: %s (MDID 0x%03X)", tag.vendorAsString().c_str(), tag.mdid);
+    M5_LOGI("Chip  : %s (TMN 0x%03X)", tag.chipAsString().c_str(), tag.model_number);
+    M5_LOGI("XTID  : %s serial=%ubit security=%u file=%u", tag.has_xtid ? "yes" : "no", tag.serial_bits,
+            tag.supports_security ? 1 : 0, tag.supports_file ? 1 : 0);
+    // Zero means the tag never said, not that the tag has none of it
+    M5_LOGI("Sizes : user=%ubit maxEPC=%ubit permalockBlock=%ubit blockPermalock=%s", tag.user_memory_bits,
+            tag.epc_max_bits, tag.permalock_block_bits, tag.supports_block_permalock ? "yes" : "no");
+
+    lcd.printf("%s / %s\n", tag.vendorAsString().c_str(), tag.chipAsString().c_str());
+
+    // Kill password then access password. All zeros is the state a tag leaves the factory in,
+    // and it is also what keeps the tag from ever being killed by accident
+    dump_bank("Reserved", m5::uhf::Bank::Reserved, 0, 4);
+
+    // The XTID says how big the User bank is. When it stays silent the PC still carries an
+    // indicator, so a short probe read is worth trying before giving up on the bank
+    uint16_t user_words = static_cast<uint16_t>(tag.user_memory_bits / 16);
+    if (user_words == 0 && m5::uhf::pcUserMemoryIndicator(tag.pc)) {
+        user_words = USER_PROBE_WORDS;
+        M5_LOGI("User  : size unknown, probing %u words", user_words);
+    }
+    if (user_words > USER_DUMP_MAX_WORDS) {
+        user_words = USER_DUMP_MAX_WORDS;
+    }
+    if (user_words) {
+        dump_bank("User", m5::uhf::Bank::User, 0, user_words);
+    } else {
+        M5_LOGI("User  : the tag reports none");
+    }
+
+    uhf.deselect();
+}
 }  // namespace
 
 void setup()
@@ -108,6 +185,13 @@ void setup()
     if (unit.readChannel(channel)) {
         M5_LOGI("Channel: %u", channel);
     }
+    // Select acts on the inventoried flag of one session, so which session and which flag value
+    // the module then queries for decides whether a selected tag is included or excluded
+    m5::uhf::QueryParameters qp{};
+    if (unit.readQueryParameters(qp)) {
+        M5_LOGI("Query: Q=%u session=S%u target=%c", qp.q, (unsigned)qp.session,
+                qp.target == m5::uhf::Target::A ? 'A' : 'B');
+    }
 
     // Survey the band before reading anything. A tag that refuses to answer while the antenna
     // and the transmit power are both fine is usually drowned out by something on the air, and
@@ -120,13 +204,10 @@ void setup()
         print_channel_levels("RSSI", levels);
     }
 
-    // Resume detection now that the settings have been read
-    unit.startPolling(unit.config().polling_count);
-
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
-    lcd.println("A: detect()  raw stream below");
+    lcd.println("A: detect + identify");
 }
 
 void loop()
@@ -143,6 +224,12 @@ void loop()
             lcd.printf("detect: %u tag(s)\n", (unsigned)tags.size());
             for (size_t i = 0; i < tags.size(); ++i) {
                 print_tag(tags[i]);
+            }
+            // Which tag to address is only unambiguous while there is exactly one in the field
+            if (tags.size() == 1) {
+                identify_and_dump(tags[0]);
+            } else {
+                M5_LOGI("Put a single tag in the field to identify it");
             }
         } else {
             lcd.println("detect: no tag");
