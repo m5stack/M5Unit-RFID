@@ -407,6 +407,20 @@ inline uint32_t chipSharedUserMemoryBits(const Chip chip, const uint16_t pc)
 constexpr uint8_t TID_CLASS_EPCGLOBAL{0xE2};
 
 /*!
+  @brief Does a TID say it carries an extended TID, and with it a serial number?
+  @param tid TID bytes starting at word 0
+  @param len Length of tid in bytes, at least 2
+  @return True when the XTID indicator is set
+  @details Bit 08h of the TID. What lies past word 1 is only defined when this is set: the Tag
+  Data Standard calls a TID without it a short TID, "in which the values beyond address 1Fh are
+  not defined" (TDS 1.5 16.1), and EPC Gen2 v3 asks for a serial number only of tags that set it
+ */
+inline bool tidHasXtid(const uint8_t* tid, const size_t len)
+{
+    return tid != nullptr && len >= 2 && (tid[1] & 0x80) != 0;
+}
+
+/*!
   @brief Serial length an XTID header announces
   @param xtid_header XTID header word, TID bits 20h to 2Fh
   @return Length of the serial in bits, 0 when the tag carries none

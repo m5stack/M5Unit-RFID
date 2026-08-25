@@ -192,6 +192,13 @@ bool UHFLayer::select(const Tid& tid, const uint32_t access_password, const bool
         M5_LIB_LOGE("The tag carries no TID to build a mask from");
         return false;
     }
+    // Without an extended TID the bytes in hand are the chip's name and nothing else: every tag
+    // of that model carries them. Some chips hold no serial at all, and the ones that do put it
+    // at an address of their own choosing, so reading further would not help
+    if (!tidHasXtid(tid.begin(), tid.size)) {
+        M5_LIB_LOGE("This TID has no serial number to tell one tag of this chip from another");
+        return false;
+    }
     if (!apply_selection(Bank::Tid, TID_MASK_POINTER_BITS, tid.begin(), tid.size, access_password, verify)) {
         return false;
     }

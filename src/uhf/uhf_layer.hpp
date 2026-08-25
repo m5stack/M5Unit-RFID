@@ -88,6 +88,10 @@ public:
       @details The TID is locked at manufacture, so a mask built from it keeps working across
       an EPC rewrite. The tag has to have been identified first, since detection alone only
       ever reveals an EPC
+      @warning Only a tag carrying an extended TID can be picked out this way, and this refuses
+      the rest. A TID without one holds the chip's name and nothing more, which every tag of
+      that model carries: selecting on it would address all of them at once. Where the serial
+      sits, and whether there is one at all, is left to each manufacturer past word 1
      */
     bool select(const Tid& tid, const uint32_t access_password = 0, const bool verify = true);
     //! @brief Stop addressing a single tag, and put polling back the way select() found it
