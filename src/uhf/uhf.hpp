@@ -374,7 +374,7 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
 inline uint32_t chipSharedUserMemoryBits(const Chip chip, const uint16_t pc)
 {
     // A tag selected by its TID reaches identify() with no PC, and a bank sized from a length
-    // of zero would be the whole pool. Saying nothing is the honest answer
+    // of zero would be the whole pool. Returning 0 rather than a wrong size
     if (chip != Chip::AlienHiggs9 || pc == 0) {
         return 0;
     }
@@ -477,8 +477,8 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                     return Chip::AlienHiggs3;  // Higgs 3 IC datasheet, Table 1
                 case 0x821:
                     // Neither Alien nor the GS1 registry publishes this one; it comes from
-                    // third-party tables. Read off a real Higgs 9, whose TID is
-                    // E2803821 2000 6820042E3E3B, so it is measured rather than taken on trust
+                    // third-party tables, and was read off a real Higgs 9 whose TID is
+                    // E2803821 2000 6820042E3E3B
                     return Chip::AlienHiggs9;
                 default:
                     return Chip::Unknown;
@@ -507,10 +507,9 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
 /*!
   @brief Fill in what the tag left unsaid from what its chip is known to hold
   @param[in,out] tag Tag whose TID has been decoded
-  @details The XTID is where a tag states its own memory sizes, and hardly any tag does: three
-  chips from three designers were all found carrying an XTID with nothing in it but a serial
-  number. What the chip is known to hold is the only thing left, and the mask designer and model
-  number are what name the chip
+  @details The XTID is where a tag states its own memory sizes, and hardly any tag does: in
+  practice an XTID carries a serial number and nothing else. What the chip is known to hold is
+  the only thing left, and the mask designer and model number are what name the chip
  */
 inline void fillSizesFromChip(Tag& tag)
 {

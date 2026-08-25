@@ -89,9 +89,9 @@ void print_identity(const m5::uhf::Tag& tag)
     M5_LOGI("Vendor: %s (MDID 0x%03X)", tag.vendorAsString().c_str(), tag.mdid);
     M5_LOGI("Chip  : %s (TMN 0x%03X)", tag.chipAsString().c_str(), tag.model_number);
 
-    // "XTID: yes" only says the indicator bit is set. What it carries is another matter, and on
-    // every chip tried so far it carries a serial number and nothing else, which is why the
-    // sizes below come from the chip rather than from the tag
+    // "XTID: yes" only says the indicator bit is set. What it carries is another matter: in
+    // practice it carries a serial number and nothing else, which is why the sizes below come
+    // from the chip rather than from the tag
     if (tag.has_xtid && tag.tid.size >= 6) {
         const uint16_t header = static_cast<uint16_t>((tag.tid[4] << 8) | tag.tid[5]);
         M5_LOGI("XTID  : header=0x%04X serial=%ubit segments=%s", header, tag.serial_bits,

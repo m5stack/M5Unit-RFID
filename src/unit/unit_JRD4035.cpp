@@ -66,18 +66,16 @@ constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
   tag: the module then queries session 0 for the tags flagged A
   @note The session has to be the one the module queries. This module leaves the Query set to
   Sel=ALL, meaning it ignores the SL flag outright, so a Select aimed at SL would store a mask
-  that changes nothing. Session 0 is what the factory Query uses, it is what the vendor's own
-  example sends (SelParam 0x01), and it is what every working implementation of this protocol
-  sends
+  that changes nothing. Session 0 is what the factory Query uses, and what the vendor's own
+  example sends (SelParam 0x01)
  */
 constexpr uint8_t SELECT_TARGET_S0{0x00};
 constexpr uint8_t SELECT_ACTION_MATCH_TO_A{0x00};
 
 /*!
   @brief Settling time between storing the select mask and using it
-  @details The vendor's own host tool waits this long after Set Select Parameter before it
-  reads, and other working implementations wait longer still. Sending the read immediately, as
-  the response to the select arriving would allow, is not something any of them do
+  @details The response to Set Select Parameter arriving does not mean the mask is in effect
+  yet. The vendor's own host tool waits this long before it reads
  */
 constexpr uint32_t SELECT_SETTLE_MS{20};
 
@@ -107,7 +105,7 @@ constexpr int TAG_OPERATION_ATTEMPTS{3};
 
 //! @brief Byte sent to wake the module. Any value does; this is what the vendor's driver sends
 constexpr uint8_t WAKE_BYTE{0x55};
-//! @brief How long waking takes. Measured by nobody; the vendor's driver waits this long
+//! @brief How long waking takes. Not documented; this is what the vendor's driver waits
 constexpr uint32_t WAKE_DELAY_MS{100};
 
 //! @brief A bank code that is not one of the four, used to reject a bank cast in from outside
@@ -149,9 +147,7 @@ std::string to_hex(const uint8_t* data, const size_t len)
 
 // Probe settings for begin. The module answers within about 10ms once it is ready, so a short
 // per-attempt timeout fits many more probes into the startup window than the normal timeout
-// would. The M5Stack reference implementation retries getVersion() indefinitely at 500ms
-// intervals, which suggests it met the same slow start; a library cannot block forever, so the
-// probe is bounded by a deadline instead.
+// would.
 constexpr uint32_t BEGIN_PROBE_TIMEOUT_MS{200};
 constexpr uint32_t BEGIN_RETRY_INTERVAL_MS{50};
 
@@ -159,10 +155,9 @@ constexpr uint32_t BEGIN_RETRY_INTERVAL_MS{50};
 // the board brings up while M5Unified initialises, so the module may still be booting
 constexpr uint32_t STARTUP_DELAY_MS{500};
 
-// Upper bound for the begin probe. Across nearly fifty starts on hardware the module always
-// answered the first probe within 6 to 64 milliseconds, so this window is generous by a wide
-// margin. It is bounded because a module that is not answering at all is almost always one that
-// is not wired up, and stalling the caller does not help with that.
+// Upper bound for the begin probe. Measured on hardware, the module always answered the first
+// probe within 6 to 64 milliseconds, so this window is generous. A module that never answers is
+// almost always one that is not wired up, and stalling the caller does not help with that.
 constexpr uint32_t BEGIN_PROBE_WINDOW_MS{3000};
 
 constexpr int MODULE_INFORMATION_RETRY{3};
@@ -216,7 +211,7 @@ bool UnitJRD4035::begin()
     ad->setTimeout(_cfg.timeout_ms);
     ad->flushRX();
 
-    // Hold back the first transmission until the module has finished booting (STARTUP_DELAY_MS).
+    // Hold back the first transmission until the module has finished booting
     m5::utility::delay(STARTUP_DELAY_MS);
     ad->flushRX();
 
@@ -333,8 +328,6 @@ void UnitJRD4035::route_frame(const Frame& f)
     // Tag notification. The protocol document is inconsistent about the Type byte of a tag
     // notification, so the command code is used to route it
     if (f.command == COMMAND_SINGLE_POLLING || f.command == COMMAND_MULTIPLE_POLLING) {
-        // The document is inconsistent about the Type byte of a tag notification; log the
-        // observed value so it can be settled against real hardware
         M5_LIB_LOGD("Tag notification: type=%02X cmd=%02X", f.type, f.command);
         m5::uhf::Tag tag{};
         if (parse_tag_notification(tag, f.parameter.data(), f.parameter.size())) {
@@ -361,9 +354,8 @@ void UnitJRD4035::route_frame(const Frame& f)
         if (is_no_tag(code) && !awaiting_inventory) {
             return;
         }
-        // Whether this matters is not known here: most of them are retried and succeed on the
-        // next attempt. Saying so is left to succeeded(), which is reached only once the
-        // operation has actually given up
+        // Whether this matters is not known here: a retry may still succeed. Saying so is left
+        // to succeeded(), which is reached only once the operation has given up
         M5_LIB_LOGD("Error frame %02X", code);
         if (_response_pending) {
             _response         = f;
@@ -637,8 +629,7 @@ bool UnitJRD4035::wake()
         M5_LIB_LOGE("Illegal adapter");
         return false;
     }
-    // The module discards whatever byte wakes it, so this one is spent on that alone. Its
-    // value does not matter; 0x55 is what the vendor's own driver sends
+    // The module discards whatever byte wakes it, so this one is spent on that alone
     const uint8_t byte{WAKE_BYTE};
     if (writeWithTransaction(&byte, 1) != m5::hal::error::error_t::OK) {
         M5_LIB_LOGE("Failed to send the wake byte");

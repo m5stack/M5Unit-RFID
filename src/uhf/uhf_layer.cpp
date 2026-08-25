@@ -280,7 +280,7 @@ bool UHFLayer::dump_words(const char* what, const Bank bank, const uint16_t word
         return false;
     }
 
-    // Eight words to a line, which is the sixteen bytes the sister NFC dump puts on one
+    // Eight words to a line, so sixteen bytes
     constexpr uint16_t PER_LINE{8};
     for (uint16_t off = 0; off < words; off += PER_LINE) {
         const uint16_t at = static_cast<uint16_t>(word_address + off);

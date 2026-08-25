@@ -300,8 +300,8 @@ inline bool parse_select_parameter(m5::uhf::SelectParameter& out, const uint8_t*
   @param word_address Start address in 16-bit words
   @param word_count Number of 16-bit words
   @return True if successful
-  @note A word_count of zero would mean "to the end of the bank" in EPC Gen2, but whether the
-  module honours that is unverified, so it is refused here
+  @note A word_count of zero would mean "to the end of the bank" in EPC Gen2, but the module
+  does not document that, so it is refused here
  */
 inline bool build_read_tag_memory(std::vector<uint8_t>& out, const uint32_t access_password, const uint8_t membank,
                                   const uint16_t word_address, const uint16_t word_count)
