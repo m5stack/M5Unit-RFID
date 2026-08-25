@@ -93,13 +93,13 @@ protected:
       @param command Command to send
       @param param Parameter
       @param param_len Parameter length
-      @param timeout_ms Timeout in milliseconds
+      @param timeout_ms How long to wait, or 0 to wait config_t::command_timeout_ms
       @return True if successful
       @note The module answers every command under the code it was sent, including the two the
       protocol document says come back as something else
      */
     bool send_and_wait(m100::Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
-                       const uint32_t timeout_ms = 1000U);
+                       const uint32_t timeout_ms = 0);
     //! @brief Read one frame from the stream. Returns false when nothing is pending
     bool read_frame(m100::Frame& out, const uint32_t timeout_ms);
     //! @brief Route a received frame

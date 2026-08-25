@@ -47,8 +47,13 @@ public:
         m5::uhf::Region region{m5::uhf::Region::Unspecified};
         //! Capacity of the tag queue
         uint16_t tag_queue_size{32};
-        //! Serial I/O timeout (ms)
-        uint32_t timeout_ms{1000};
+        /*!
+          How long to wait for the answer to an ordinary command, in milliseconds. Measured, a
+          module answers one of these within about 15ms; the room above that is for a module
+          that is busy rather than for one that is working normally
+          @note Tag operations and channel scans take far longer and carry limits of their own
+         */
+        uint32_t command_timeout_ms{1000};
     };
 
     virtual ~UHFRFIDComponent() = default;

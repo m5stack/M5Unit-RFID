@@ -103,6 +103,15 @@ constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
  */
 constexpr int TAG_OPERATION_ATTEMPTS{3};
 
+/*!
+  @brief How long to wait for the rest of a frame that has already started
+  @details A frame is sent in one go, and the longest the module can send is 517 bytes, which
+  at 115200 baud takes about 45ms. This is the ceiling on how long a stream that stops halfway
+  can hold the caller up, and it is deliberately not the configured timeout: that one is for a
+  frame arriving at all, which is a different wait and a far longer one
+ */
+constexpr uint32_t WITHIN_FRAME_TIMEOUT_MS{200};
+
 //! @brief Byte sent to wake the module. Any value does; this is what the vendor's driver sends
 constexpr uint8_t WAKE_BYTE{0x55};
 //! @brief How long waking takes. Not documented; this is what the vendor's driver waits
@@ -208,7 +217,6 @@ bool UnitJRD4035::begin()
     if (!UHFRFIDComponent::begin()) {
         return false;
     }
-    ad->setTimeout(_cfg.timeout_ms);
     ad->flushRX();
 
     // Hold back the first transmission until the module has finished booting
@@ -288,11 +296,12 @@ bool UnitJRD4035::read_frame(Frame& out, const uint32_t timeout_ms)
         }
     }
 
-    // 2. The remaining header bytes belong to the same frame, so a normal timeout is used
+    // 2. The remaining header bytes belong to the same frame, so the wait is on the rest of a
+    // frame that has started rather than on a frame arriving at all
     std::vector<uint8_t> raw{};
     raw.push_back(b);
     uint8_t head[4]{};
-    ad->setTimeout(_cfg.timeout_ms);
+    ad->setTimeout(WITHIN_FRAME_TIMEOUT_MS);
     if (readWithTransaction(head, sizeof(head)) != m5::hal::error::error_t::OK) {
         M5_LIB_LOGW("Header found but the rest did not arrive");
         return false;
@@ -419,7 +428,8 @@ bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const ui
     }
 
     // Keep pumping so that tag notifications arriving while we wait are queued, not dropped
-    const unsigned long expire_at = m5::utility::millis() + timeout_ms;
+    const uint32_t wait_ms        = timeout_ms != 0 ? timeout_ms : _cfg.command_timeout_ms;
+    const unsigned long expire_at = m5::utility::millis() + wait_ms;
     while (m5::utility::millis() < expire_at) {
         Frame f{};
         if (read_frame(f, 1)) {
