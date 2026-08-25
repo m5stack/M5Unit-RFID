@@ -130,6 +130,14 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: UHF_Lock
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_Kill
+            board: Core
+            framework: Arduino
+            espressif32: latest
 
     steps:
       - name: Checkout
