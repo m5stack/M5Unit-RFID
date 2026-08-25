@@ -203,8 +203,10 @@ private:
       in that state answers nothing until the flag decays. Letting polling run between two tag
       operations therefore breaks the second one, so it stays stopped from select() until
       deselect() rather than being stopped and restarted around each operation
+      @return False when polling was running and would not stop. The module is still running
+      rounds, and a tag operation attempted now would be answering into them
      */
-    void pause_polling();
+    bool pause_polling();
     //! @brief Put polling back the way select() found it
     void resume_polling();
 

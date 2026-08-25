@@ -58,12 +58,19 @@ bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
     return !tags.empty();
 }
 
-void UHFLayer::pause_polling()
+bool UHFLayer::pause_polling()
 {
-    if (_u.inPolling()) {
-        _u.stopPolling();
-        _resume_polling = true;
+    if (!_u.inPolling()) {
+        return true;
     }
+    // Resuming is wanted either way: the caller asked for polling and deselect() is what takes
+    // that back, whether or not the module heard the stop
+    _resume_polling = true;
+    if (!_u.stopPolling()) {
+        M5_LIB_LOGE("The module is still running inventory rounds; tag operations will fail");
+        return false;
+    }
+    return true;
 }
 
 void UHFLayer::resume_polling()
@@ -112,7 +119,9 @@ bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, con
         M5_LIB_LOGE("An empty mask would match every tag, not one");
         return false;
     }
-    pause_polling();
+    if (!pause_polling()) {
+        return false;
+    }
 
     if (!_u.write_select_parameter(bank, pointer_bits, mask, mask_len)) {
         resume_polling();
@@ -208,7 +217,9 @@ bool UHFLayer::identify(Tag& tag)
         M5_LIB_LOGE("identify needs a tag to have been selected");
         return false;
     }
-    pause_polling();
+    if (!pause_polling()) {
+        return false;
+    }
 
     // The two fixed words name the chip and say whether an XTID follows them
     std::vector<uint8_t> tid{};
@@ -357,7 +368,9 @@ bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16
         M5_LIB_LOGE("readBank needs a tag to have been selected");
         return false;
     }
-    pause_polling();
+    if (!pause_polling()) {
+        return false;
+    }
     return _u.read_tag_memory(out, bank, word_address, word_count, _access_password);
 }
 
@@ -371,7 +384,9 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const std
         M5_LIB_LOGE("A write of %u bytes is not a whole number of words", (unsigned)data.size());
         return false;
     }
-    pause_polling();
+    if (!pause_polling()) {
+        return false;
+    }
 
     // One command carries at most WRITE_MAX_WORDS, which is a limit of the reader's command
     // frame rather than of the tag or of EPC Gen2. A caller writing a bank larger than that
@@ -417,7 +432,9 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
             }
         }
     }
-    pause_polling();
+    if (!pause_polling()) {
+        return false;
+    }
     return _u.lock_tag_memory(buildLockPayload(settings.data(), settings.size()), _access_password);
 }
 
@@ -443,7 +460,9 @@ bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
         return false;
     }
 
-    pause_polling();
+    if (!pause_polling()) {
+        return false;
+    }
     if (!_u.kill_tag(kill_password)) {
         return false;
     }

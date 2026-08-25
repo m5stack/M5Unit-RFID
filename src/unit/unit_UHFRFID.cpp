@@ -26,8 +26,9 @@ namespace unit {
 bool UHFRFIDComponent::begin()
 {
     _tags.reset(new m5::container::CircularBuffer<m5::uhf::Tag>(_cfg.tag_queue_size));
-    _dropped = 0;
-    _polling = false;
+    _dropped        = 0;
+    _polling        = false;
+    _rounds_running = false;
     return true;
 }
 
@@ -45,6 +46,7 @@ bool UHFRFIDComponent::startPolling(const uint16_t count)
         return false;
     }
     _polling           = true;
+    _rounds_running    = true;
     _polling_count     = count;
     _last_frame_at     = m5::utility::millis();
     _polling_issued_at = _last_frame_at;
@@ -53,18 +55,21 @@ bool UHFRFIDComponent::startPolling(const uint16_t count)
 
 bool UHFRFIDComponent::stopPolling()
 {
+    // Cleared before the command goes out, and not after it comes back: update() renews the
+    // polling on a timer, and leaving this set would have it start again behind the caller
     _polling = false;
     if (!stop_polling_command()) {
         M5_LIB_LOGE("Failed to stop polling");
         return false;
     }
+    _rounds_running = false;
     return true;
 }
 
 bool UHFRFIDComponent::reject_while_polling(const char* what) const
 {
-    if (_polling) {
-        M5_LIB_LOGW("%s is unreliable while polling; call stopPolling() first", what);
+    if (_rounds_running) {
+        M5_LIB_LOGW("%s is unreliable while the module is running inventory rounds; stopPolling()", what);
         return true;
     }
     return false;

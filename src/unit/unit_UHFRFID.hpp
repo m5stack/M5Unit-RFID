@@ -78,7 +78,13 @@ public:
       cannot be stopped once the host is gone
      */
     bool startPolling(const uint16_t count);
-    //! @brief Stop continuous polling
+    /*!
+      @brief Stop continuous polling
+      @return True if the module confirmed it stopped
+      @note Returning false does not leave the module running rounds for ever. Nothing renews
+      the polling once this has been called, so the count it was started with runs out and it
+      falls silent on its own within seconds
+     */
     bool stopPolling();
     //! @brief In continuous polling?
     inline bool inPolling() const
@@ -292,7 +298,10 @@ protected:
     config_t _cfg{};
     std::unique_ptr<m5::container::CircularBuffer<m5::uhf::Tag>> _tags{};
     uint32_t _dropped{};
+    //! Whether polling should be renewed. Cleared as soon as a stop is asked for
     bool _polling{};
+    //! Whether the module is believed to still be running rounds. Only a confirmed stop clears it
+    bool _rounds_running{};
     uint16_t _polling_count{};
     unsigned long _last_frame_at{};
     unsigned long _polling_issued_at{};
