@@ -277,13 +277,15 @@ struct Tag {
     Epc epc{};       //!< EPC
 
     // Filled in by identification
-    Tid tid{};                        //!< TID starting at word 0
-    Chip chip{Chip::Unknown};         //!< Identified chip, Unknown when the pair below is not listed
-    Vendor vendor{Vendor::Unknown};   //!< Named mask designer, Unknown when mdid is not listed
-    uint16_t mdid{};                  //!< Raw mask-designer identifier (9 bits)
-    uint16_t model_number{};          //!< Tag model number (12 bits)
-    uint16_t serial_bits{};           //!< Length of the XTID serial, 0 when the tag has none
-    uint32_t user_memory_bits{};      //!< Size of the User bank, 0 when unknown
+    Tid tid{};                       //!< TID starting at word 0
+    Chip chip{Chip::Unknown};        //!< Identified chip, Unknown when the pair below is not listed
+    Vendor vendor{Vendor::Unknown};  //!< Named mask designer, Unknown when mdid is not listed
+    uint16_t mdid{};                 //!< Raw mask-designer identifier (9 bits)
+    uint16_t model_number{};         //!< Tag model number (12 bits)
+    uint16_t serial_bits{};          //!< Length of the XTID serial, 0 when the tag has none
+    //! @brief Size of the User bank, 0 when unknown. On a chip that shares a pool with the EPC
+    //! this is what the bank holds at the EPC length the PC states, not a fixed property
+    uint32_t user_memory_bits{};
     uint32_t epc_max_bits{};          //!< Largest EPC the chip accepts, 0 when unknown
     uint32_t permalock_block_bits{};  //!< BlockPermalock granularity, 0 when unknown
     bool has_xtid{};                  //!< XTID indicator (TID bit 08h)
@@ -306,9 +308,7 @@ struct Tag {
   @brief User memory a chip is known to hold, in bits
   @param chip Chip
   @return Size in bits, 0 when this library does not know
-  @details Where a tag says nothing about itself this is what is left. Only chips whose size
-  comes from a datasheet are listed: a wrong size reported confidently is worse than none at
-  all, so anything unverified is left out rather than guessed at
+  @details Where a tag says nothing about itself this is what is left
   @note Zero means unknown, not empty. A tag with no user memory at all says so through the
   user memory indicator of its PC, which is a separate thing
  */
@@ -316,7 +316,10 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
 {
     switch (chip) {
         case Chip::AlienHiggs9:
-            return 688;  // ALC-390: "688 bit user memory". 43 words, confirmed on a tag
+            // ALC-390 offers "688 bit user memory", which a tag holds only while its EPC is
+            // the 96 bit it leaves the factory with. chipSharedUserMemoryBits is what sizes
+            // this chip; this is the figure to fall back on when the PC is unknown
+            return 688;
         case Chip::ImpinjMonza4QT:
             return 512;  // Monza 4 Rev8.0 2.3.1: "512 bits of user memory". 32 words, confirmed
         case Chip::NxpUcodeG2iM:
@@ -335,8 +338,7 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
   @brief Largest EPC a chip is known to accept, in bits
   @param chip Chip
   @return Size in bits, 0 when this library does not know
-  @details Sourced the same way as chipUserMemoryBits, and left out for the same reason when it
-  cannot be sourced
+  @details Sourced the same way as chipUserMemoryBits
  */
 inline uint32_t chipEpcMaxBits(const Chip chip)
 {
@@ -345,6 +347,10 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
             return 496;  // ALC-390: "Supports EPC size up to 496b"
         case Chip::ImpinjMonza4QT:
             return 128;  // Monza 4 Rev8.0 2.3.1: "128 bits of EPC memory"
+        case Chip::NxpUcode8:
+            // SL3S1205_15 Rev3.6 Table 6 gives 128 bit, and a real tag takes a PC of eight
+            // words and refuses nine
+            return 128;
         case Chip::NxpUcodeG2iM:
             return 256;  // G2iM Rev3.7: "256 bit of EPC memory"
         case Chip::NxpUcodeG2iMPlus:
@@ -352,6 +358,29 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
         default:
             return 0;
     }
+}
+
+/*!
+  @brief User memory of a chip that carves it out of one pool with the EPC, in bits
+  @param chip Chip
+  @param pc Protocol Control of the tag, which is where the length of the EPC is
+  @return Size in bits, 0 when the chip holds the two apart or the PC is not known
+  @details A few chips give the EPC and the User bank one pool to share, so neither size can be
+  stated without the other. Measured on a Higgs 9: every word the EPC grows by is a word the
+  User bank loses, and the two always add up to 49. Its datasheet offers 496 bit of EPC and 688
+  bit of User, which overrun the 1024 bit the same sheet gives the chip; both are true, and
+  neither is true at the same time as the other
+ */
+inline uint32_t chipSharedUserMemoryBits(const Chip chip, const uint16_t pc)
+{
+    // A tag selected by its TID reaches identify() with no PC, and a bank sized from a length
+    // of zero would be the whole pool. Saying nothing is the honest answer
+    if (chip != Chip::AlienHiggs9 || pc == 0) {
+        return 0;
+    }
+    constexpr uint16_t HIGGS9_POOL_WORDS{49};
+    const uint16_t epc_words = static_cast<uint16_t>((pc >> 11) & 0x1F);
+    return epc_words < HIGGS9_POOL_WORDS ? static_cast<uint32_t>(HIGGS9_POOL_WORDS - epc_words) * 16U : 0U;
 }
 
 //! @brief ISO/IEC 15963 allocation class identifier used by EPCglobal tags
@@ -433,8 +462,8 @@ inline Vendor resolveVendor(const uint16_t mdid)
   @param vendor Named mask designer
   @param model_number Tag model number
   @return Chip, or Chip::Unknown when the pair is not one we have confirmed
-  @note Only pairs read from a manufacturer datasheet are listed. A tag whose chip comes back
-  Unknown still reports its raw mask-designer identifier and model number
+  @note A tag whose chip comes back Unknown still reports its raw mask-designer identifier and
+  model number
  */
 inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
 {
@@ -485,6 +514,10 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
  */
 inline void fillSizesFromChip(Tag& tag)
 {
+    if (tag.user_memory_bits == 0) {
+        // A chip that shares a pool has no one size to look up, so the PC is asked first
+        tag.user_memory_bits = chipSharedUserMemoryBits(tag.chip, tag.pc);
+    }
     if (tag.user_memory_bits == 0) {
         tag.user_memory_bits = chipUserMemoryBits(tag.chip);
     }
