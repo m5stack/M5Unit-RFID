@@ -48,6 +48,7 @@ public:
     virtual bool writeQueryParameters(const m5::uhf::QueryParameters& qp) override;
     virtual bool writeAutoSleepTime(const uint8_t minutes) override;
     virtual bool sleep() override;
+    virtual bool wake() override;
     virtual bool writeOperatingChannels(const std::vector<uint8_t>& channels) override;
     virtual bool readBlockingSignal(m5::uhf::ChannelLevels& levels) override;
     virtual bool readChannelRSSI(m5::uhf::ChannelLevels& levels) override;

@@ -175,10 +175,22 @@ public:
     /*!
       @brief Put the module into low power sleep
       @return True if successful
-      @note Any byte wakes the module up again, but that byte is discarded and the module
-      reloads the chip firmware before it can answer
+      @warning Nothing but wake() reaches a sleeping module. Every other call fails until it
+      is woken, and the select mask it was holding does not survive
      */
     virtual bool sleep() = 0;
+    /*!
+      @brief Wake the module from low power sleep
+      @return True if successful
+      @details Sends one byte to wake it and waits for the chip firmware to reload. The byte
+      itself is thrown away by the module, which is why it is sent on its own rather than as
+      the first real command
+      @warning The transmit power, region, hopping and demodulator settings come back, but the
+      select mode and select parameter do not. A tag targeted before the sleep has to be
+      selected again
+      @note Calling this on a module that is awake costs the wait and nothing else
+     */
+    virtual bool wake() = 0;
     /*!
       @brief Replace the channel list used for automatic frequency hopping
       @param channels Channel indices of the operating region, in the order to hop through

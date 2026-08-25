@@ -320,8 +320,12 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
         case Chip::ImpinjMonza4QT:
             return 512;  // Monza 4 Rev8.0 2.3.1: "512 bits of user memory". 32 words, confirmed
         case Chip::NxpUcodeG2iM:
+            // Rev3.7 Table 7 and Table 15. The "640 bit configurable User Memory" of the
+            // general description is the whole pool, and this part keeps its EPC fixed at
+            // 256 bit, which takes 128 of those bits away
+            return 512;
         case Chip::NxpUcodeG2iMPlus:
-            return 640;  // G2iM Rev3.7: "640 bit configurable User Memory"
+            return 640;  // G2iM Rev3.7 Table 16: 128 bit EPC and 640 bit User as it ships
         default:
             return 0;
     }

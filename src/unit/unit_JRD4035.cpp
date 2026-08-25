@@ -105,7 +105,22 @@ constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
  */
 constexpr int TAG_OPERATION_ATTEMPTS{3};
 
-//! @brief Translate a bank to the code the module uses
+//! @brief Byte sent to wake the module. Any value does; this is what the vendor's driver sends
+constexpr uint8_t WAKE_BYTE{0x55};
+//! @brief How long waking takes. Measured by nobody; the vendor's driver waits this long
+constexpr uint32_t WAKE_DELAY_MS{100};
+
+//! @brief A bank code that is not one of the four, used to reject a bank cast in from outside
+constexpr uint8_t MEMBANK_NONE{0xFF};
+
+/*!
+  @brief Translate a bank to the code the module uses
+  @param bank Bank
+  @return Bank code, or MEMBANK_NONE when the bank is not one of the four
+  @details Naming a bank the enum does not hold can only be a mistake, and every bank is a
+  valid target for the operations that take one. Guessing which was meant would silently read
+  or write the wrong part of the tag, so this says so instead
+ */
 inline uint8_t membank_of(const m5::uhf::Bank bank)
 {
     switch (bank) {
@@ -115,9 +130,11 @@ inline uint8_t membank_of(const m5::uhf::Bank bank)
             return MEMBANK_EPC;
         case m5::uhf::Bank::Tid:
             return MEMBANK_TID;
-        default:
+        case m5::uhf::Bank::User:
             return MEMBANK_USER;
     }
+    M5_LIB_LOGE("Illegal bank %u", (unsigned)static_cast<uint8_t>(bank));
+    return MEMBANK_NONE;
 }
 
 // Render a byte buffer as hex for the diagnostic logs
@@ -437,7 +454,7 @@ bool UnitJRD4035::start_polling_command(const uint16_t count)
 bool UnitJRD4035::stop_polling_command()
 {
     Frame res{};
-    return send_and_wait(res, CMD_STOP_POLLING, nullptr, 0);
+    return send_and_wait(res, CMD_STOP_POLLING, nullptr, 0) && succeeded(res, "stopPolling");
 }
 
 bool UnitJRD4035::read_module_information_kind(std::string& out, const uint8_t kind)
@@ -478,7 +495,8 @@ bool UnitJRD4035::readTransmitPower(int16_t& dbm100)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_GET_TX_POWER, nullptr, 0) || res.parameter.size() < 2) {
+    if (!send_and_wait(res, CMD_GET_TX_POWER, nullptr, 0) || !succeeded(res, "readTransmitPower") ||
+        res.parameter.size() < 2) {
         return false;
     }
     dbm100 = static_cast<int16_t>((res.parameter[0] << 8) | res.parameter[1]);
@@ -492,7 +510,7 @@ bool UnitJRD4035::writeTransmitPower(const int16_t dbm100)
     }
     Frame res{};
     const uint8_t param[] = {static_cast<uint8_t>(dbm100 >> 8), static_cast<uint8_t>(dbm100 & 0xFF)};
-    return send_and_wait(res, CMD_SET_TX_POWER, param, sizeof(param));
+    return send_and_wait(res, CMD_SET_TX_POWER, param, sizeof(param)) && succeeded(res, "writeTransmitPower");
 }
 
 bool UnitJRD4035::readRegion(m5::uhf::Region& region)
@@ -501,7 +519,7 @@ bool UnitJRD4035::readRegion(m5::uhf::Region& region)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_GET_REGION, nullptr, 0) || res.parameter.empty()) {
+    if (!send_and_wait(res, CMD_GET_REGION, nullptr, 0) || !succeeded(res, "readRegion") || res.parameter.empty()) {
         return false;
     }
     region = from_region_code(res.parameter[0]);
@@ -520,7 +538,7 @@ bool UnitJRD4035::writeRegion(const m5::uhf::Region region)
     }
     Frame res{};
     const uint8_t param[] = {code};
-    return send_and_wait(res, CMD_SET_REGION, param, sizeof(param));
+    return send_and_wait(res, CMD_SET_REGION, param, sizeof(param)) && succeeded(res, "writeRegion");
 }
 
 bool UnitJRD4035::readChannel(uint8_t& index)
@@ -529,7 +547,7 @@ bool UnitJRD4035::readChannel(uint8_t& index)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_GET_CHANNEL, nullptr, 0) || res.parameter.empty()) {
+    if (!send_and_wait(res, CMD_GET_CHANNEL, nullptr, 0) || !succeeded(res, "readChannel") || res.parameter.empty()) {
         return false;
     }
     index = res.parameter[0];
@@ -543,7 +561,7 @@ bool UnitJRD4035::writeChannel(const uint8_t index)
     }
     Frame res{};
     const uint8_t param[] = {index};
-    return send_and_wait(res, CMD_SET_CHANNEL, param, sizeof(param));
+    return send_and_wait(res, CMD_SET_CHANNEL, param, sizeof(param)) && succeeded(res, "writeChannel");
 }
 
 bool UnitJRD4035::writeAutomaticFrequencyHopping(const bool enable)
@@ -553,7 +571,8 @@ bool UnitJRD4035::writeAutomaticFrequencyHopping(const bool enable)
     }
     Frame res{};
     const uint8_t param[] = {static_cast<uint8_t>(enable ? 0xFF : 0x00)};
-    return send_and_wait(res, CMD_SET_HOPPING, param, sizeof(param));
+    return send_and_wait(res, CMD_SET_HOPPING, param, sizeof(param)) &&
+           succeeded(res, "writeAutomaticFrequencyHopping");
 }
 
 bool UnitJRD4035::readQueryParameters(m5::uhf::QueryParameters& qp)
@@ -562,7 +581,8 @@ bool UnitJRD4035::readQueryParameters(m5::uhf::QueryParameters& qp)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_GET_QUERY, nullptr, 0) || res.parameter.size() < 2) {
+    if (!send_and_wait(res, CMD_GET_QUERY, nullptr, 0) || !succeeded(res, "readQueryParameters") ||
+        res.parameter.size() < 2) {
         return false;
     }
     parse_query_parameters(qp, static_cast<uint16_t>((res.parameter[0] << 8) | res.parameter[1]));
@@ -583,7 +603,7 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
 
     Frame res{};
     const uint8_t param[] = {static_cast<uint8_t>(raw >> 8), static_cast<uint8_t>(raw & 0xFF)};
-    return send_and_wait(res, CMD_SET_QUERY, param, sizeof(param));
+    return send_and_wait(res, CMD_SET_QUERY, param, sizeof(param)) && succeeded(res, "writeQueryParameters");
 }
 
 bool UnitJRD4035::writeAutoSleepTime(const uint8_t minutes)
@@ -597,7 +617,7 @@ bool UnitJRD4035::writeAutoSleepTime(const uint8_t minutes)
     }
     Frame res{};
     const uint8_t param[]{minutes};
-    return send_and_wait(res, CMD_SET_AUTO_SLEEP_TIME, param, sizeof(param));
+    return send_and_wait(res, CMD_SET_AUTO_SLEEP_TIME, param, sizeof(param)) && succeeded(res, "writeAutoSleepTime");
 }
 
 bool UnitJRD4035::sleep()
@@ -607,7 +627,27 @@ bool UnitJRD4035::sleep()
     }
     // The module answers before it powers down, so the response is awaited as usual
     Frame res{};
-    return send_and_wait(res, CMD_SLEEP, nullptr, 0);
+    return send_and_wait(res, CMD_SLEEP, nullptr, 0) && succeeded(res, "sleep");
+}
+
+bool UnitJRD4035::wake()
+{
+    auto ad = asAdapter<AdapterUART>(Adapter::Type::UART);
+    if (!ad) {
+        M5_LIB_LOGE("Illegal adapter");
+        return false;
+    }
+    // The module discards whatever byte wakes it, so this one is spent on that alone. Its
+    // value does not matter; 0x55 is what the vendor's own driver sends
+    const uint8_t byte{WAKE_BYTE};
+    if (writeWithTransaction(&byte, 1) != m5::hal::error::error_t::OK) {
+        M5_LIB_LOGE("Failed to send the wake byte");
+        return false;
+    }
+    // Waking powers the chip down and reloads its firmware, so nothing answers until that is
+    // done. The vendor's driver waits this long and the manual gives no figure of its own
+    m5::utility::delay(WAKE_DELAY_MS);
+    return true;
 }
 
 bool UnitJRD4035::writeOperatingChannels(const std::vector<uint8_t>& channels)
@@ -625,14 +665,16 @@ bool UnitJRD4035::writeOperatingChannels(const std::vector<uint8_t>& channels)
     param.insert(param.end(), channels.begin(), channels.end());
 
     Frame res{};
-    return send_and_wait(res, CMD_INSERT_CHANNEL, param.data(), static_cast<uint16_t>(param.size()));
+    return send_and_wait(res, CMD_INSERT_CHANNEL, param.data(), static_cast<uint16_t>(param.size())) &&
+           succeeded(res, "writeOperatingChannels");
 }
 
 bool UnitJRD4035::read_channel_levels(m5::uhf::ChannelLevels& levels, const uint8_t command)
 {
     Frame res{};
     // CH_L and CH_H bracket the scanned range, and one signed level follows for each channel
-    if (!send_and_wait(res, command, nullptr, 0, CHANNEL_SCAN_TIMEOUT_MS) || res.parameter.size() < 3) {
+    if (!send_and_wait(res, command, nullptr, 0, CHANNEL_SCAN_TIMEOUT_MS) || !succeeded(res, "read_channel_levels") ||
+        res.parameter.size() < 3) {
         return false;
     }
     const uint8_t first = res.parameter[0];
@@ -688,7 +730,7 @@ bool UnitJRD4035::readSelectParameter(m5::uhf::SelectParameter& sp)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_GET_SELECT_PARAMETER, nullptr, 0)) {
+    if (!send_and_wait(res, CMD_GET_SELECT_PARAMETER, nullptr, 0) || !succeeded(res, "readSelectParameter")) {
         return false;
     }
     if (!parse_select_parameter(sp, res.parameter.data(), res.parameter.size())) {
@@ -704,7 +746,7 @@ bool UnitJRD4035::readDemodulatorParameters(m100::DemodulatorParameters& dp)
         return false;
     }
     Frame res{};
-    if (!send_and_wait(res, CMD_GET_DEMODULATOR, nullptr, 0)) {
+    if (!send_and_wait(res, CMD_GET_DEMODULATOR, nullptr, 0) || !succeeded(res, "readDemodulatorParameters")) {
         return false;
     }
     if (!parse_demodulator_parameters(dp, res.parameter.data(), res.parameter.size())) {
@@ -725,7 +767,8 @@ bool UnitJRD4035::writeDemodulatorParameters(const m100::DemodulatorParameters& 
         return false;
     }
     Frame res{};
-    return send_and_wait(res, CMD_SET_DEMODULATOR, param.data(), static_cast<uint16_t>(param.size()));
+    return send_and_wait(res, CMD_SET_DEMODULATOR, param.data(), static_cast<uint16_t>(param.size())) &&
+           succeeded(res, "writeDemodulatorParameters");
 }
 
 bool UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, const uint8_t* param,
@@ -763,7 +806,11 @@ bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_
         M5_LIB_LOGE("Mask of %zu bytes is longer than a Select can carry", mask_len);
         return false;
     }
-    const uint8_t sel_param = select_parameter_byte(SELECT_TARGET_S0, SELECT_ACTION_MATCH_TO_A, membank_of(bank));
+    const uint8_t code = membank_of(bank);
+    if (code == MEMBANK_NONE) {
+        return false;
+    }
+    const uint8_t sel_param = select_parameter_byte(SELECT_TARGET_S0, SELECT_ACTION_MATCH_TO_A, code);
 
     std::vector<uint8_t> param{};
     if (!build_select_parameter(param, sel_param, pointer_bits, static_cast<uint8_t>(mask_len * 8), SELECT_TRUNCATE_OFF,
@@ -807,7 +854,11 @@ bool UnitJRD4035::read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank
         return false;
     }
     std::vector<uint8_t> param{};
-    if (!build_read_tag_memory(param, access_password, membank_of(bank), word_address, word_count)) {
+    const uint8_t code = membank_of(bank);
+    if (code == MEMBANK_NONE) {
+        return false;
+    }
+    if (!build_read_tag_memory(param, access_password, code, word_address, word_count)) {
         M5_LIB_LOGE("Failed to build the read parameter");
         return false;
     }
@@ -839,7 +890,11 @@ bool UnitJRD4035::write_tag_memory(const m5::uhf::Bank bank, const uint16_t word
         return false;
     }
     std::vector<uint8_t> param{};
-    if (!build_write_tag_memory(param, access_password, membank_of(bank), word_address, data, len)) {
+    const uint8_t code = membank_of(bank);
+    if (code == MEMBANK_NONE) {
+        return false;
+    }
+    if (!build_write_tag_memory(param, access_password, code, word_address, data, len)) {
         M5_LIB_LOGE("Failed to build the write parameter");
         return false;
     }
