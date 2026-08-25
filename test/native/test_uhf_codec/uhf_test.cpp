@@ -917,8 +917,9 @@ TEST(UHF, ChipSizeFallback)
     const Case cases[] = {
         {"Alien Higgs 9", {0xE2, 0x80, 0x38, 0x21, 0x20, 0x00}, m5::uhf::Chip::AlienHiggs9, 688, 496},
         {"Impinj Monza 4QT", {0xE2, 0x80, 0x11, 0x05, 0x20, 0x00}, m5::uhf::Chip::ImpinjMonza4QT, 512, 128},
-        // No datasheet to hand for this one, so it stays unknown rather than being guessed at
-        {"NXP UCODE 8", {0xE2, 0x80, 0x68, 0x94, 0x20, 0x00}, m5::uhf::Chip::NxpUcode8, 0, 0},
+        // No user memory at all, and an EPC that stops at 128 bits: a real tag takes a PC of
+        // eight words and refuses nine
+        {"NXP UCODE 8", {0xE2, 0x80, 0x68, 0x94, 0x20, 0x00}, m5::uhf::Chip::NxpUcode8, 0, 128},
     };
     for (auto&& c : cases) {
         m5::uhf::Tag tag{};
