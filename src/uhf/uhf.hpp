@@ -309,8 +309,7 @@ struct Tag {
   @param chip Chip
   @return Size in bits, 0 when this library does not know
   @details Where a tag says nothing about itself this is what is left
-  @note Zero means unknown, not empty. A tag with no user memory at all says so through the
-  user memory indicator of its PC, which is a separate thing
+  @note Zero means unknown, not empty. chipHasNoUserMemory is what says a chip has none
  */
 inline uint32_t chipUserMemoryBits(const Chip chip)
 {
@@ -357,6 +356,27 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
             return 448;  // G2iM Rev3.7: "up to 448 bit EPC for UCODE G2iM+"
         default:
             return 0;
+    }
+}
+
+/*!
+  @brief Is this a chip whose datasheet says it has no User bank at all?
+  @param chip Chip
+  @return True when the chip is known to have none
+  @details Nothing a tag says distinguishes "no User bank" from "a User bank nobody has written
+  to yet", so this is the only thing that can tell a caller the bank is not worth reading
+ */
+inline bool chipHasNoUserMemory(const Chip chip)
+{
+    switch (chip) {
+        case Chip::NxpUcode8:
+            // SL3S1205_15 Rev3.6 Table 8: the memory map has no Bank 11 and the UMI bit of the
+            // PC is "hardwired to 0"
+            return true;
+        case Chip::NxpUcode9:
+            return true;  // SL3S1206 Rev3.5 Table 6, the same way
+        default:
+            return false;
     }
 }
 
@@ -887,7 +907,11 @@ inline uint8_t pcEPCLengthWords(const uint16_t pc)
 /*!
   @brief User Memory Indicator of the PC
   @param pc Protocol Control
-  @return True if the tag reports user memory holding data
+  @return True if the bit is asserted
+  @warning This does not say whether the tag has a User bank. EPC Gen2 v2.1 6.3.2.1.2.1 lets a
+  chip either fix the bit at what it was built with or compute it from whether the first words
+  of the bank hold anything, and a chip of the second kind reports zero for a bank it has but
+  has never been written to. A UCODE G2iM was measured reporting zero with 512 usable bits
  */
 inline bool pcUserMemoryIndicator(const uint16_t pc)
 {

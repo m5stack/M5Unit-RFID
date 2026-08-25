@@ -214,10 +214,10 @@ void loop()
         const uint16_t bank = static_cast<uint16_t>(tag.user_memory_bits / 16);
         M5_LOGI("%s: user memory %s", tag.chipAsString().c_str(),
                 bank ? m5::utility::formatString("%u words", bank).c_str()
-                     : (m5::uhf::pcUserMemoryIndicator(tag.pc) ? "size not known" : "none"));
+                     : (m5::uhf::chipHasNoUserMemory(tag.chip) ? "none" : "size not known"));
         lcd.printf("%s\n", tag.chipAsString().c_str());
 
-        if (bank == 0 && !m5::uhf::pcUserMemoryIndicator(tag.pc)) {
+        if (bank == 0 && m5::uhf::chipHasNoUserMemory(tag.chip)) {
             M5_LOGI("Nothing to write to on this tag");
             lcd.println("no user memory");
             return;

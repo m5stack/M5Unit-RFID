@@ -332,11 +332,19 @@ bool UHFLayer::dump()
     bool ok = dump(Bank::Reserved);
     ok &= dump(Bank::Epc);
     ok &= dump(Bank::Tid);
-    // A tag with no user memory at all is not a failure to read one
-    if (bank_words(Bank::User) == 0 && !pcUserMemoryIndicator(_selected.pc)) {
-        printf("== User ==\n(the tag reports none)\n");
-    } else {
+    if (bank_words(Bank::User) != 0) {
         ok &= dump(Bank::User);
+    } else if (chipHasNoUserMemory(_selected.chip)) {
+        // Not a failure to read one: this chip is built without the bank
+        printf("== User ==\n(the chip has none)\n");
+    } else {
+        // Neither the tag nor the chip table gave a size. Reading one word is what says whether
+        // the bank is there at all, which the PC does not: a chip that computes its user memory
+        // indicator reports zero for a bank it has but that nobody has written to
+        std::vector<uint8_t> probe{};
+        printf("== User ==\n");
+        printf(readBank(probe, Bank::User, 0, 1) ? "(size not known, and the first word reads)\n"
+                                                 : "(size not known, and it did not read)\n");
     }
     return ok;
 }

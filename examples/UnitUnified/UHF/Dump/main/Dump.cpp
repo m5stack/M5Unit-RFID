@@ -77,7 +77,9 @@ std::string bits_or_unknown(const uint32_t bits)
  */
 std::string user_memory_size(const m5::uhf::Tag& tag)
 {
-    if (tag.user_memory_bits == 0 && !m5::uhf::pcUserMemoryIndicator(tag.pc)) {
+    // Only the chip can say a bank is absent. A tag reporting no user memory in its PC may
+    // simply have a bank nobody has written to
+    if (m5::uhf::chipHasNoUserMemory(tag.chip)) {
         return "none";
     }
     return bits_or_unknown(tag.user_memory_bits);
