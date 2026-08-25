@@ -408,8 +408,8 @@ bool UnitJRD4035::send_command(const uint8_t command, const uint8_t* param, cons
     return writeWithTransaction(frame.data(), frame.size()) == m5::hal::error::error_t::OK;
 }
 
-bool UnitJRD4035::send_and_wait_answered_as(Frame& response, const uint8_t command, const uint8_t answered_as,
-                                            const uint8_t* param, const uint16_t param_len, const uint32_t timeout_ms)
+bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
+                                const uint32_t timeout_ms)
 {
     // The response to a command that timed out can still arrive afterwards, and would then be
     // taken for the answer to this one, shifting every later exchange by one frame. Whatever is
@@ -417,7 +417,7 @@ bool UnitJRD4035::send_and_wait_answered_as(Frame& response, const uint8_t comma
     // usual and drops the stale responses, because nothing is pending yet.
     pump(1);
 
-    _awaiting_command = answered_as;
+    _awaiting_command = command;
     _response         = Frame{};
     _response_pending = true;
 
@@ -439,7 +439,7 @@ bool UnitJRD4035::send_and_wait_answered_as(Frame& response, const uint8_t comma
         }
     }
     _response_pending = false;
-    M5_LIB_LOGE("Timeout waiting for %02X, the response to %02X", answered_as, command);
+    M5_LIB_LOGE("Timeout waiting for the response to %02X", command);
     return false;
 }
 
@@ -645,7 +645,7 @@ bool UnitJRD4035::wake()
         return false;
     }
     // Waking powers the chip down and reloads its firmware, so nothing answers until that is
-    // done. The vendor's driver waits this long and the manual gives no figure of its own
+    // done. How long that takes is not documented, and this is not a measured figure
     m5::utility::delay(WAKE_DELAY_MS);
     return true;
 }

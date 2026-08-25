@@ -87,26 +87,19 @@ protected:
 
     //! @brief Send a command frame
     bool send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len);
-    //! @brief Send a command and wait for its response, routing notifications to the tag queue
-    inline bool send_and_wait(m100::Frame& response, const uint8_t command, const uint8_t* param,
-                              const uint16_t param_len, const uint32_t timeout_ms = 1000U)
-    {
-        return send_and_wait_answered_as(response, command, command, param, param_len, timeout_ms);
-    }
     /*!
-      @brief Send a command that the module answers under a different command code
+      @brief Send a command and wait for its response, routing notifications to the tag queue
       @param[out] response Response frame
       @param command Command to send
-      @param answered_as Command code the response carries
       @param param Parameter
       @param param_len Parameter length
       @param timeout_ms Timeout in milliseconds
       @return True if successful
-      @details Write (0x49) is answered as 0x39 and Set Select Mode (0x12) as 0x0C. Waiting on
-      the code that was sent would simply time out for those two
+      @note The module answers every command under the code it was sent, including the two the
+      protocol document says come back as something else
      */
-    bool send_and_wait_answered_as(m100::Frame& response, const uint8_t command, const uint8_t answered_as,
-                                   const uint8_t* param, const uint16_t param_len, const uint32_t timeout_ms = 1000U);
+    bool send_and_wait(m100::Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
+                       const uint32_t timeout_ms = 1000U);
     //! @brief Read one frame from the stream. Returns false when nothing is pending
     bool read_frame(m100::Frame& out, const uint32_t timeout_ms);
     //! @brief Route a received frame
