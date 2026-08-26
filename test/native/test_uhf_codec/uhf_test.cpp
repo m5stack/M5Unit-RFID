@@ -742,12 +742,17 @@ TEST(UHF, ErrorDescription)
     // Module-level failures are not tag errors and keep their own meanings
     EXPECT_FALSE(m5::unit::m100::is_tag_error(0x15));
     EXPECT_FALSE(m5::unit::m100::is_tag_error(0x16));
-    EXPECT_STREQ(m5::unit::m100::error_description(0x16), "Failed to access the tag");
-    EXPECT_STREQ(m5::unit::m100::error_description(0x15), "No tag answered, or a CRC error");
+    // The module's own wording hedges this one, so this does too
+    EXPECT_STREQ(m5::unit::m100::error_description(0x16), "Access failed; the password may be wrong");
 
-    // A code the module documents as having two possible causes is not reported as one of them
+    // One wording covers all six of these in the module's documentation, and it names two
+    // causes. Neither is claimed as the one that happened
     EXPECT_STREQ(m5::unit::m100::error_description(0x09), "Read failed: no answer, or a CRC error");
     EXPECT_STREQ(m5::unit::m100::error_description(0x10), "Write failed: no answer, or a CRC error");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x12), "Kill failed: no answer, or a CRC error");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x13), "Lock failed: no answer, or a CRC error");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x14), "BlockPermalock failed: no answer, or a CRC error");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x15), "No tag answered, or a CRC error");
 }
 
 TEST(UHF, ExtractFrame)
@@ -1074,7 +1079,7 @@ TEST(UHF, WorthRetrying)
     EXPECT_FALSE(is_worth_retrying(TAG_ERROR_KILL | 0x0B));
     EXPECT_FALSE(is_worth_retrying(TAG_ERROR_BLOCK_PERMALOCK | 0x03));
 
-    // A wrong password stays wrong, and repeating it can start a security timeout on the tag
+    // Repeating a failed access straight away is what starts a security timeout on the tag
     EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::AccessFail)));
     // A malformed command frame is ours to fix, not the tag's
     EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::CommandError)));

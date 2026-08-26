@@ -752,9 +752,10 @@ inline bool is_tag_error(const uint8_t error_code)
   @param error_code Error code carried by the failure notification
   @return Description, never null
   @details A tag error is named by its Gen2 meaning (v1.2.0 Annex I), everything else by what
-  the module's own documentation says the code stands for. Where that names more than one cause
-  both are given: a read or a write that comes back as failed may mean the tag said nothing or
-  that what it said did not pass the CRC check, and which of the two it was is not reported
+  the module's own documentation says the code stands for. Read, Write, Kill, Lock,
+  BlockPermalock and Inventory all share one wording there, and it names two causes: the tag
+  said nothing, or what it said did not pass the CRC check. Which of the two it was is not
+  reported, so neither is claimed here
  */
 inline const char* error_description(const uint8_t error_code)
 {
@@ -780,15 +781,15 @@ inline const char* error_description(const uint8_t error_code)
         case Error::WriteFail:
             return "Write failed: no answer, or a CRC error";
         case Error::KillFail:
-            return "Failed to kill the tag";
+            return "Kill failed: no answer, or a CRC error";
         case Error::LockFail:
-            return "Failed to lock the tag's memory";
+            return "Lock failed: no answer, or a CRC error";
         case Error::BlockPermalockFail:
-            return "BlockPermalock failed";
+            return "BlockPermalock failed: no answer, or a CRC error";
         case Error::InventoryFail:
             return "No tag answered, or a CRC error";
         case Error::AccessFail:
-            return "Failed to access the tag";
+            return "Access failed; the password may be wrong";
         case Error::CommandError:
             return "Command error in the command frame";
         case Error::FHSSFail:
@@ -856,11 +857,13 @@ inline bool error_answers_command(const uint8_t error_code, const uint8_t comman
   @brief Is this failure worth sending the same command again for?
   @param error_code Error code carried by the failure notification
   @return True when a repeat has a chance of succeeding
-  @details The module reporting that the tag did not answer says nothing about the tag being
-  unwilling, only that this one exchange did not complete, and the next one may. A tag that
-  answered with a reason of its own will answer the same way however often it is asked, so
-  those are excluded, as is a wrong access password: repeating that cannot make it right and
-  may start a security timeout on the tag (EPC Gen2 v2.1 6.3.2.5)
+  @details A failure that means the tag said nothing, or said something that did not survive
+  the air, says nothing about the tag being unwilling: this one exchange did not complete and
+  the next one may. A tag that answered with a reason of its own will answer the same way
+  however often it is asked, so those are excluded.
+  A failed access is excluded for a different reason. Repeating one straight away is what
+  starts a security timeout on the tag (EPC Gen2 v2.1 6.3.2.5), and the timeout outlasts the
+  gap between two attempts here, so a repeat would be worth less than the harm it does
  */
 inline bool is_worth_retrying(const uint8_t error_code)
 {
