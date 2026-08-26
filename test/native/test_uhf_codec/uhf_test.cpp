@@ -291,6 +291,26 @@ TEST(UHF, DecodeProtocolControl)
     // XPC indicator and a non-EPCglobal numbering system
     EXPECT_TRUE(m5::uhf::pcXPCIndicator(0x3200));
     EXPECT_EQ(m5::uhf::pcNumberingSystemIdentifier(0x3055), 0x055);
+
+    // Bit 10h of the PC is the most significant one of the word, so the Toggle at 17h is the
+    // eighth down. Every tag this ran against reports it clear, and a tag asserting it is
+    // saying the EPC bank holds an ISO UII instead of an EPC
+    EXPECT_FALSE(m5::uhf::pcToggle(0x3000));
+    EXPECT_FALSE(m5::uhf::pcToggle(0x3400));
+    EXPECT_TRUE(m5::uhf::pcToggle(0x3100));
+
+    // The three bits below the length are read one at a time, and setting one does not disturb
+    // its neighbours
+    EXPECT_TRUE(m5::uhf::pcUserMemoryIndicator(0x3400) && !m5::uhf::pcXPCIndicator(0x3400) &&
+                !m5::uhf::pcToggle(0x3400));
+    EXPECT_TRUE(!m5::uhf::pcUserMemoryIndicator(0x3200) && m5::uhf::pcXPCIndicator(0x3200) &&
+                !m5::uhf::pcToggle(0x3200));
+    EXPECT_TRUE(!m5::uhf::pcUserMemoryIndicator(0x3100) && !m5::uhf::pcXPCIndicator(0x3100) &&
+                m5::uhf::pcToggle(0x3100));
+    EXPECT_TRUE(m5::uhf::pcUserMemoryIndicator(0x3700) && m5::uhf::pcXPCIndicator(0x3700) && m5::uhf::pcToggle(0x3700));
+
+    // The length is untouched whichever of them is set
+    EXPECT_EQ(m5::uhf::pcEPCLengthWords(0x3700), 6);
 }
 
 TEST(UHF, BuildSelectParameter)
