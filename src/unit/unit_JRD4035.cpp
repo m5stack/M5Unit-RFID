@@ -60,17 +60,20 @@ constexpr uint8_t AUTO_SLEEP_MAX_MINUTES{30};
 constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
 
 /*!
-  @brief Select target and action used to address a single tag
-  @details Target 000 acts on the inventoried flag of session 0 and action 000 sets it to A on
-  a match while setting it to B on everything else, which is what narrows the field down to one
-  tag: the module then queries session 0 for the tags flagged A
-  @note The session has to be the one the module queries. This module leaves the Query set to
-  Sel=ALL, meaning it ignores the SL flag outright, so a Select aimed at SL would store a mask
-  that changes nothing. Session 0 is what the factory Query uses, and what the vendor's own
-  example sends (SelParam 0x01)
+  @name Select actions used to address a single tag
+  @details A Select sets the inventoried flag of one session, and the round that follows invites
+  one end of that flag. Setting the matching tag to the end the round invites, and everything
+  else to the other, is what narrows the field down to one tag
+  @note The Target field says which session, and it has to be the session the round names: a
+  Select acting on any other changes a flag the round does not look at (EPC Gen2 v2.1 6.3.2.2).
+  Both are taken from the Query the module currently holds rather than assumed
  */
-constexpr uint8_t SELECT_TARGET_S0{0x00};
+///@{
+//! Action 000: matching tags to A, the rest to B (EPC Gen2 v2.1 Table 6-31)
 constexpr uint8_t SELECT_ACTION_MATCH_TO_A{0x00};
+//! Action 100: matching tags to B, the rest to A (EPC Gen2 v2.1 Table 6-31)
+constexpr uint8_t SELECT_ACTION_MATCH_TO_B{0x04};
+///@}
 
 /*!
   @brief Settling time between storing the select mask and using it
@@ -605,7 +608,13 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
 
     Frame res{};
     const uint8_t param[] = {static_cast<uint8_t>(raw >> 8), static_cast<uint8_t>(raw & 0xFF)};
-    return send_and_wait(res, CMD_SET_QUERY, param, sizeof(param)) && succeeded(res, "writeQueryParameters");
+    if (!send_and_wait(res, CMD_SET_QUERY, param, sizeof(param)) || !succeeded(res, "writeQueryParameters")) {
+        return false;
+    }
+    // A mask already stored was built to match the round these settings describe. Changing them
+    // leaves it acting on a flag the round no longer looks at, which nothing reports
+    M5_LIB_LOGW("A select mask stored before this was built for the old round; store it again");
+    return true;
 }
 
 bool UnitJRD4035::writeAutoSleepTime(const uint8_t minutes)
@@ -811,7 +820,18 @@ bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_
     if (code == MEMBANK_NONE) {
         return false;
     }
-    const uint8_t sel_param = select_parameter_byte(SELECT_TARGET_S0, SELECT_ACTION_MATCH_TO_A, code);
+    // A Select acts on one session's inventoried flag, and a round is qualified by the flag of
+    // the session it names. Act on a different one and the mask changes nothing a round looks
+    // at (Gen2 v2.1 6.3.2.2); assert the wrong end of it and the mask picks out every tag
+    // except the one meant. Both are silent, so the round's own settings decide these two
+    m5::uhf::QueryParameters qp{};
+    if (!readQueryParameters(qp)) {
+        M5_LIB_LOGE("Cannot store a mask without knowing which round it has to match");
+        return false;
+    }
+    const uint8_t target    = static_cast<uint8_t>(qp.session);
+    const uint8_t action    = (qp.target == m5::uhf::Target::A) ? SELECT_ACTION_MATCH_TO_A : SELECT_ACTION_MATCH_TO_B;
+    const uint8_t sel_param = select_parameter_byte(target, action, code);
 
     std::vector<uint8_t> param{};
     if (!build_select_parameter(param, sel_param, pointer_bits, static_cast<uint8_t>(mask_len * 8), SELECT_TRUNCATE_OFF,
