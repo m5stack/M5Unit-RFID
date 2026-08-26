@@ -446,6 +446,8 @@ constexpr uint16_t XTID_LOCK_BIT{0x0200};                    //!< bit 9, one wor
 constexpr uint16_t XTID_EXTENDED_HEADER{0x0001};             //!< bit 0, header continues
 ///@}
 
+//! @brief Words every TID starts with, which say what the chip is and whether an XTID follows
+constexpr size_t TID_FIXED_WORDS{2};
 //! @brief Words the two fixed TID words and the XTID header take up
 constexpr size_t XTID_FIXED_WORDS{3};
 
@@ -472,6 +474,87 @@ inline size_t xtidTotalWords(const uint16_t xtid_header)
         words += 1;
     }
     return words;
+}
+
+//! @brief Words at the front of a TID that name the chip rather than the individual tag
+//! @details The allocation class identifier, the mask designer and the model number, then the
+//! XTID header. Every tag of one model carries the same bytes there
+constexpr size_t TID_CHIP_WORDS{3};
+
+/*!
+  @brief Can a mask built from this TID tell one tag of the chip from another?
+  @param tid TID bytes, starting at word 0
+  @param len Their length in bytes
+  @return True when the TID reaches past what names the chip and carries something there
+  @details What makes a TID unique is the serial, and the serial begins at word 3 in both of
+  the layouts in use: after the XTID header when a tag has one (TDS 16.2), and at TID 30h on
+  chips that keep a serial without advertising it in the header. Asking what the mask can
+  actually tell apart therefore answers for both, where the XTID indicator answers only for the
+  first
+  @note A chip with no serial there is not addressed by such a mask at all, so getting this
+  wrong ends in a tag that does not answer rather than in the wrong tag being addressed
+ */
+inline bool tidTellsTagsApart(const uint8_t* tid, const size_t len)
+{
+    if (tid == nullptr || len <= TID_CHIP_WORDS * 2) {
+        return false;
+    }
+    for (size_t i = TID_CHIP_WORDS * 2; i < len; ++i) {
+        if (tid[i] != 0x00) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*!
+  @struct TidReadPlan
+  @brief What to read next of a tag's TID, given what has been read of it so far
+ */
+struct TidReadPlan {
+    uint16_t word_address{};  //!< Word address the next read starts at
+    uint16_t words{};         //!< Words to read, zero once nothing is left to read
+    bool fits{true};          //!< False when the header describes more than a Tid can hold
+};
+
+/*!
+  @brief Say what to read next of a TID
+  @param tid Bytes read so far, starting at TID word 0
+  @param len Their length in bytes
+  @return The next read, asking for no words once the TID is complete
+  @details A TID cannot be read in one go because each part says how much more there is: the two
+  fixed words say whether an XTID follows, and the XTID header says how long the rest is (TDS
+  16.1 and 16.2). Calling this after every read walks the whole TID in
+  @note A header describing more than TID_MAX_BYTES gives fits == false. Nothing is read for it,
+  since what came back could not be kept
+ */
+inline TidReadPlan tidReadPlan(const uint8_t* tid, const size_t len)
+{
+    TidReadPlan plan{};
+    if (len < TID_FIXED_WORDS * 2) {
+        plan.words = static_cast<uint16_t>(TID_FIXED_WORDS);
+        return plan;
+    }
+    if (!tidHasXtid(tid, len)) {
+        return plan;
+    }
+    if (len < XTID_FIXED_WORDS * 2) {
+        plan.word_address = static_cast<uint16_t>(TID_FIXED_WORDS);
+        plan.words        = static_cast<uint16_t>(XTID_FIXED_WORDS - TID_FIXED_WORDS);
+        return plan;
+    }
+    const uint16_t header = static_cast<uint16_t>((tid[TID_FIXED_WORDS * 2] << 8) | tid[TID_FIXED_WORDS * 2 + 1]);
+    const size_t total    = xtidTotalWords(header);
+    if (total * 2 > TID_MAX_BYTES) {
+        plan.fits = false;
+        return plan;
+    }
+    const size_t have = len / 2;
+    if (have < total) {
+        plan.word_address = static_cast<uint16_t>(have);
+        plan.words        = static_cast<uint16_t>(total - have);
+    }
+    return plan;
 }
 
 /*!

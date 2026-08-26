@@ -29,6 +29,20 @@ void begin_unit()
     if (lcd.height() > lcd.width()) {
         lcd.setRotation(1);
     }
+    // Notifications keep coming while the module is polling, and the driver's default 256-byte
+    // receive buffer holds only about 22ms of them at this baud rate. Anything that keeps the
+    // sketch busy for longer than that, printing included, costs bytes out of the middle of a
+    // frame. The port has to be closed for a new size to be accepted
+#if defined(ARDUINO)
+    constexpr size_t RX_BUFFER_BYTES{2048};
+    auto& serial = m5::unit::wiring::defaultUartSerial();
+    serial.end();
+    // The call answers with the size it settled on, and with zero when it would not take. There
+    // is no way to ask afterwards, so this is the only chance to find out
+    if (serial.setRxBufferSize(RX_BUFFER_BYTES) != RX_BUFFER_BYTES) {
+        M5_LOGW("The receive buffer kept its default size; frames may arrive in pieces");
+    }
+#endif
     // Unit UHF-RFID is a UART unit; PortC is preferred and PortA is the fallback
     if (!(m5::unit::wiring::addUART(Units, unit, 115200) && Units.begin())) {
         M5_LOGE("Failed to begin");

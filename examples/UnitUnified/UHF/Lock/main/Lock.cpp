@@ -20,8 +20,8 @@
   locked bank stays writeable (Gen2 v2.1 6.3.2.1.1.2). Given a password, the same bank refuses
   a reader that does not know it.
 
-  If the run stops between storing the password and clearing it, the tag keeps ACCESS_PASSWORD
-  below. Holding the button puts it back to zero, and that works whatever the tag is holding,
+  A run that stops part way can leave the User bank locked, the access password set, or both.
+  Holding the button undoes whichever of them is there, and works whatever the tag is holding,
   since a write goes through from the open state and so does not need the current password.
 */
 #include <M5Unified.h>
@@ -53,6 +53,20 @@ void begin_unit()
     if (lcd.height() > lcd.width()) {
         lcd.setRotation(1);
     }
+    // Notifications keep coming while the module is polling, and the driver's default 256-byte
+    // receive buffer holds only about 22ms of them at this baud rate. Anything that keeps the
+    // sketch busy for longer than that, printing included, costs bytes out of the middle of a
+    // frame. The port has to be closed for a new size to be accepted
+#if defined(ARDUINO)
+    constexpr size_t RX_BUFFER_BYTES{2048};
+    auto& serial = m5::unit::wiring::defaultUartSerial();
+    serial.end();
+    // The call answers with the size it settled on, and with zero when it would not take. There
+    // is no way to ask afterwards, so this is the only chance to find out
+    if (serial.setRxBufferSize(RX_BUFFER_BYTES) != RX_BUFFER_BYTES) {
+        M5_LOGW("The receive buffer kept its default size; frames may arrive in pieces");
+    }
+#endif
     // Unit UHF-RFID is a UART unit; PortC is preferred and PortA is the fallback
     if (!(m5::unit::wiring::addUART(Units, unit, 115200) && Units.begin())) {
         M5_LOGE("Failed to begin");
@@ -116,7 +130,7 @@ void write_probe(const char* when)
     constexpr uint32_t RESTORE_INTERVAL_MS{20};
 
     const std::vector<uint8_t> pattern{0x5A, 0xA5};
-    const bool wrote = uhf.writeBank(m5::uhf::Bank::User, 0, pattern);
+    const bool wrote = uhf.writeBank(m5::uhf::Bank::User, 0, pattern.data(), static_cast<uint16_t>(pattern.size()));
     M5_LOGI("Writing one word %s: %s", when, wrote ? "allowed" : "refused");
     lcd.printf("write %s: %s\n", when, wrote ? "ok" : "no");
     if (!wrote) {
@@ -124,7 +138,7 @@ void write_probe(const char* when)
     }
     const std::vector<uint8_t> zero{0x00, 0x00};
     for (uint8_t i = 0; i < RESTORE_ATTEMPTS; ++i) {
-        if (uhf.writeBank(m5::uhf::Bank::User, 0, zero)) {
+        if (uhf.writeBank(m5::uhf::Bank::User, 0, zero.data(), static_cast<uint16_t>(zero.size()))) {
             return;
         }
         m5::utility::delay(RESTORE_INTERVAL_MS);
@@ -154,7 +168,8 @@ bool set_access_password(const m5::uhf::Tag& tag, const uint32_t password)
 {
     const std::vector<uint8_t> data{static_cast<uint8_t>(password >> 24), static_cast<uint8_t>(password >> 16),
                                     static_cast<uint8_t>(password >> 8), static_cast<uint8_t>(password)};
-    if (!uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data)) {
+    if (!uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data.data(),
+                       static_cast<uint16_t>(data.size()))) {
         M5_LOGE("Failed to store the access password %08X", password);
         lcd.println("password: failed");
         return false;
@@ -211,6 +226,9 @@ void lock_and_open(m5::uhf::Tag& tag)
     write_probe("before locking");
 
     if (!set_access_password(tag, ACCESS_PASSWORD)) {
+        // The write may have landed and only the reading back have failed, which leaves the tag
+        // holding a password nobody asked it to keep
+        M5_LOGE("THE TAG MAY HOLD THE ACCESS PASSWORD %08X; hold the button to put it back", ACCESS_PASSWORD);
         uhf.deselect();
         return;
     }
@@ -224,7 +242,7 @@ void lock_and_open(m5::uhf::Tag& tag)
         if (address_with(tag, ACCESS_PASSWORD)) {
             write_probe("while locked, with the password");
             if (!set_lock(m5::uhf::LockTarget::User, m5::uhf::LockAction::Open, "open User")) {
-                M5_LOGE("The User bank may still be locked");
+                M5_LOGE("THE USER BANK MAY STILL BE LOCKED; hold the button to put it back");
             }
         }
     }
@@ -234,18 +252,23 @@ void lock_and_open(m5::uhf::Tag& tag)
     if (set_access_password(tag, 0)) {
         write_probe("after opening");
     } else {
-        M5_LOGE("THE TAG STILL HOLDS THE ACCESS PASSWORD %08X; hold the button to clear it", ACCESS_PASSWORD);
+        M5_LOGE("THE TAG STILL HOLDS THE ACCESS PASSWORD %08X; hold the button to put it back", ACCESS_PASSWORD);
     }
     uhf.deselect();
 }
-//! @brief Put the access password back to zero, whatever the tag is holding now
-//! @details A write goes through from the open state, so the current password does not have to
-//! be known. This is what gets a tag back after a run stopped part way through
-void clear_access_password(const m5::uhf::Tag& detected)
+//! @brief Undo both of the things a run can leave behind: a lock and a password
+//! @details A run that stops part way can leave the User bank locked, the access password set,
+//! or both, and a run whose lock fails never reaches the step that opens the bank again. The
+//! bank is opened before the password goes, since opening it is what the password is for
+//! @note Zero is tried first because it costs nothing when it is wrong: a reader with no
+//! password to send does not send one, so there is no failed access to knock the tag out of
+//! the round. Offering the wrong password does, which is why it is only the second try
+void restore_tag(const m5::uhf::Tag& detected)
 {
-    if (!address_with(detected, 0)) {
+    if (!address_with(detected, 0) && !address_with(detected, ACCESS_PASSWORD)) {
         return;
     }
+    set_lock(m5::uhf::LockTarget::User, m5::uhf::LockAction::Open, "open User");
     if (set_access_password(detected, 0)) {
         lcd.println("password: cleared");
     }
@@ -261,7 +284,7 @@ void setup()
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
     lcd.println("A: lock and open");
-    lcd.println("A hold: clear password");
+    lcd.println("A hold: put it back");
     lcd.println("(nothing is kept)");
 }
 
@@ -283,7 +306,7 @@ void loop()
         lcd.setCursor(0, 0);
         m5::uhf::Tag detected{};
         if (detect_one(detected)) {
-            clear_access_password(detected);
+            restore_tag(detected);
         }
     }
 }

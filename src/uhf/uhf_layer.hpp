@@ -88,10 +88,12 @@ public:
       @details The TID is locked at manufacture, so a mask built from it keeps working across
       an EPC rewrite. The tag has to have been identified first, since detection alone only
       ever reveals an EPC
-      @warning Only a tag carrying an extended TID can be picked out this way, and this refuses
-      the rest. A TID without one holds the chip's name and nothing more, which every tag of
-      that model carries: selecting on it would address all of them at once. Where the serial
-      sits, and whether there is one at all, is left to each manufacturer past word 1
+      @warning The TID has to reach past the three words that name the chip and carry something
+      there, and this refuses one that does not: every tag of a model holds the same bytes in
+      those words, so a mask built from them alone would address all of them at once. An
+      extended TID is not required, since a chip can keep a serial without announcing one
+      @note Reading that far is the caller's to do. identify() stops at the two fixed words on a
+      tag whose XTID header says there is no serial, so a TID from it will be refused here
      */
     bool select(const Tid& tid, const uint32_t access_password = 0, const bool verify = true);
     //! @brief Stop addressing a single tag, and put polling back the way select() found it
@@ -160,10 +162,24 @@ public:
      */
     bool readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address, const uint16_t word_count);
     /*!
+      @brief Read a memory bank into a buffer of the caller's own
+      @param[out] out Buffer, which has to hold word_count words
+      @param[in,out] out_len Its size in bytes going in, and how many bytes arrived coming out
+      @param bank Memory bank
+      @param word_address Start address in 16-bit words
+      @param word_count Number of 16-bit words to read
+      @return True if successful
+      @note A tag can answer with less than was asked for, which is what out_len reports. A
+      buffer too small for word_count words is refused rather than filled part way
+     */
+    bool readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
+                  const uint16_t word_count);
+    /*!
       @brief Write a memory bank
       @param bank Memory bank
       @param word_address Start address in 16-bit words
-      @param data Bytes to write; the length must be a whole number of 16-bit words
+      @param data Bytes to write
+      @param data_len Their length, which has to be a whole number of 16-bit words
       @return True if successful
       @note A bank larger than one command can carry is written in several, so the caller does
       not have to know how much that is. A write that fails partway leaves everything before the
@@ -171,7 +187,7 @@ public:
       @note Writing the EPC bank changes the very bytes an EPC mask matches on, so a selection
       made from an EPC is dropped afterwards and has to be made again
      */
-    bool writeBank(const Bank bank, const uint16_t word_address, const std::vector<uint8_t>& data);
+    bool writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len);
     /*!
       @brief Change the lock state of memory banks and passwords
       @param settings What to change; anything left out keeps the state it has
@@ -197,6 +213,8 @@ private:
                          const uint32_t access_password, const bool verify);
     //! @brief Read one word of the EPC bank to prove the selected tag is there and answering
     bool verify_selection();
+    //! @brief Drop the selection when a write has replaced the bytes its mask matches on
+    void drop_selection_if_mask_rewritten(const Bank bank);
     //! @brief How many words of a bank there are to read, 0 when that is not known
     uint16_t bank_words(const Bank bank);
     //! @brief Print a stretch of one bank, sixteen bytes to a line

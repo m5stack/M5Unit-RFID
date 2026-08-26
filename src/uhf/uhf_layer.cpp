@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 #include "unit/m100_frame.hpp"
 
@@ -27,7 +28,6 @@ constexpr uint32_t TID_MASK_POINTER_BITS{0x00};
 //! @brief Word holding the first half of the EPC, past the CRC-16 and the PC
 constexpr uint16_t EPC_FIRST_WORD{2};
 //! @brief Words of the TID that sit at a fixed address whatever the tag is
-constexpr uint16_t TID_FIXED_WORDS{2};
 }  // namespace
 
 bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
@@ -192,11 +192,10 @@ bool UHFLayer::select(const Tid& tid, const uint32_t access_password, const bool
         M5_LIB_LOGE("The tag carries no TID to build a mask from");
         return false;
     }
-    // Without an extended TID the bytes in hand are the chip's name and nothing else: every tag
-    // of that model carries them. Some chips hold no serial at all, and the ones that do put it
-    // at an address of their own choosing, so reading further would not help
-    if (!tidHasXtid(tid.begin(), tid.size)) {
-        M5_LIB_LOGE("This TID has no serial number to tell one tag of this chip from another");
+    // The first three words name the chip, and every tag of that model carries the same bytes
+    // there. A mask that reaches no further would address all of them at once
+    if (!tidTellsTagsApart(tid.begin(), tid.size)) {
+        M5_LIB_LOGE("A TID mask of %u bytes cannot tell one tag of this chip from another", (unsigned)tid.size);
         return false;
     }
     if (!apply_selection(Bank::Tid, TID_MASK_POINTER_BITS, tid.begin(), tid.size, access_password, verify)) {
@@ -228,39 +227,32 @@ bool UHFLayer::identify(Tag& tag)
         return false;
     }
 
-    // The two fixed words name the chip and say whether an XTID follows them
+    // A TID says its own length as it is read: the fixed words say whether an XTID follows,
+    // and the XTID header says how long the rest is. tidReadPlan walks that
     std::vector<uint8_t> tid{};
-    if (!_u.read_tag_memory(tid, Bank::Tid, 0, TID_FIXED_WORDS, _access_password)) {
-        return false;
-    }
     Tag identified = _selected;
-    if (!decodeTid(identified, tid.data(), tid.size())) {
-        M5_LIB_LOGE("Not an EPCglobal TID: %02X", tid.empty() ? 0 : tid[0]);
-        return false;
-    }
-
-    if (identified.has_xtid) {
-        // Only the header says how long the rest is, so it has to be read before the rest can be
-        std::vector<uint8_t> header{};
-        if (!_u.read_tag_memory(header, Bank::Tid, TID_FIXED_WORDS, 1, _access_password)) {
+    for (;;) {
+        const TidReadPlan plan = tidReadPlan(tid.data(), tid.size());
+        if (!plan.fits) {
+            M5_LIB_LOGE("XTID of more than %zu bytes cannot be kept", TID_MAX_BYTES);
             return false;
         }
-        tid.insert(tid.end(), header.begin(), header.end());
-
-        const size_t total = xtidTotalWords(static_cast<uint16_t>((header[0] << 8) | header[1]));
-        if (total * 2 > TID_MAX_BYTES) {
-            M5_LIB_LOGE("XTID of %zu words does not fit; the header reads %02X%02X", total, header[0], header[1]);
+        if (plan.words == 0) {
+            break;
+        }
+        std::vector<uint8_t> part{};
+        if (!_u.read_tag_memory(part, Bank::Tid, plan.word_address, plan.words, _access_password)) {
             return false;
         }
-        if (total > XTID_FIXED_WORDS) {
-            std::vector<uint8_t> rest{};
-            if (!_u.read_tag_memory(rest, Bank::Tid, XTID_FIXED_WORDS, static_cast<uint16_t>(total - XTID_FIXED_WORDS),
-                                    _access_password)) {
-                return false;
-            }
-            tid.insert(tid.end(), rest.begin(), rest.end());
+        // A short answer would leave the plan asking for the same words again, so the loop
+        // insists on getting what it asked for
+        if (part.size() != static_cast<size_t>(plan.words) * 2) {
+            M5_LIB_LOGE("Asked for %u words of TID and got %zu bytes", plan.words, part.size());
+            return false;
         }
+        tid.insert(tid.end(), part.begin(), part.end());
         if (!decodeTid(identified, tid.data(), tid.size())) {
+            M5_LIB_LOGE("Not an EPCglobal TID: %02X", tid.empty() ? 0 : tid[0]);
             return false;
         }
     }
@@ -381,44 +373,86 @@ bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16
     return _u.read_tag_memory(out, bank, word_address, word_count, _access_password);
 }
 
-bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const std::vector<uint8_t>& data)
+bool UHFLayer::readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
+                        const uint16_t word_count)
+{
+    const uint16_t capacity = out_len;
+    out_len                 = 0;
+    if (out == nullptr || capacity < word_count * 2) {
+        M5_LIB_LOGE("A buffer of %u bytes cannot hold %u words", capacity, word_count);
+        return false;
+    }
+    std::vector<uint8_t> read{};
+    if (!readBank(read, bank, word_address, word_count)) {
+        return false;
+    }
+    // A tag answering with more than was asked for is not something to write past the end of
+    // the caller's buffer for
+    if (read.size() > capacity) {
+        M5_LIB_LOGE("The tag answered with %u bytes, more than the %u asked for", (unsigned)read.size(), capacity);
+        return false;
+    }
+    std::memcpy(out, read.data(), read.size());
+    out_len = static_cast<uint16_t>(read.size());
+    return true;
+}
+
+bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("writeBank needs a tag to have been selected");
         return false;
     }
-    if (data.empty() || (data.size() % 2) != 0) {
-        M5_LIB_LOGE("A write of %u bytes is not a whole number of words", (unsigned)data.size());
+    if (data == nullptr || data_len == 0 || (data_len % 2) != 0) {
+        M5_LIB_LOGE("A write of %u bytes is not a whole number of words", data_len);
         return false;
     }
     if (!pause_polling()) {
         return false;
     }
 
-    // One command carries at most WRITE_MAX_WORDS, which is a limit of the reader's command
-    // frame rather than of the tag or of EPC Gen2. A caller writing a bank larger than that
-    // should not have to know it, so the write is split here. The module is already looping
-    // internally: Gen2 writes one word at a time and it is the module that batches them
-    size_t written = 0;
-    while (written < data.size()) {
-        const size_t chunk = std::min(data.size() - written, m5::unit::m100::WRITE_MAX_WORDS * 2);
-        const uint16_t at  = static_cast<uint16_t>(word_address + written / 2);
-        if (!_u.write_tag_memory(bank, at, data.data() + written, chunk, _access_password)) {
-            // Say how far it got: whatever came before this is already on the tag
-            M5_LIB_LOGE("Wrote %u of %u words before failing at word %u", (unsigned)(written / 2),
-                        (unsigned)(data.size() / 2), at);
+    // How many words one command may carry is left to the chip. Gen2 makes Write, which carries
+    // one word, mandatory, and BlockWrite, which carries several, optional (v2.1 6.3.2.1). Of
+    // the chips this has run against, UCODE G2iM gives its BlockWrite as 32 bits and Monza 4
+    // takes two words only from an even address, refusing more than two outright. A command
+    // carrying more than two words can come back failed with some of them written and the rest
+    // not, and nothing in the answer says how many.
+    // One word at a time is therefore what is sent, since Write is the one command every tag
+    // has to implement. The Reserved bank is the exception: a password there is two words and
+    // is also what authorises the write, so a word at a time would invalidate the credential
+    // the second word goes under, and two words from an even address is what these chips
+    // document as their limit
+    const uint16_t chunk_words = (bank == Bank::Reserved) ? 2 : 1;
+
+    uint16_t written = 0;
+    while (written < data_len) {
+        const uint16_t at = static_cast<uint16_t>(word_address + written / 2);
+        // An odd start costs one single-word write to reach the even address the pair needs
+        const uint16_t words = (at % 2) ? 1 : chunk_words;
+        const uint16_t chunk = std::min(static_cast<uint16_t>(data_len - written), static_cast<uint16_t>(words * 2));
+        if (!_u.write_tag_memory(bank, at, data + written, chunk, _access_password)) {
+            M5_LIB_LOGE("Wrote %u of %u words, then failed in the %u from word %u", written / 2, data_len / 2,
+                        chunk / 2, at);
+            // Part of what the mask matches on may have been replaced, which leaves a selection
+            // that no longer picks this tag out. That is as true of a failure as of a success
+            drop_selection_if_mask_rewritten(bank);
             return false;
         }
-        written += chunk;
+        written = static_cast<uint16_t>(written + chunk);
     }
 
-    // An EPC mask matches on the bytes that were just replaced, so it no longer picks this tag
-    // out. Dropping the selection turns a silent mis-address into an explicit "select again"
+    drop_selection_if_mask_rewritten(bank);
+    return true;
+}
+
+void UHFLayer::drop_selection_if_mask_rewritten(const Bank bank)
+{
+    // A mask matches on bytes that have just been replaced, so it no longer picks this tag out.
+    // Dropping the selection turns a silent mis-address into an explicit "select again"
     if (bank == Bank::Epc && _mask_bank == Bank::Epc) {
         M5_LIB_LOGW("The EPC the selection matched on has been rewritten; select the tag again");
         deselect();
     }
-    return true;
 }
 
 bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_permanent)

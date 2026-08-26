@@ -930,6 +930,83 @@ TEST(UHF, ErrorAnswersCommand)
     EXPECT_TRUE(error_answers_command(0x7F, COMMAND_KILL_TAG));
 }
 
+TEST(UHF, TidTellsTagsApart)
+{
+    // Two fixed words and an XTID header, and nothing past them. Every tag of the model holds
+    // these same bytes, so a mask built from them would address all of them at once
+    const uint8_t chip_only[] = {0xE2, 0x80, 0x69, 0x95, 0x20, 0x00};
+    EXPECT_FALSE(m5::uhf::tidTellsTagsApart(chip_only, sizeof(chip_only)));
+
+    // Shorter still, and nothing at all
+    EXPECT_FALSE(m5::uhf::tidTellsTagsApart(chip_only, 4));
+    EXPECT_FALSE(m5::uhf::tidTellsTagsApart(nullptr, 6));
+
+    // A serial past the header is what tells two tags apart
+    const uint8_t serialised[] = {0xE2, 0x80, 0x69, 0x95, 0x20, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    EXPECT_TRUE(m5::uhf::tidTellsTagsApart(serialised, sizeof(serialised)));
+
+    // Room for a serial with nothing in it leaves every tag alike again
+    const uint8_t blank_serial[] = {0xE2, 0x80, 0x69, 0x95, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    EXPECT_FALSE(m5::uhf::tidTellsTagsApart(blank_serial, sizeof(blank_serial)));
+
+    // UCODE G2iM keeps a serial without announcing one: its XTID header reads zero, and bit 08h
+    // with it, yet the two tags below differ. The rule has to pass these
+    const uint8_t g2im_a[] = {0xE2, 0x00, 0x68, 0x0A, 0x00, 0x00, 0x40, 0x00, 0x02, 0xA3, 0xB9, 0x13};
+    const uint8_t g2im_b[] = {0xE2, 0x00, 0x68, 0x0A, 0x00, 0x00, 0x40, 0x00, 0x02, 0xA3, 0xB1, 0x13};
+    EXPECT_FALSE(m5::uhf::tidHasXtid(g2im_a, sizeof(g2im_a)));
+    EXPECT_TRUE(m5::uhf::tidTellsTagsApart(g2im_a, sizeof(g2im_a)));
+    EXPECT_TRUE(m5::uhf::tidTellsTagsApart(g2im_b, sizeof(g2im_b)));
+    EXPECT_NE(0, memcmp(g2im_a, g2im_b, sizeof(g2im_a)));
+
+    // The two fixed words of the same chip say nothing about the individual, which is what
+    // identify() is left holding when the header says there is no serial
+    EXPECT_FALSE(m5::uhf::tidTellsTagsApart(g2im_a, 4));
+}
+
+TEST(UHF, TidReadPlan)
+{
+    // Nothing read yet: the two fixed words come first, since they say what follows
+    m5::uhf::TidReadPlan plan = m5::uhf::tidReadPlan(nullptr, 0);
+    EXPECT_TRUE(plan.fits);
+    EXPECT_EQ(plan.word_address, 0);
+    EXPECT_EQ(plan.words, 2);
+
+    // Bit 08h clear: no XTID, so the TID ends after the fixed words
+    const uint8_t no_xtid[] = {0xE2, 0x00, 0x68, 0x0A};
+    plan                    = m5::uhf::tidReadPlan(no_xtid, sizeof(no_xtid));
+    EXPECT_EQ(plan.words, 0);
+
+    // Bit 08h set: the header word follows, and only it says how long the rest is
+    const uint8_t xtid[] = {0xE2, 0x80, 0x69, 0x95};
+    plan                 = m5::uhf::tidReadPlan(xtid, sizeof(xtid));
+    EXPECT_EQ(plan.word_address, 2);
+    EXPECT_EQ(plan.words, 1);
+
+    // A header of zero announces no serial and no segments, so the three words are the whole
+    const uint8_t bare[] = {0xE2, 0x80, 0x69, 0x95, 0x00, 0x00};
+    plan                 = m5::uhf::tidReadPlan(bare, sizeof(bare));
+    EXPECT_EQ(plan.words, 0);
+
+    // A 48-bit serial makes six words in all, three of which are already in hand
+    const uint8_t serial48[] = {0xE2, 0x80, 0x69, 0x95, 0x20, 0x00};
+    plan                     = m5::uhf::tidReadPlan(serial48, sizeof(serial48));
+    EXPECT_EQ(plan.word_address, 3);
+    EXPECT_EQ(plan.words, 3);
+
+    // Once those six words are in hand there is nothing left to ask for
+    const uint8_t serial48_read[] = {0xE2, 0x80, 0x69, 0x95, 0x20, 0x00, 1, 2, 3, 4, 5, 6};
+    plan                          = m5::uhf::tidReadPlan(serial48_read, sizeof(serial48_read));
+    EXPECT_EQ(plan.words, 0);
+
+    // The longest TID the standard can describe is twenty words, and it still fits in what a
+    // Tid holds. That equality is what TID_MAX_BYTES is sized for
+    const uint8_t largest[] = {0xE2, 0x80, 0x69, 0x95, 0xFE, 0x00};
+    plan                    = m5::uhf::tidReadPlan(largest, sizeof(largest));
+    EXPECT_TRUE(plan.fits);
+    EXPECT_EQ(plan.word_address, 3);
+    EXPECT_EQ(plan.words, m5::uhf::TID_MAX_BYTES / 2 - 3);
+}
+
 TEST(UHF, QueryParameters)
 {
     // The vendor documents the layout by spelling this word out: DR=8, M=1, TRext=use pilot
