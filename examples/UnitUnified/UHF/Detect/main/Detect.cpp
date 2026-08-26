@@ -52,6 +52,21 @@ void begin_unit()
     M5_LOGI("M5UnitUnified has been begun");
     M5_LOGI("%s", Units.debugInfo().c_str());
 
+    // The module keeps these across a power cycle, so what it holds now is whatever was last
+    // written to it rather than a default. They decide how far a tag can be and how faint an
+    // answer still counts, which is the difference between a tag that reads and one that does
+    // not. What is there is reported, not changed: how much power may be radiated is a question
+    // of where the unit is being used
+    int16_t dbm100{};
+    if (unit.readTransmitPower(dbm100)) {
+        M5_LOGI("Transmit power: %d.%02d dBm", dbm100 / 100, dbm100 % 100);
+    }
+    m5::unit::m100::DemodulatorParameters dp{};
+    if (unit.readDemodulatorParameters(dp)) {
+        M5_LOGI("Demodulator: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
+                m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
+    }
+
     m5::uhf::ModuleInformation info{};
     if (unit.readModuleInformation(info)) {
         M5_LOGI("HW:%s SW:%s MFR:%s", info.hardware_version.c_str(), info.software_version.c_str(),
