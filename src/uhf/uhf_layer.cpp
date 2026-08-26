@@ -165,6 +165,14 @@ bool UHFLayer::select(const Tag& tag, const uint32_t access_password, const bool
         M5_LIB_LOGE("The tag carries no EPC to build a mask from");
         return false;
     }
+    // A tag that sends an XPC sends it ahead of the EPC, so what detection reported as the EPC
+    // begins with a word or two that lives at 210h rather than at 20h (EPC Gen2 v2.1
+    // 6.3.2.1.2.2). A mask laid over the EPC from those bytes matches nothing, and none of the
+    // tags this was tried on carry one, so it is refused rather than guessed at
+    if (pcXPCIndicator(tag.pc)) {
+        M5_LIB_LOGE("This tag sends an XPC, and what was reported as its EPC begins with it");
+        return false;
+    }
     if (!apply_selection(Bank::Epc, EPC_MASK_POINTER_BITS, tag.epc.begin(), tag.epc.size, access_password, verify)) {
         return false;
     }
@@ -270,7 +278,9 @@ uint16_t UHFLayer::bank_words(const Bank bank)
             // Kill password then access password, two words each. Fixed by EPC Gen2
             return 4;
         case Bank::Epc:
-            // The stored CRC and the PC, then as much EPC as the PC says there is
+            // The stored CRC and the PC, then as much EPC as the PC says there is. On a tag
+            // that sends an XPC the length would count that too, so such a tag is turned away
+            // at select() and never reaches here
             return static_cast<uint16_t>(2 + pcEPCLengthWords(_selected.pc));
         case Bank::Tid:
             // Whatever identify() ended up keeping, which is the whole of the TID
@@ -407,6 +417,14 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uin
         M5_LIB_LOGE("A write of %u bytes is not a whole number of words", data_len);
         return false;
     }
+    // The first word of the EPC bank holds the CRC the tag works out for itself, and a tag told
+    // to write there does not write and reports the parameters as unsupported instead (Gen2
+    // v2.1 6.3.2.1.2.1). Turning it away here keeps a request that cannot succeed off the air,
+    // where its failure would look like any other
+    if (bank == Bank::Epc && word_address == 0) {
+        M5_LIB_LOGE("The first word of the EPC bank is the tag's own CRC and cannot be written");
+        return false;
+    }
     if (!pause_polling()) {
         return false;
     }
@@ -476,7 +494,38 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
     if (!pause_polling()) {
         return false;
     }
-    return _u.lock_tag_memory(buildLockPayload(settings.data(), settings.size()), _access_password);
+
+    // A lock needs the tag in a state the reader has to put it in first, and getting there is
+    // an exchange of its own that can fail on its own. The module reports that the same way it
+    // reports a tag that never heard the command, so a single try cannot tell the two apart.
+    // The mask goes back before each further try, since what was lost may be the singulation
+    constexpr uint8_t ATTEMPTS{3};
+    constexpr uint32_t RETRY_INTERVAL_MS{20};
+    const uint32_t payload = buildLockPayload(settings.data(), settings.size());
+    for (uint8_t attempt = 0; attempt < ATTEMPTS; ++attempt) {
+        if (attempt && !reapply_selection()) {
+            break;
+        }
+        if (_u.lock_tag_memory(payload, _access_password)) {
+            return true;
+        }
+        m5::utility::delay(RETRY_INTERVAL_MS);
+    }
+    return false;
+}
+
+bool UHFLayer::reapply_selection()
+{
+    if (_mask_bank == Bank::Tid && !_selected.tid.empty()) {
+        return _u.write_select_parameter(Bank::Tid, TID_MASK_POINTER_BITS, _selected.tid.begin(), _selected.tid.size) &&
+               _u.write_select_enabled(true);
+    }
+    if (_mask_bank == Bank::Epc && !_selected.epc.empty()) {
+        return _u.write_select_parameter(Bank::Epc, EPC_MASK_POINTER_BITS, _selected.epc.begin(), _selected.epc.size) &&
+               _u.write_select_enabled(true);
+    }
+    M5_LIB_LOGW("Nothing to build a mask from; the selection cannot be put back");
+    return false;
 }
 
 bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)

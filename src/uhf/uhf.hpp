@@ -68,7 +68,7 @@ enum class Target : uint8_t { A, B };
   @details Decides whether a stored select mask narrows the field down at all. A reader left on
   All ignores the SL flag outright, so a Select that acts on SL stores a mask that changes
   nothing; one that acts on an inventoried flag still works because the round is qualified by
-  the session instead (EPC Gen2 v2.1 Table 6-25)
+  the session instead (EPC Gen2 v2.1 Table 6-32 and 6.3.2.3)
  */
 enum class SelectFilter : uint8_t {
     All,          //!< Every tag answers, whatever its SL flag says
@@ -493,6 +493,9 @@ constexpr size_t TID_CHIP_WORDS{3};
   first
   @note A chip with no serial there is not addressed by such a mask at all, so getting this
   wrong ends in a tag that does not answer rather than in the wrong tag being addressed
+  @note The rule this replaced came from the XTID indicator, on the strength of TDS 1.5 16
+  calling everything past address 1Fh undefined without one. That sentence is not in TDS 1.13
+  or anything after it, and chips carry a serial there regardless
  */
 inline bool tidTellsTagsApart(const uint8_t* tid, const size_t len)
 {
@@ -797,7 +800,7 @@ constexpr size_t SELECT_MASK_MAX_BYTES{32};
   @struct SelectParameter
   @brief The mask the reader holds, and how it is matched
   @details Reading it back is the only way to see what the reader is actually addressing. A
-  Select produces no reply from any tag (EPC Gen2 v2.1 Table 6-29), so nothing else confirms
+  Select produces no reply from any tag (EPC Gen2 v2.1 6.3.2.12.1.1), so nothing else confirms
   that the reader and the caller agree on which tag is meant
  */
 struct SelectParameter {
@@ -995,6 +998,10 @@ inline bool verify_tag_crc(const Tag& tag)
   @brief EPC length in 16-bit words encoded in the PC
   @param pc Protocol Control
   @return Number of 16-bit words comprising the EPC
+  @warning The PC a tag backscatters is not the one in its memory. A tag that sends an XPC
+  ahead of its EPC raises the length here by the word or two that takes, while leaving EPC
+  memory 10h to 14h alone (EPC Gen2 v2.1 6.3.2.1.2.2). Counted from a backscattered PC this is
+  therefore the length of what came over the air, not the length of the EPC
  */
 inline uint8_t pcEPCLengthWords(const uint16_t pc)
 {
@@ -1006,9 +1013,10 @@ inline uint8_t pcEPCLengthWords(const uint16_t pc)
   @param pc Protocol Control
   @return True if the bit is asserted
   @warning This does not say whether the tag has a User bank. EPC Gen2 v2.1 6.3.2.1.2.1 lets a
-  chip either fix the bit at what it was built with or compute it from whether the first words
-  of the bank hold anything, and a chip of the second kind reports zero for a bank it has but
-  has never been written to. A UCODE G2iM was measured reporting zero with 512 usable bits
+  chip either fix the bit at what it was built with or compute it, and a chip that computes it
+  ORs together bits 03h to 07h of File_0 and nothing else, so it reports zero for a bank it has
+  but whose first five bits have never been written. A UCODE G2iM was measured reporting zero
+  with 512 usable bits
  */
 inline bool pcUserMemoryIndicator(const uint16_t pc)
 {
@@ -1026,9 +1034,27 @@ inline bool pcXPCIndicator(const uint16_t pc)
 }
 
 /*!
+  @brief Toggle bit of the PC
+  @param pc Protocol Control
+  @return True when the EPC bank holds an ISO 15961 UII rather than an EPC
+  @details Of the bits below the length this is the one that can always be believed: it is
+  never one of the bits a tag substitutes from its XPC (GS1 TDS 2.3 9.4). A tag asserting it
+  is telling the reader that what follows the PC is not an EPC, and nothing here decodes it as
+  one
+ */
+inline bool pcToggle(const uint16_t pc)
+{
+    return (pc & 0x0100) != 0;
+}
+
+/*!
   @brief Numbering System Identifier of the PC
   @param pc Protocol Control
   @return NSI (0x000 for EPCglobal)
+  @warning These bits cannot be relied on to be the identifier. What is spoken of as the PC
+  word is the top eight bits of the Protocol Control joined to the bottom eight of the Extended
+  Protocol Control, and a tag substitutes the latter for its own flags whether or not it goes
+  on to send an XPC word (GS1 TDS 2.3 9.4). Only pcToggle() sits outside what is substituted
  */
 inline uint16_t pcNumberingSystemIdentifier(const uint16_t pc)
 {

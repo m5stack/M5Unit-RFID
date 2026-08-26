@@ -215,6 +215,8 @@ private:
     bool verify_selection();
     //! @brief Drop the selection when a write has replaced the bytes its mask matches on
     void drop_selection_if_mask_rewritten(const Bank bank);
+    //! @brief Store the mask of the selected tag again, so a lost singulation can be regained
+    bool reapply_selection();
     //! @brief How many words of a bank there are to read, 0 when that is not known
     uint16_t bank_words(const Bank bank);
     //! @brief Print a stretch of one bank, sixteen bytes to a line
