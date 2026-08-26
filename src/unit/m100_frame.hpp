@@ -154,10 +154,83 @@ inline bool parse_frame(Frame& out, const uint8_t* raw, const size_t len, const 
     return true;
 }
 
+/*!
+  @enum FrameExtract
+  @brief What came of trying to take a frame out of the bytes received so far
+ */
+enum class FrameExtract : uint8_t {
+    Ok,        //!< A frame was taken out, and the bytes it was made of are gone from the buffer
+    NeedMore,  //!< What is in the buffer could still turn into a frame once more bytes arrive
+};
+
+/*!
+  @brief Take the first whole frame out of received bytes
+  @param[out] out Frame, filled in only when Ok is returned
+  @param[in,out] buffer Bytes received so far. What was used, and what was thrown away, is
+  removed; everything else is left for the next call
+  @param[out] discarded Bytes thrown away before a frame could be found
+  @param header Frame header byte
+  @param end Frame end byte
+  @return Ok when a frame came out, NeedMore when the buffer has to grow first
+  @details The header byte also occurs inside the data a tag notification carries, so a byte
+  that looks like the start of a frame may be the middle of one. Rather than trusting it, the
+  length, the checksum and the end byte are all made to agree; when they do not, one byte is
+  thrown away and the search goes on from the next. Bytes are never read again to do this, so a
+  frame that arrived in pieces costs nothing to wait for
+ */
+inline FrameExtract extract_frame(Frame& out, std::vector<uint8_t>& buffer, size_t& discarded, const uint8_t header,
+                                  const uint8_t end)
+{
+    discarded = 0;
+    for (;;) {
+        // Nothing before a header byte can be the start of a frame
+        size_t start = 0;
+        while (start < buffer.size() && buffer[start] != header) {
+            ++start;
+        }
+        if (start) {
+            discarded += start;
+            buffer.erase(buffer.begin(), buffer.begin() + static_cast<long>(start));
+        }
+        if (buffer.size() < FRAME_PARAMETER_OFFSET) {
+            return FrameExtract::NeedMore;
+        }
+        const uint16_t param_len = static_cast<uint16_t>((buffer[3] << 8) | buffer[4]);
+        const size_t total       = static_cast<size_t>(param_len) + FRAME_OVERHEAD;
+        if (param_len > MAX_PARAMETER_LENGTH) {
+            // A length no frame can have says this header byte was data
+            discarded += 1;
+            buffer.erase(buffer.begin());
+            continue;
+        }
+        if (buffer.size() < total) {
+            return FrameExtract::NeedMore;
+        }
+        if (parse_frame(out, buffer.data(), total, header, end)) {
+            buffer.erase(buffer.begin(), buffer.begin() + static_cast<long>(total));
+            return FrameExtract::Ok;
+        }
+        // The checksum or the end byte disagreed, so this was not a frame either
+        discarded += 1;
+        buffer.erase(buffer.begin());
+    }
+}
+
 //! @brief Command code of the single polling notification
 constexpr uint8_t COMMAND_SINGLE_POLLING{0x22};
 //! @brief Command code of the multiple polling notification
 constexpr uint8_t COMMAND_MULTIPLE_POLLING{0x27};
+
+/*!
+  @name Command codes of the operations an error code can name
+ */
+///@{
+constexpr uint8_t COMMAND_READ_TAG_MEMORY{0x39};
+constexpr uint8_t COMMAND_WRITE_TAG_MEMORY{0x49};
+constexpr uint8_t COMMAND_KILL_TAG{0x65};
+constexpr uint8_t COMMAND_LOCK_TAG_MEMORY{0x82};
+constexpr uint8_t COMMAND_BLOCK_PERMALOCK{0xD3};
+///@}
 //! @brief Fixed part of a tag notification (RSSI, PC and CRC)
 constexpr size_t TAG_NOTIFICATION_OVERHEAD{5};
 
@@ -678,8 +751,10 @@ inline bool is_tag_error(const uint8_t error_code)
   @brief Describe an error code in one word
   @param error_code Error code carried by the failure notification
   @return Description, never null
-  @details A tag error is named by its Gen2 meaning (v1.2.0 Annex I), everything else by the
-  module-level failure it stands for
+  @details A tag error is named by its Gen2 meaning (v1.2.0 Annex I), everything else by what
+  the module's own documentation says the code stands for. Where that names more than one cause
+  both are given: a read or a write that comes back as failed may mean the tag said nothing or
+  that what it said did not pass the CRC check, and which of the two it was is not reported
  */
 inline const char* error_description(const uint8_t error_code)
 {
@@ -701,25 +776,79 @@ inline const char* error_description(const uint8_t error_code)
     }
     switch (static_cast<Error>(error_code)) {
         case Error::ReadFail:
-            return "Read failed: no answer from the tag";
+            return "Read failed: no answer, or a CRC error";
         case Error::WriteFail:
-            return "Write failed: no answer from the tag";
+            return "Write failed: no answer, or a CRC error";
         case Error::KillFail:
-            return "Kill failed: no answer from the tag";
+            return "Failed to kill the tag";
         case Error::LockFail:
-            return "Lock failed: no answer from the tag";
+            return "Failed to lock the tag's memory";
         case Error::BlockPermalockFail:
-            return "BlockPermalock failed: no answer from the tag";
+            return "BlockPermalock failed";
         case Error::InventoryFail:
-            return "No tag answered";
+            return "No tag answered, or a CRC error";
         case Error::AccessFail:
-            return "Access failed: wrong access password";
+            return "Failed to access the tag";
         case Error::CommandError:
-            return "Command error";
+            return "Command error in the command frame";
         case Error::FHSSFail:
-            return "No free channel to hop to";
+            return "Frequency hopping channel search timed out";
         default:
             return "Unlisted error";
+    }
+}
+
+/*!
+  @brief Could this error code be the answer to this command?
+  @param error_code Error code carried by the failure notification
+  @param command Command code the module was asked to carry out
+  @return True when the code can have come from that command
+  @details An error the tag reported carries the operation in its high nibble, and the module's
+  own failures are named after the command they belong to, so most codes say what they answer.
+  A code that any command can provoke, and any code not listed here, is accepted for all of
+  them: turning away an error that did belong to the command would leave the caller waiting out
+  its timeout for a reply that has already arrived
+ */
+inline bool error_answers_command(const uint8_t error_code, const uint8_t command)
+{
+    if (is_tag_error(error_code)) {
+        switch (error_code & 0xF0) {
+            case TAG_ERROR_READ:
+                return command == COMMAND_READ_TAG_MEMORY;
+            case TAG_ERROR_WRITE:
+                return command == COMMAND_WRITE_TAG_MEMORY;
+            case TAG_ERROR_LOCK:
+                return command == COMMAND_LOCK_TAG_MEMORY;
+            case TAG_ERROR_KILL:
+                return command == COMMAND_KILL_TAG;
+            case TAG_ERROR_BLOCK_PERMALOCK:
+                return command == COMMAND_BLOCK_PERMALOCK;
+            default:
+                return true;
+        }
+    }
+    switch (static_cast<Error>(error_code)) {
+        case Error::ReadFail:
+            return command == COMMAND_READ_TAG_MEMORY;
+        case Error::WriteFail:
+            return command == COMMAND_WRITE_TAG_MEMORY;
+        case Error::KillFail:
+            return command == COMMAND_KILL_TAG;
+        case Error::LockFail:
+            return command == COMMAND_LOCK_TAG_MEMORY;
+        case Error::BlockPermalockFail:
+            return command == COMMAND_BLOCK_PERMALOCK;
+        case Error::InventoryFail:
+            return command == COMMAND_SINGLE_POLLING || command == COMMAND_MULTIPLE_POLLING;
+        case Error::AccessFail:
+            // Every tag operation is preceded by an access, so any of them can end here
+            return command == COMMAND_READ_TAG_MEMORY || command == COMMAND_WRITE_TAG_MEMORY ||
+                   command == COMMAND_LOCK_TAG_MEMORY || command == COMMAND_KILL_TAG ||
+                   command == COMMAND_BLOCK_PERMALOCK;
+        default:
+            // A command error or a failed hop answers whatever was sent, and so does a code
+            // this table does not name
+            return true;
     }
 }
 

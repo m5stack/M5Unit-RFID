@@ -742,8 +742,192 @@ TEST(UHF, ErrorDescription)
     // Module-level failures are not tag errors and keep their own meanings
     EXPECT_FALSE(m5::unit::m100::is_tag_error(0x15));
     EXPECT_FALSE(m5::unit::m100::is_tag_error(0x16));
-    EXPECT_STREQ(m5::unit::m100::error_description(0x16), "Access failed: wrong access password");
-    EXPECT_STREQ(m5::unit::m100::error_description(0x15), "No tag answered");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x16), "Failed to access the tag");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x15), "No tag answered, or a CRC error");
+
+    // A code the module documents as having two possible causes is not reported as one of them
+    EXPECT_STREQ(m5::unit::m100::error_description(0x09), "Read failed: no answer, or a CRC error");
+    EXPECT_STREQ(m5::unit::m100::error_description(0x10), "Write failed: no answer, or a CRC error");
+}
+
+TEST(UHF, ExtractFrame)
+{
+    const uint8_t header = jrd::FRAME_HEADER;
+    const uint8_t end    = jrd::FRAME_END;
+
+    // A response to "get module information": BB 01 03 00 01 00 05 7E
+    std::vector<uint8_t> one{};
+    const uint8_t param[] = {0x00};
+    if (!build_frame(one, 0x01, 0x03, param, sizeof(param))) {
+        EXPECT_TRUE(false);
+        return;
+    }
+
+    Frame f{};
+    size_t discarded{};
+
+    // A whole frame and nothing else comes out, and the buffer is left empty
+    {
+        std::vector<uint8_t> buf = one;
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(discarded, 0u);
+        EXPECT_EQ(f.command, 0x03);
+        EXPECT_TRUE(buf.empty());
+    }
+
+    // Whatever sits in front of the header is not part of a frame and is counted as thrown away
+    {
+        std::vector<uint8_t> buf{0x11, 0x22, 0x33};
+        buf.insert(buf.end(), one.begin(), one.end());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(discarded, 3u);
+        EXPECT_TRUE(buf.empty());
+    }
+
+    // A frame that arrived in pieces is kept as it stands, and finished off once the rest turns
+    // up. This is what a truncated read used to throw away
+    {
+        std::vector<uint8_t> buf(one.begin(), one.begin() + 5);
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::NeedMore);
+        EXPECT_EQ(discarded, 0u);
+        EXPECT_EQ(buf.size(), 5u);
+
+        buf.insert(buf.end(), one.begin() + 5, one.end());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(f.command, 0x03);
+        EXPECT_TRUE(buf.empty());
+    }
+
+    // Too few bytes to read a length out of are not enough to judge anything by
+    {
+        std::vector<uint8_t> buf{header, 0x01};
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::NeedMore);
+        EXPECT_EQ(buf.size(), 2u);
+    }
+
+    // A length no frame can have says the header byte was data. One byte goes and the search
+    // carries on, so the real frame behind it still comes out
+    {
+        std::vector<uint8_t> buf{header, 0x01, 0x03, 0xFF, 0xFF};
+        buf.insert(buf.end(), one.begin(), one.end());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(f.command, 0x03);
+        EXPECT_TRUE(buf.empty());
+        EXPECT_EQ(discarded, 5u);
+    }
+
+    // A checksum that disagrees says the same thing, and is recovered from the same way
+    {
+        std::vector<uint8_t> bad = one;
+        bad[bad.size() - 2] ^= 0xFF;
+        std::vector<uint8_t> buf = bad;
+        buf.insert(buf.end(), one.begin(), one.end());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(f.command, 0x03);
+        EXPECT_TRUE(buf.empty());
+        EXPECT_EQ(discarded, one.size());
+    }
+
+    // The header byte occurs inside the data a tag notification carries. Taking it for the start
+    // of a frame has to cost one byte, not the frame that follows
+    {
+        std::vector<uint8_t> notification{};
+        const uint8_t payload[] = {0xC7, 0x30, 0x00, header, header, 0x02, 0x03, 0x04};
+        if (!build_frame(notification, 0x02, 0x22, payload, sizeof(payload))) {
+            EXPECT_TRUE(false);
+            return;
+        }
+        std::vector<uint8_t> buf = notification;
+        buf.insert(buf.end(), one.begin(), one.end());
+
+        // The notification is whole, so its payload is never mistaken for a frame start
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(discarded, 0u);
+        EXPECT_EQ(f.command, 0x22);
+
+        // What follows it is untouched
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(f.command, 0x03);
+        EXPECT_TRUE(buf.empty());
+    }
+
+    // Losing the front of a notification leaves its payload looking like a frame start. The
+    // frame behind it still has to come out
+    {
+        std::vector<uint8_t> notification{};
+        const uint8_t payload[] = {0xC7, 0x30, 0x00, header, header, 0x02, 0x03, 0x04};
+        if (!build_frame(notification, 0x02, 0x22, payload, sizeof(payload))) {
+            EXPECT_TRUE(false);
+            return;
+        }
+        // Start halfway in, at the first header byte of the payload
+        std::vector<uint8_t> buf(notification.begin() + 8, notification.end());
+        buf.insert(buf.end(), one.begin(), one.end());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(f.command, 0x03);
+        EXPECT_TRUE(buf.empty());
+        EXPECT_GT(discarded, 0u);
+    }
+
+    // Two frames back to back come out one at a time
+    {
+        std::vector<uint8_t> buf = one;
+        buf.insert(buf.end(), one.begin(), one.end());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_EQ(buf.size(), one.size());
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::Ok);
+        EXPECT_TRUE(buf.empty());
+    }
+
+    // Nothing at all is not something to wait for a frame in
+    {
+        std::vector<uint8_t> buf{};
+        EXPECT_EQ(extract_frame(f, buf, discarded, header, end), FrameExtract::NeedMore);
+        EXPECT_EQ(discarded, 0u);
+    }
+}
+
+TEST(UHF, ErrorAnswersCommand)
+{
+    using namespace m5::unit::m100;
+
+    // A Gen2 error the tag returned carries the operation in its high nibble, so it answers
+    // that command and no other. B4 is the "memory locked" a write to a locked bank gets
+    EXPECT_TRUE(error_answers_command(0xB4, COMMAND_WRITE_TAG_MEMORY));
+    EXPECT_FALSE(error_answers_command(0xB4, COMMAND_READ_TAG_MEMORY));
+    EXPECT_FALSE(error_answers_command(0xB4, COMMAND_LOCK_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0xA3, COMMAND_READ_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0xC0, COMMAND_LOCK_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0xD0, COMMAND_KILL_TAG));
+    EXPECT_TRUE(error_answers_command(0xE4, COMMAND_BLOCK_PERMALOCK));
+    EXPECT_FALSE(error_answers_command(0xD0, COMMAND_LOCK_TAG_MEMORY));
+
+    // The module's own failures are named after the command they belong to
+    EXPECT_TRUE(error_answers_command(0x09, COMMAND_READ_TAG_MEMORY));
+    EXPECT_FALSE(error_answers_command(0x09, COMMAND_WRITE_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0x10, COMMAND_WRITE_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0x12, COMMAND_KILL_TAG));
+    EXPECT_TRUE(error_answers_command(0x13, COMMAND_LOCK_TAG_MEMORY));
+    EXPECT_FALSE(error_answers_command(0x13, COMMAND_KILL_TAG));
+    EXPECT_TRUE(error_answers_command(0x14, COMMAND_BLOCK_PERMALOCK));
+
+    // Inventory Fail answers a polling command and nothing else
+    EXPECT_TRUE(error_answers_command(0x15, COMMAND_MULTIPLE_POLLING));
+    EXPECT_TRUE(error_answers_command(0x15, COMMAND_SINGLE_POLLING));
+    EXPECT_FALSE(error_answers_command(0x15, COMMAND_READ_TAG_MEMORY));
+
+    // Every tag operation is preceded by an access, so any of them can end in this one
+    EXPECT_TRUE(error_answers_command(0x16, COMMAND_READ_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0x16, COMMAND_LOCK_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0x16, COMMAND_KILL_TAG));
+    EXPECT_FALSE(error_answers_command(0x16, COMMAND_MULTIPLE_POLLING));
+
+    // A malformed command frame and a failed hop can answer whatever was sent, and so can a
+    // code this table does not name. Turning one of those away would cost a timeout
+    EXPECT_TRUE(error_answers_command(0x17, COMMAND_MULTIPLE_POLLING));
+    EXPECT_TRUE(error_answers_command(0x17, COMMAND_READ_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0x20, COMMAND_LOCK_TAG_MEMORY));
+    EXPECT_TRUE(error_answers_command(0x7F, COMMAND_KILL_TAG));
 }
 
 TEST(UHF, QueryParameters)

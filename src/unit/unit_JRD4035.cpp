@@ -41,10 +41,10 @@ constexpr uint8_t CMD_SET_DEMODULATOR{0xF0};
 constexpr uint8_t CMD_GET_SELECT_PARAMETER{0x0B};
 constexpr uint8_t CMD_SET_SELECT_PARAMETER{0x0C};
 constexpr uint8_t CMD_SET_SELECT_MODE{0x12};
-constexpr uint8_t CMD_READ_TAG_MEMORY{0x39};
-constexpr uint8_t CMD_WRITE_TAG_MEMORY{0x49};
-constexpr uint8_t CMD_LOCK_TAG_MEMORY{0x82};
-constexpr uint8_t CMD_KILL_TAG{0x65};
+constexpr uint8_t CMD_READ_TAG_MEMORY{COMMAND_READ_TAG_MEMORY};
+constexpr uint8_t CMD_WRITE_TAG_MEMORY{COMMAND_WRITE_TAG_MEMORY};
+constexpr uint8_t CMD_LOCK_TAG_MEMORY{COMMAND_LOCK_TAG_MEMORY};
+constexpr uint8_t CMD_KILL_TAG{COMMAND_KILL_TAG};
 
 // The channel count of the insert command is a single byte
 constexpr size_t CHANNEL_LIST_MAX{255};
@@ -110,7 +110,10 @@ constexpr int TAG_OPERATION_ATTEMPTS{3};
   can hold the caller up, and it is deliberately not the configured timeout: that one is for a
   frame arriving at all, which is a different wait and a far longer one
  */
-constexpr uint32_t WITHIN_FRAME_TIMEOUT_MS{200};
+// Longest gap between two bytes of the same frame. The module sends a frame in one go, so a
+// pause longer than a couple of dozen byte times means it has finished sending rather than that
+// more is coming
+constexpr uint32_t BYTE_GAP_TIMEOUT_MS{2};
 
 //! @brief Byte sent to wake the module. Any value does; this is what the vendor's driver sends
 constexpr uint8_t WAKE_BYTE{0x55};
@@ -217,11 +220,11 @@ bool UnitJRD4035::begin()
     if (!UHFRFIDComponent::begin()) {
         return false;
     }
-    ad->flushRX();
+    flush_rx();
 
     // Hold back the first transmission until the module has finished booting
     m5::utility::delay(STARTUP_DELAY_MS);
-    ad->flushRX();
+    flush_rx();
 
     // The UART transport has no address probe, so the module information is used to
     // confirm that the module responds
@@ -245,7 +248,7 @@ bool UnitJRD4035::begin()
         }
         M5_LIB_LOGD("Probe %d did not answer", attempts);
         m5::utility::delay(BEGIN_RETRY_INTERVAL_MS);
-        ad->flushRX();
+        flush_rx();
     }
     const unsigned long probe_elapsed = m5::utility::millis() - probe_started_at;
     if (!detected) {
@@ -275,6 +278,16 @@ bool UnitJRD4035::begin()
     return true;
 }
 
+void UnitJRD4035::flush_rx()
+{
+    auto ad = asAdapter<AdapterUART>(Adapter::Type::UART);
+    if (ad) {
+        ad->flushRX();
+    }
+    // Half a frame left over here would be taken for the start of the next one
+    _rx.clear();
+}
+
 bool UnitJRD4035::read_frame(Frame& out, const uint32_t timeout_ms)
 {
     auto ad = asAdapter<AdapterUART>(Adapter::Type::UART);
@@ -282,52 +295,32 @@ bool UnitJRD4035::read_frame(Frame& out, const uint32_t timeout_ms)
         return false;
     }
 
-    // 1. Look for the frame header one byte at a time. A timeout here only means
-    // that nothing is pending, and no byte is lost
-    uint8_t b{};
-    ad->setTimeout(timeout_ms);
-    if (readWithTransaction(&b, 1) != m5::hal::error::error_t::OK) {
-        return false;
-    }
-    while (b != _frame_header) {
-        M5_LIB_LOGD("Skipping %02X while looking for header %02X", b, _frame_header);
+    bool first = true;
+    for (;;) {
+        // What is already in hand is tried first: the bytes of a frame that arrived in pieces
+        // are still there from the last call, and finishing it needs no waiting at all
+        size_t discarded{};
+        const FrameExtract taken = extract_frame(out, _rx, discarded, _frame_header, _frame_end);
+        if (discarded) {
+            M5_LIB_LOGW("Dropped %zu bytes to find the start of a frame", discarded);
+        }
+        if (taken == FrameExtract::Ok) {
+            M5_LIB_LOGD("RX: type=%02X cmd=%02X len=%u", out.type, out.command,
+                        static_cast<unsigned>(out.parameter.size()));
+            return true;
+        }
+
+        // Waiting on the first byte is waiting for a frame to arrive at all, which is what the
+        // caller's timeout is about. Every byte after it belongs to a frame already on its way
+        uint8_t b{};
+        ad->setTimeout(first ? timeout_ms : BYTE_GAP_TIMEOUT_MS);
+        first = false;
         if (readWithTransaction(&b, 1) != m5::hal::error::error_t::OK) {
+            // Whatever is in the buffer stays there. Nothing is lost by giving up here
             return false;
         }
+        _rx.push_back(b);
     }
-
-    // 2. The remaining header bytes belong to the same frame, so the wait is on the rest of a
-    // frame that has started rather than on a frame arriving at all
-    std::vector<uint8_t> raw{};
-    raw.push_back(b);
-    uint8_t head[4]{};
-    ad->setTimeout(WITHIN_FRAME_TIMEOUT_MS);
-    if (readWithTransaction(head, sizeof(head)) != m5::hal::error::error_t::OK) {
-        M5_LIB_LOGW("Header found but the rest did not arrive");
-        return false;
-    }
-    raw.insert(raw.end(), head, head + sizeof(head));
-
-    // 3. Parameter, checksum and end
-    const uint16_t param_len = static_cast<uint16_t>((head[2] << 8) | head[3]);
-    if (param_len > MAX_PARAMETER_LENGTH) {
-        M5_LIB_LOGW("Too large parameter length %u", param_len);
-        return false;
-    }
-    const size_t rest = static_cast<size_t>(param_len) + 2;
-    std::vector<uint8_t> tail(rest);
-    if (readWithTransaction(tail.data(), rest) != m5::hal::error::error_t::OK) {
-        return false;
-    }
-    raw.insert(raw.end(), tail.begin(), tail.end());
-
-    // 4. Validate
-    if (!parse_frame(out, raw.data(), raw.size(), _frame_header, _frame_end)) {
-        M5_LIB_LOGW("Malformed frame: %s", to_hex(raw.data(), raw.size()).c_str());
-        return false;
-    }
-    M5_LIB_LOGD("RX: %s", to_hex(raw.data(), raw.size()).c_str());
-    return true;
 }
 
 void UnitJRD4035::route_frame(const Frame& f)
@@ -367,6 +360,13 @@ void UnitJRD4035::route_frame(const Frame& f)
         // to succeeded(), which is reached only once the operation has given up
         M5_LIB_LOGD("Error frame %02X", code);
         if (_response_pending) {
+            // An error code names the operation it came from, so one that cannot have come from
+            // the command being waited on is left over from an exchange that already gave up.
+            // Taking it would answer this command with someone else's failure
+            if (!error_answers_command(code, _awaiting_command)) {
+                M5_LIB_LOGD("Error %02X cannot answer %02X; dropped", code, _awaiting_command);
+                return;
+            }
             _response         = f;
             _response_pending = false;
         }

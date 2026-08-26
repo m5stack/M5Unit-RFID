@@ -102,6 +102,8 @@ protected:
                        const uint32_t timeout_ms = 0);
     //! @brief Read one frame from the stream. Returns false when nothing is pending
     bool read_frame(m100::Frame& out, const uint32_t timeout_ms);
+    //! @brief Throw away everything received, in the driver and in the staging buffer alike
+    void flush_rx();
     //! @brief Route a received frame
     void route_frame(const m100::Frame& f);
     //! @brief Read the module information for one kind (0x00 hardware / 0x01 software / 0x02 manufacturer)
@@ -150,6 +152,9 @@ protected:
     uint8_t _frame_end{m100::jrd::FRAME_END};
 
     //! Response slot filled by route_frame while send_and_wait is pumping
+    //! @brief Bytes taken from the UART that have not been made into a frame yet. Keeping them
+    //! is what lets a frame that arrived in pieces be finished off by the next read
+    std::vector<uint8_t> _rx{};
     m100::Frame _response{};
     bool _response_pending{};
     uint8_t _awaiting_command{};
