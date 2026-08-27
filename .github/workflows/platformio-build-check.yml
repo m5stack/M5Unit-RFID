@@ -146,6 +146,10 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: UHF_MonzaQT
+            board: Core
+            framework: Arduino
+            espressif32: latest
 
     steps:
       - name: Checkout
