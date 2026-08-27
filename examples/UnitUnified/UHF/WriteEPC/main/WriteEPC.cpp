@@ -12,10 +12,14 @@
   them at once: reads and writes then collide and are reported as a tag that did not answer.
   Giving each tag an EPC of its own is what makes all of that behave.
 
-  The EPC written here is the first twelve bytes of the tag's own TID, which hold the class
-  identifier, the mask designer, the model and the chip's factory serial. That is unique per
-  tag without anything having to be counted or remembered, and running this twice over the same
-  tag writes the same value, so the second run finds nothing to do.
+  The EPC written here is the tag's own TID, which holds the class identifier, the mask
+  designer, the model and the chip's factory serial. That is unique per tag without anything
+  having to be counted or remembered, and running this twice over the same tag writes the same
+  value, so the second run finds nothing to do.
+
+  @note The tags this was written for carry a 96-bit TID, the same length as the EPC it
+  replaces. A tag whose TID is a different length is reported and left alone, since writing one
+  would mean changing the PC as well
 
   @warning This is not a GS1 EPC scheme. It is an identifier for a bench full of blank tags, not
   something to put on goods
@@ -36,8 +40,6 @@ m5::unit::UnitUnified Units;
 m5::unit::UnitUHFRFID unit{};
 m5::uhf::UHFLayer uhf{unit};
 
-//! @brief Words of TID that make up the new EPC, which is as long as the 96-bit EPC it replaces
-constexpr uint16_t TID_WORDS{6};
 //! @brief Word address the EPC starts at, after the stored CRC and the PC (Gen2 v2.1 6.3.2.1.2)
 constexpr uint16_t EPC_FIRST_WORD{2};
 
@@ -126,21 +128,6 @@ void print_bytes(const char* what, const uint8_t* data, const size_t len)
     M5_LOGI("%s: %s", what, text.c_str());
 }
 
-//! @brief Read the TID words that become the new EPC
-//! @details The first two words name the chip and the three after the XTID header hold the
-//! factory serial (TDS 16.1 and 16.2). They are read straight rather than through identify(),
-//! because a chip whose XTID header says there is no serial can still carry one: UCODE G2iM
-//! keeps a permalocked 48-bit serial at TID 30h to 5Fh with an XTID header of zero
-bool read_tid_for_epc(std::vector<uint8_t>& tid)
-{
-    if (!uhf.readBank(tid, m5::uhf::Bank::Tid, 0, TID_WORDS) || tid.size() != TID_WORDS * 2) {
-        M5_LOGE("Could not read %u words of TID", TID_WORDS);
-        lcd.println("TID: unreadable");
-        return false;
-    }
-    return true;
-}
-
 //! @brief Give the tag the EPC its own TID spells out
 //! @param detected The tag to work on
 //! @param dry_run Show what would be written and stop there. Nothing about the tag is changed
@@ -151,40 +138,45 @@ void write_own_epc(const m5::uhf::Tag& detected, const bool dry_run)
         lcd.println("select: failed");
         return;
     }
+    // The TID is what this example writes, so reading it is not optional. identify() reads the
+    // whole of it, following the XTID header where there is one and the chip's own layout where
+    // there is not: UCODE G2iM keeps a permalocked serial at TID 30h to 5Fh under a header of
+    // zero, and that serial is the part worth writing
     m5::uhf::Tag tag = detected;
-    if (uhf.identify(tag)) {
-        M5_LOGI("Chip: %s", tag.chipAsString().c_str());
-        lcd.printf("%s\n", tag.chipAsString().c_str());
-    }
-
-    std::vector<uint8_t> tid{};
-    if (!read_tid_for_epc(tid)) {
+    if (!uhf.identify(tag)) {
+        M5_LOGE("Could not read the tag's TID");
+        lcd.println("TID: unreadable");
         uhf.deselect();
         return;
     }
+    M5_LOGI("Chip: %s", tag.chipAsString().c_str());
+    lcd.printf("%s\n", tag.chipAsString().c_str());
+
+    const uint8_t* tid = tag.tid.begin();
+    const size_t tid_len{tag.tid.size};
     print_bytes("EPC now", detected.epc.begin(), detected.epc.size);
-    print_bytes("TID", tid.data(), tid.size());
-    print_bytes("EPC to write", tid.data(), tid.size());
+    print_bytes("TID", tid, tid_len);
+    print_bytes("EPC to write", tid, tid_len);
     // The same test the layer applies to a TID mask: everything before word 3 names the chip,
     // so a TID with nothing past it is the same on every tag of this kind and is no use either
     // as an EPC or as a way of addressing the tag while the EPC is being replaced
-    if (!m5::uhf::tidTellsTagsApart(tid.data(), tid.size())) {
+    if (!m5::uhf::tidTellsTagsApart(tid, tid_len)) {
         M5_LOGE("This chip carries no serial in its TID; there is nothing unique to write");
         lcd.println("no serial in TID");
         uhf.deselect();
         return;
     }
 
-    if (detected.epc.size == tid.size() && memcmp(detected.epc.begin(), tid.data(), tid.size()) == 0) {
+    if (detected.epc.size == tid_len && memcmp(detected.epc.begin(), tid, tid_len) == 0) {
         M5_LOGI("The tag already carries this EPC; nothing to do");
         lcd.println("already done");
         uhf.deselect();
         return;
     }
-    if (detected.epc.size != tid.size()) {
+    if (detected.epc.size != tid_len) {
         // Writing a different length would mean changing the PC as well, which is more than
         // this example takes on
-        M5_LOGE("The tag holds a %u-byte EPC, and this writes %zu", detected.epc.size, tid.size());
+        M5_LOGE("The tag holds a %u-byte EPC, and this writes %zu", detected.epc.size, tid_len);
         lcd.println("EPC length differs");
         uhf.deselect();
         return;
@@ -200,15 +192,14 @@ void write_own_epc(const m5::uhf::Tag& detected, const bool dry_run)
     // From here the tag is addressed by its TID. A mask built from the EPC matches on the very
     // bytes about to be replaced, so it stops picking this tag out half way through the write;
     // the TID is fixed at manufacture and goes on matching whatever happens to the EPC
-    m5::uhf::Tid mask{};
-    if (!mask.assign(tid.data(), tid.size()) || !uhf.select(mask)) {
+    if (!uhf.select(tag.tid)) {
         M5_LOGE("Failed to address the tag by its TID");
         lcd.println("TID select: failed");
         uhf.deselect();
         return;
     }
 
-    const bool wrote = uhf.writeBank(m5::uhf::Bank::Epc, EPC_FIRST_WORD, tid.data(), static_cast<uint16_t>(tid.size()));
+    const bool wrote = uhf.writeBank(m5::uhf::Bank::Epc, EPC_FIRST_WORD, tid, static_cast<uint16_t>(tid_len));
     if (!wrote) {
         // A failure part way through leaves the tag holding the front of the new EPC and the
         // back of the old one. Saying it kept the old one would be a guess
@@ -218,7 +209,7 @@ void write_own_epc(const m5::uhf::Tag& detected, const bool dry_run)
 
     // The TID mask still holds, so what the tag ended up with can be read straight back
     std::vector<uint8_t> back{};
-    if (!uhf.readBank(back, m5::uhf::Bank::Epc, EPC_FIRST_WORD, TID_WORDS)) {
+    if (!uhf.readBank(back, m5::uhf::Bank::Epc, EPC_FIRST_WORD, static_cast<uint16_t>(tid_len / 2))) {
         M5_LOGE("Could not read the EPC back; present the tag again to see what it holds");
         lcd.println("check it again");
         uhf.deselect();
@@ -227,7 +218,7 @@ void write_own_epc(const m5::uhf::Tag& detected, const bool dry_run)
     print_bytes("EPC after", back.data(), back.size());
     uhf.deselect();
 
-    const bool took = back.size() == tid.size() && memcmp(back.data(), tid.data(), tid.size()) == 0;
+    const bool took = back.size() == tid_len && memcmp(back.data(), tid, tid_len) == 0;
     M5_LOGI("Writing the EPC: %s", took ? "done" : "the tag holds something else");
     lcd.println(took ? "written" : "MISMATCH");
 }
