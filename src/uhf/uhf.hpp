@@ -360,6 +360,27 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
 }
 
 /*!
+  @brief Words of TID a chip carries without an XTID header to say so
+  @param chip Chip
+  @return Total words of TID, or zero where the header is the only thing that says
+  @details A chip whose XTID header reads zero still has whatever its datasheet lays out, and
+  some keep a permalocked serial there. Stopping at the two fixed words would leave that behind,
+  and a TID that stops short of the serial is the same on every tag of the model
+ */
+inline uint16_t chipTidWords(const Chip chip)
+{
+    switch (chip) {
+        case Chip::NxpUcodeG2iM:
+        case Chip::NxpUcodeG2iMPlus:
+            // SL3S1003_1013 Rev3.7 Table 8: 30h to 5Fh is a permalocked serial number, under an
+            // XTID header that reads 00h. The TID ends there; 60h onwards is User TID memory
+            return 6;
+        default:
+            return 0;
+    }
+}
+
+/*!
   @brief Is this a chip whose datasheet says it has no User bank at all?
   @param chip Chip
   @return True when the chip is known to have none
@@ -511,56 +532,6 @@ inline bool tidTellsTagsApart(const uint8_t* tid, const size_t len)
 }
 
 /*!
-  @struct TidReadPlan
-  @brief What to read next of a tag's TID, given what has been read of it so far
- */
-struct TidReadPlan {
-    uint16_t word_address{};  //!< Word address the next read starts at
-    uint16_t words{};         //!< Words to read, zero once nothing is left to read
-    bool fits{true};          //!< False when the header describes more than a Tid can hold
-};
-
-/*!
-  @brief Say what to read next of a TID
-  @param tid Bytes read so far, starting at TID word 0
-  @param len Their length in bytes
-  @return The next read, asking for no words once the TID is complete
-  @details A TID cannot be read in one go because each part says how much more there is: the two
-  fixed words say whether an XTID follows, and the XTID header says how long the rest is (TDS
-  16.1 and 16.2). Calling this after every read walks the whole TID in
-  @note A header describing more than TID_MAX_BYTES gives fits == false. Nothing is read for it,
-  since what came back could not be kept
- */
-inline TidReadPlan tidReadPlan(const uint8_t* tid, const size_t len)
-{
-    TidReadPlan plan{};
-    if (len < TID_FIXED_WORDS * 2) {
-        plan.words = static_cast<uint16_t>(TID_FIXED_WORDS);
-        return plan;
-    }
-    if (!tidHasXtid(tid, len)) {
-        return plan;
-    }
-    if (len < XTID_FIXED_WORDS * 2) {
-        plan.word_address = static_cast<uint16_t>(TID_FIXED_WORDS);
-        plan.words        = static_cast<uint16_t>(XTID_FIXED_WORDS - TID_FIXED_WORDS);
-        return plan;
-    }
-    const uint16_t header = static_cast<uint16_t>((tid[TID_FIXED_WORDS * 2] << 8) | tid[TID_FIXED_WORDS * 2 + 1]);
-    const size_t total    = xtidTotalWords(header);
-    if (total * 2 > TID_MAX_BYTES) {
-        plan.fits = false;
-        return plan;
-    }
-    const size_t have = len / 2;
-    if (have < total) {
-        plan.word_address = static_cast<uint16_t>(have);
-        plan.words        = static_cast<uint16_t>(total - have);
-    }
-    return plan;
-}
-
-/*!
   @brief Resolve a named mask designer from its identifier
   @param mdid Mask-designer identifier (9 bits)
   @return Vendor, or Vendor::Unknown when the identifier is not one we list
@@ -643,6 +614,82 @@ inline void fillSizesFromChip(Tag& tag)
     if (tag.epc_max_bits == 0) {
         tag.epc_max_bits = chipEpcMaxBits(tag.chip);
     }
+}
+
+/*!
+  @brief Name the chip from the two fixed words of a TID
+  @param tid TID bytes starting at word 0
+  @param len Their length in bytes
+  @return Chip, or Chip::Unknown where the bytes do not name one
+  @details The mask-designer identifier and the model number sit in the first two words, which
+  is what makes the chip known before the rest of the TID has been read
+ */
+inline Chip chipFromTid(const uint8_t* tid, const size_t len)
+{
+    if (tid == nullptr || len < TID_FIXED_WORDS * 2 || tid[0] != TID_CLASS_EPCGLOBAL) {
+        return Chip::Unknown;
+    }
+    const uint16_t mdid  = static_cast<uint16_t>(((tid[1] & 0x1F) << 4) | (tid[2] >> 4));
+    const uint16_t model = static_cast<uint16_t>(((tid[2] & 0x0F) << 8) | tid[3]);
+    return resolveChip(resolveVendor(mdid), model);
+}
+
+/*!
+  @struct TidReadPlan
+  @brief What to read next of a tag's TID, given what has been read of it so far
+ */
+struct TidReadPlan {
+    uint16_t word_address{};  //!< Word address the next read starts at
+    uint16_t words{};         //!< Words to read, zero once nothing is left to read
+    bool fits{true};          //!< False when the header describes more than a Tid can hold
+};
+
+/*!
+  @brief Say what to read next of a TID
+  @param tid Bytes read so far, starting at TID word 0
+  @param len Their length in bytes
+  @return The next read, asking for no words once the TID is complete
+  @details A TID cannot be read in one go because each part says how much more there is: the two
+  fixed words say whether an XTID follows, and the XTID header says how long the rest is (TDS
+  16.1 and 16.2). Calling this after every read walks the whole TID in
+  @note A header describing more than TID_MAX_BYTES gives fits == false. Nothing is read for it,
+  since what came back could not be kept
+ */
+inline TidReadPlan tidReadPlan(const uint8_t* tid, const size_t len)
+{
+    TidReadPlan plan{};
+    if (len < TID_FIXED_WORDS * 2) {
+        plan.words = static_cast<uint16_t>(TID_FIXED_WORDS);
+        return plan;
+    }
+    if (!tidHasXtid(tid, len)) {
+        // No header to say how long the TID is. The chip may still be one that keeps a serial
+        // past the words that name it, and that serial is the whole point of reading a TID
+        const size_t total = chipTidWords(chipFromTid(tid, len));
+        const size_t held  = len / 2;
+        if (total > held) {
+            plan.word_address = static_cast<uint16_t>(held);
+            plan.words        = static_cast<uint16_t>(total - held);
+        }
+        return plan;
+    }
+    if (len < XTID_FIXED_WORDS * 2) {
+        plan.word_address = static_cast<uint16_t>(TID_FIXED_WORDS);
+        plan.words        = static_cast<uint16_t>(XTID_FIXED_WORDS - TID_FIXED_WORDS);
+        return plan;
+    }
+    const uint16_t header = static_cast<uint16_t>((tid[TID_FIXED_WORDS * 2] << 8) | tid[TID_FIXED_WORDS * 2 + 1]);
+    const size_t total    = xtidTotalWords(header);
+    if (total * 2 > TID_MAX_BYTES) {
+        plan.fits = false;
+        return plan;
+    }
+    const size_t have = len / 2;
+    if (have < total) {
+        plan.word_address = static_cast<uint16_t>(have);
+        plan.words        = static_cast<uint16_t>(total - have);
+    }
+    return plan;
 }
 
 /*!

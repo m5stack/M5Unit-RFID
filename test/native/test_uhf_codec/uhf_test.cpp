@@ -1047,9 +1047,25 @@ TEST(UHF, TidReadPlan)
     EXPECT_EQ(plan.word_address, 0);
     EXPECT_EQ(plan.words, 2);
 
-    // Bit 08h clear: no XTID, so the TID ends after the fixed words
+    // Bit 08h clear: no XTID header to say how long the TID is. These bytes name a UCODE G2iM,
+    // whose datasheet puts a permalocked serial at 30h to 5Fh under a header that reads zero,
+    // so four more words follow the two in hand
     const uint8_t no_xtid[] = {0xE2, 0x00, 0x68, 0x0A};
-    plan                    = m5::uhf::tidReadPlan(no_xtid, sizeof(no_xtid));
+    EXPECT_EQ(m5::uhf::chipFromTid(no_xtid, sizeof(no_xtid)), m5::uhf::Chip::NxpUcodeG2iM);
+    plan = m5::uhf::tidReadPlan(no_xtid, sizeof(no_xtid));
+    EXPECT_EQ(plan.word_address, 2);
+    EXPECT_EQ(plan.words, 4);
+
+    // Once those six words are in hand there is nothing more to ask for
+    const uint8_t g2im_read[] = {0xE2, 0x00, 0x68, 0x0A, 0x00, 0x00, 0x40, 0x00, 0x02, 0xA3, 0xA9, 0x13};
+    plan                      = m5::uhf::tidReadPlan(g2im_read, sizeof(g2im_read));
+    EXPECT_EQ(plan.words, 0);
+    EXPECT_TRUE(m5::uhf::tidTellsTagsApart(g2im_read, sizeof(g2im_read)));
+
+    // A chip no table names says nothing beyond its fixed words, so the TID ends there
+    const uint8_t unlisted[] = {0xE2, 0x00, 0x6F, 0xFF};
+    EXPECT_EQ(m5::uhf::chipFromTid(unlisted, sizeof(unlisted)), m5::uhf::Chip::Unknown);
+    plan = m5::uhf::tidReadPlan(unlisted, sizeof(unlisted));
     EXPECT_EQ(plan.words, 0);
 
     // Bit 08h set: the header word follows, and only it says how long the rest is
