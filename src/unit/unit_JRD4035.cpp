@@ -31,6 +31,7 @@ constexpr uint8_t CMD_SET_CHANNEL{0xAB};
 constexpr uint8_t CMD_SET_HOPPING{0xAD};
 constexpr uint8_t CMD_SET_TX_POWER{0xB6};
 constexpr uint8_t CMD_GET_TX_POWER{0xB7};
+constexpr uint8_t CMD_SET_CONTINUOUS_CARRIER{0xB0};
 constexpr uint8_t CMD_IDLE_MODE{0x04};
 constexpr uint8_t CMD_SLEEP{0x17};
 constexpr uint8_t CMD_SET_AUTO_SLEEP_TIME{0x1D};
@@ -632,6 +633,18 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
     // leaves it acting on a flag the round no longer looks at, which nothing reports
     M5_LIB_LOGW("A select mask stored before this was built for the old round; store it again");
     return true;
+}
+
+bool UnitJRD4035::writeContinuousCarrier(const bool enable)
+{
+    if (reject_while_polling("writeContinuousCarrier")) {
+        return false;
+    }
+    Frame res{};
+    // The protocol spells the two states out rather than using one and zero
+    const uint8_t param[]{static_cast<uint8_t>(enable ? 0xFF : 0x00)};
+    return send_and_wait(res, CMD_SET_CONTINUOUS_CARRIER, param, sizeof(param)) &&
+           succeeded(res, "writeContinuousCarrier");
 }
 
 bool UnitJRD4035::writeAutoSleepTime(const uint8_t minutes)

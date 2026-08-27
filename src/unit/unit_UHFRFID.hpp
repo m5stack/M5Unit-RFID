@@ -178,6 +178,17 @@ public:
     virtual bool writeChannel(const uint8_t index) = 0;
     //! @brief Enable or disable automatic frequency hopping
     virtual bool writeAutomaticFrequencyHopping(const bool enable) = 0;
+    /*!
+      @brief Turn the unmodulated carrier on or off
+      @param enable True to transmit a carrier, false to stop
+      @return True if successful
+      @details A carrier with nothing modulated onto it, which is what a spectrum analyser or a
+      power meter needs to measure the transmitter. No tag answers it and nothing else uses it
+      @warning This transmits until it is turned off. What may be radiated, and for how long, is
+      a question of where the unit is being used: a carrier that never stops is not what the
+      channel rules of most regions have in mind
+     */
+    virtual bool writeContinuousCarrier(const bool enable) = 0;
     //! @brief Read the query parameters
     virtual bool readQueryParameters(m5::uhf::QueryParameters& qp) = 0;
     //! @brief Write the query parameters

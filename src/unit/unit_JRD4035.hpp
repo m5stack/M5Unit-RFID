@@ -44,6 +44,7 @@ public:
     virtual bool readChannel(uint8_t& index) override;
     virtual bool writeChannel(const uint8_t index) override;
     virtual bool writeAutomaticFrequencyHopping(const bool enable) override;
+    virtual bool writeContinuousCarrier(const bool enable) override;
     virtual bool readQueryParameters(m5::uhf::QueryParameters& qp) override;
     virtual bool writeQueryParameters(const m5::uhf::QueryParameters& qp) override;
     virtual bool writeAutoSleepTime(const uint8_t minutes) override;
