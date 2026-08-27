@@ -87,57 +87,20 @@ bool module_answers()
     return unit.readTransmitPower(dbm100);
 }
 
-//! @brief How many commands to send a sleeping module before giving up on one being answered
+//! @brief How many commands to send before giving up on one being answered
 constexpr int PROBE_ATTEMPTS{4};
 
-//! @brief Waits tried after waking, in milliseconds, before the module is asked anything
-constexpr uint32_t WAKE_WAITS_MS[]{0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000};
+/*!
+  @brief Sleep once, wake, and see what it costs to get an answer
+  @details One sleep per run, and no more. Sleeping and waking over and over has been seen to
+  leave the module answering nothing at all, watchdog resets included, so the wait between one
+  run and the next is the time it takes to press the button again.
 
-//! @brief How long to leave the module alone between one sleep and the next
-constexpr uint32_t SETTLE_MS{1000};
-
-//! @brief Find how long the module needs after being woken before it answers
-//! @details A command that fails takes the whole command timeout to say so, which is too coarse
-//! to measure with. Waiting a set time before asking anything, and lengthening it until the
-//! first question is answered, gives a figure as fine as the steps below
-//! @note wake() waits on its own account before returning, and that wait is inside every figure
-//! here. What is reported is the time from the wake byte, not from wake() returning
-void measure_wake_time()
-{
-    for (const uint32_t wait : WAKE_WAITS_MS) {
-        // Sleeping and waking again immediately has been seen to trip the module's watchdog,
-        // which answers 0x05 and leaves it not answering at all for a while
-        m5::utility::delay(SETTLE_MS);
-        if (!unit.sleep()) {
-            M5_LOGE("The module would not go to sleep");
-            lcd.println("sleep: failed");
-            return;
-        }
-        if (!unit.wake()) {
-            M5_LOGE("Failed to send the wake byte");
-            lcd.println("wake: failed");
-            return;
-        }
-        const unsigned long woke_at = m5::utility::millis();
-        m5::utility::delay(wait);
-        if (module_answers()) {
-            const unsigned long took = m5::utility::millis() - woke_at;
-            M5_LOGI("Answered %lums after waking, having been left alone for %ums", took, wait);
-            lcd.printf("wakes in %lums\n", took);
-            return;
-        }
-        M5_LOGI("Left alone for %ums, and the question that followed went unanswered", wait);
-    }
-    M5_LOGW("Nothing was answered within %ums of waking", WAKE_WAITS_MS[sizeof(WAKE_WAITS_MS) / sizeof(uint32_t) - 1]);
-    lcd.println("no answer");
-}
-
-//! @brief Sleep, then send commands until one is answered, counting them
-//! @details A sleeping module is woken by the first byte it receives and throws that byte away,
-//! which is why wake() sends one on its own. A command frame starts with a byte like any other,
-//! so sending one wakes the module and is lost doing it. This is the reason a single command
-//! that fails against a sleeping module says nothing about whether the module is reachable
-void sleep_then_probe()
+  Waking loses bytes rather than time. A module measured here answered the second command it
+  was sent whether it had been left alone for nothing or for twelve seconds, so what wake()
+  does is send the bytes those losses take rather than wait for them to stop
+ */
+void measure_wake()
 {
     if (!unit.sleep()) {
         M5_LOGE("The module would not go to sleep");
@@ -145,17 +108,28 @@ void sleep_then_probe()
         return;
     }
     M5_LOGI("Asleep");
+
     const unsigned long began = m5::utility::millis();
+    if (!unit.wake()) {
+        M5_LOGE("The module did not come back, %lums after being woken", m5::utility::millis() - began);
+        lcd.println("wake: failed");
+        return;
+    }
+    const unsigned long woke_in = m5::utility::millis() - began;
+
+    // wake() answers for itself, so anything sent now should be answered first time. Counting
+    // says whether that holds
+    const unsigned long asked_at = m5::utility::millis();
     for (int attempt = 1; attempt <= PROBE_ATTEMPTS; ++attempt) {
         if (module_answers()) {
-            M5_LOGI("Command %d of %d was answered, %lums after the module went to sleep", attempt, PROBE_ATTEMPTS,
-                    m5::utility::millis() - began);
-            lcd.printf("woken by command %d\n", attempt);
+            M5_LOGI("Awake in %lums, and command %d of %d was answered %lums later", woke_in, attempt, PROBE_ATTEMPTS,
+                    m5::utility::millis() - asked_at);
+            lcd.printf("awake %lums, cmd %d\n", woke_in, attempt);
             return;
         }
     }
-    M5_LOGI("%d commands went unanswered over %lums", PROBE_ATTEMPTS, m5::utility::millis() - began);
-    lcd.println("still asleep");
+    M5_LOGE("Awake in %lums, but %d commands after it went unanswered", woke_in, PROBE_ATTEMPTS);
+    lcd.println("awake, then silent");
 }
 
 //! @brief The one tag in the field, or none
@@ -320,8 +294,7 @@ void loop()
                 selection_across(detected, LowPower::LayerSleep);
             }
         } else {
-            measure_wake_time();
-            sleep_then_probe();
+            measure_wake();
         }
     }
     if (M5.BtnA.wasHold()) {

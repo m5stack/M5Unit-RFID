@@ -135,9 +135,10 @@ constexpr uint32_t RESYNC_LIMIT_MS{250};
 
 //! @brief Byte sent to wake the module. Any value does; the protocol does not name one
 constexpr uint8_t WAKE_BYTE{0x55};
-//! @brief How long to wait after the wake byte. Known to be short: a module can take over a
-//! second to answer, and no figure for this appears in the vendor's documents
-constexpr uint32_t WAKE_DELAY_MS{100};
+//! @brief How long to wait after the wake byte before asking the module anything
+constexpr uint32_t WAKE_DELAY_MS{20};
+//! @brief How many questions waking costs. The first is thrown away and the second is answered
+constexpr int WAKE_QUESTIONS{2};
 
 //! @brief A bank code that is not one of the four, used to reject a bank cast in from outside
 constexpr uint8_t MEMBANK_NONE{0xFF};
@@ -672,16 +673,25 @@ bool UnitJRD4035::wake()
         M5_LIB_LOGE("Illegal adapter");
         return false;
     }
-    // The module discards whatever byte wakes it, so this one is spent on that alone
+    // The module throws away the byte that wakes it, and the command that follows goes
+    // unanswered as well. Waiting does not stop that: a module measured across waits from
+    // nothing to twelve seconds lost its first command every time and answered the second.
+    // What waking costs is a command, so one is spent on it here rather than by the caller
     const uint8_t byte{WAKE_BYTE};
     if (writeWithTransaction(&byte, 1) != m5::hal::error::error_t::OK) {
         M5_LIB_LOGE("Failed to send the wake byte");
         return false;
     }
-    // Waking powers the chip down and reloads its firmware, so nothing answers until that is
-    // done. How long that takes is not documented, and this is not a measured figure
     m5::utility::delay(WAKE_DELAY_MS);
-    return true;
+    flush_rx();
+    for (int i = 0; i < WAKE_QUESTIONS; ++i) {
+        Frame res{};
+        if (send_and_wait(res, CMD_GET_TX_POWER, nullptr, 0)) {
+            return true;
+        }
+    }
+    M5_LIB_LOGE("The module did not answer either of the %d questions after being woken", WAKE_QUESTIONS);
+    return false;
 }
 
 bool UnitJRD4035::writeOperatingChannels(const std::vector<uint8_t>& channels)
