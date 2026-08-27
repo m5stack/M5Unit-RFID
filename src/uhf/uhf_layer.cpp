@@ -27,6 +27,10 @@ constexpr uint32_t EPC_MASK_POINTER_BITS{0x20};
 constexpr uint32_t TID_MASK_POINTER_BITS{0x00};
 //! @brief Word holding the first half of the EPC, past the CRC-16 and the PC
 constexpr uint16_t EPC_FIRST_WORD{2};
+//! @brief QT control word, bit 15: the tag reduces its range once open or secured
+constexpr uint16_t QT_SHORT_RANGE{0x8000};
+//! @brief QT control word, bit 14: the tag shows its public memory map
+constexpr uint16_t QT_PUBLIC_MEMORY{0x4000};
 //! @brief Words of the TID that sit at a fixed address whatever the tag is
 }  // namespace
 
@@ -250,7 +254,14 @@ bool UHFLayer::identify(Tag& tag)
         }
         std::vector<uint8_t> part{};
         if (!_u.read_tag_memory(part, Bank::Tid, plan.word_address, plan.words, _access_password)) {
-            return false;
+            // A tag can promise more TID than it has: an Impinj Monza 4QT showing its public
+            // map still says it has an extended TID, and answers with a memory overrun when
+            // asked for one. What was read before that already names the chip, so it is kept
+            if (tid.empty()) {
+                return false;
+            }
+            M5_LIB_LOGW("The tag has less TID than it says; keeping the %zu bytes that read", tid.size());
+            break;
         }
         // A short answer would leave the plan asking for the same words again, so the loop
         // insists on getting what it asked for
@@ -512,6 +523,60 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
         m5::utility::delay(RETRY_INTERVAL_MS);
     }
     return false;
+}
+
+bool UHFLayer::readQTParameters(QTParameters& qt)
+{
+    qt = QTParameters{};
+    if (!_has_selection) {
+        M5_LIB_LOGE("readQTParameters needs a tag to have been selected");
+        return false;
+    }
+    // Only a chip that is known not to have the command is turned away. One this table does
+    // not name is tried: not knowing is not the same as knowing it cannot
+    if (_selected.chip != Chip::Unknown && !chipSupportsQT(_selected.chip)) {
+        M5_LIB_LOGE("%s has no QT command", _selected.chipAsString().c_str());
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    uint16_t control{};
+    if (!_u.qt_command(control, false, false, _access_password)) {
+        return false;
+    }
+    qt.short_range   = (control & QT_SHORT_RANGE) != 0;
+    qt.public_memory = (control & QT_PUBLIC_MEMORY) != 0;
+    return true;
+}
+
+bool UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("writeQTParameters needs a tag to have been selected");
+        return false;
+    }
+    // Only a chip that is known not to have the command is turned away. One this table does
+    // not name is tried: not knowing is not the same as knowing it cannot
+    if (_selected.chip != Chip::Unknown && !chipSupportsQT(_selected.chip)) {
+        M5_LIB_LOGE("%s has no QT command", _selected.chipAsString().c_str());
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    uint16_t control =
+        static_cast<uint16_t>((qt.short_range ? QT_SHORT_RANGE : 0) | (qt.public_memory ? QT_PUBLIC_MEMORY : 0));
+    if (!_u.qt_command(control, true, persistent, _access_password)) {
+        return false;
+    }
+    // The public map answers with an EPC of its own, so a mask built from the private one stops
+    // matching. Whichever way it went, the mask that is stored may no longer name this tag
+    if (qt.public_memory) {
+        M5_LIB_LOGW("The tag answers under a different EPC now; select it again");
+        _has_selection = false;
+    }
+    return true;
 }
 
 bool UHFLayer::reapply_selection()
