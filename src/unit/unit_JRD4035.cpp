@@ -32,6 +32,9 @@ constexpr uint8_t CMD_SET_HOPPING{0xAD};
 constexpr uint8_t CMD_SET_TX_POWER{0xB6};
 constexpr uint8_t CMD_GET_TX_POWER{0xB7};
 constexpr uint8_t CMD_SET_CONTINUOUS_CARRIER{0xB0};
+constexpr uint8_t CMD_MONZA_QT{0xE5};
+//! @brief Command code a QT write is answered under, which is not the one it was sent as
+constexpr uint8_t CMD_MONZA_QT_WRITE_ANSWER{0xE6};
 constexpr uint8_t CMD_IDLE_MODE{0x04};
 constexpr uint8_t CMD_SLEEP{0x17};
 constexpr uint8_t CMD_SET_AUTO_SLEEP_TIME{0x1D};
@@ -429,14 +432,14 @@ bool UnitJRD4035::send_command(const uint8_t command, const uint8_t* param, cons
 }
 
 bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
-                                const uint32_t timeout_ms)
+                                const uint32_t timeout_ms, const uint8_t answer_command)
 {
     // Anything that arrived since the last exchange is taken first: route_frame queues tag
     // notifications as usual and drops answers, because nothing is pending yet. That clears what
     // has already come in; an answer still on its way is waited out where the timeout happens
     pump(1);
 
-    _awaiting_command = command;
+    _awaiting_command = answer_command ? answer_command : command;
     _response         = Frame{};
     _response_pending = true;
 
@@ -632,6 +635,42 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
     // A mask already stored was built to match the round these settings describe. Changing them
     // leaves it acting on a flag the round no longer looks at, which nothing reports
     M5_LIB_LOGW("A select mask stored before this was built for the old round; store it again");
+    return true;
+}
+
+bool UnitJRD4035::qt_command(uint16_t& control, const bool write, const bool persistent, const uint32_t access_password)
+{
+    const uint8_t param[]{static_cast<uint8_t>(access_password >> 24), static_cast<uint8_t>(access_password >> 16),
+                          static_cast<uint8_t>(access_password >> 8),  static_cast<uint8_t>(access_password),
+                          static_cast<uint8_t>(write ? 0x01 : 0x00),   static_cast<uint8_t>(persistent ? 0x01 : 0x00),
+                          static_cast<uint8_t>(control >> 8),          static_cast<uint8_t>(control)};
+    Frame res{};
+    // A write is answered under a code of its own, which is the one to wait for. Like any other
+    // tag operation this is worth repeating: 0x2E covers a tag that said nothing at all
+    const uint8_t answer = write ? CMD_MONZA_QT_WRITE_ANSWER : 0;
+    if (!send_tag_operation(res, CMD_MONZA_QT, param, sizeof(param), "qt_command", answer)) {
+        return false;
+    }
+    // Both answers carry the tag that replied before anything else: a length byte, then that
+    // many bytes of PC and EPC. A read puts the control word after them, a write a status byte
+    if (res.parameter.empty()) {
+        M5_LIB_LOGE("QT answered with nothing");
+        return false;
+    }
+    const size_t tag_len = res.parameter[0];
+    const size_t rest    = res.parameter.size() - 1;
+    if (rest < tag_len) {
+        M5_LIB_LOGE("QT answered with %u bytes of tag in %u", static_cast<unsigned>(tag_len),
+                    static_cast<unsigned>(rest));
+        return false;
+    }
+    if (!write) {
+        if (rest < tag_len + 2) {
+            M5_LIB_LOGE("QT read answered without a control word");
+            return false;
+        }
+        control = static_cast<uint16_t>((res.parameter[1 + tag_len] << 8) | res.parameter[2 + tag_len]);
+    }
     return true;
 }
 
@@ -836,12 +875,12 @@ bool UnitJRD4035::writeDemodulatorParameters(const m100::DemodulatorParameters& 
 }
 
 bool UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, const uint8_t* param,
-                                     const uint16_t param_len, const char* what)
+                                     const uint16_t param_len, const char* what, const uint8_t answer_command)
 {
     for (int attempt = 1; attempt <= TAG_OPERATION_ATTEMPTS; ++attempt) {
         // A module saying nothing at all is not failing for a reason a repeat would fix, and
         // each attempt would cost the whole timeout, so that case is left alone
-        if (!send_and_wait(response, command, param, param_len, TAG_OPERATION_TIMEOUT_MS)) {
+        if (!send_and_wait(response, command, param, param_len, TAG_OPERATION_TIMEOUT_MS, answer_command)) {
             return false;
         }
         if (!is_error_frame(response.command)) {

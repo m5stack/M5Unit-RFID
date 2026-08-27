@@ -327,6 +327,16 @@ protected:
     virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) = 0;
     //! @brief Kill the addressed tag permanently
     virtual bool kill_tag(const uint32_t kill_password) = 0;
+    /*!
+      @brief Read or write the QT control word of the addressed tag
+      @param[in,out] control Word read, or word to write
+      @param write True to write, false to read
+      @param persistent True to write where a loss of power does not undo it
+      @param access_password Access password of the tag
+      @return True if successful
+     */
+    virtual bool qt_command(uint16_t& control, const bool write, const bool persistent,
+                            const uint32_t access_password) = 0;
     ///@}
 
     /*!

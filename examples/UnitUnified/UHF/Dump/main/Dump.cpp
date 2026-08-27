@@ -142,6 +142,16 @@ void print_identity(const m5::uhf::Tag& tag)
     M5_LOGI("Sizes : user=%s maxEPC=%s permalockBlock=%s", user_memory_size(tag).c_str(),
             bits_or_unknown(tag.epc_max_bits).c_str(), bits_or_unknown(tag.permalock_block_bits).c_str());
 
+    // The one chip here that keeps two memory maps says which of them it is showing. Reading
+    // that changes nothing, and no other chip answers it
+    if (tag.chip == m5::uhf::Chip::ImpinjMonza4QT) {
+        m5::uhf::QTParameters qt{};
+        if (uhf.readQTParameters(qt)) {
+            M5_LOGI("QT    : %s memory, short range %s", qt.public_memory ? "public" : "private",
+                    qt.short_range ? "on" : "off");
+        }
+    }
+
     lcd.printf("%s / %s\n", tag.vendorAsString().c_str(), tag.chipAsString().c_str());
     lcd.printf("user %s\n", user_memory_size(tag).c_str());
 }

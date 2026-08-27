@@ -449,6 +449,25 @@ inline uint16_t chipTidWords(const Chip chip)
 }
 
 /*!
+  @brief Is this a chip whose datasheet gives it the QT command?
+  @param chip Chip
+  @return True where the datasheet says it has it
+  @details Only a chip that is known not to have it can be turned away. A chip this table does
+  not name is worth trying rather than refusing: not knowing is not the same as knowing it
+  cannot
+ */
+inline bool chipSupportsQT(const Chip chip)
+{
+    switch (chip) {
+        case Chip::ImpinjMonza4QT:
+            // Monza 4 V10.0 Table 2-8, the only part of the family with the column ticked
+            return true;
+        default:
+            return false;
+    }
+}
+
+/*!
   @brief Size of the block BlockPermalock works in, in bits
   @param chip Chip
   @return Block size, or zero where it is not known
@@ -993,6 +1012,20 @@ struct QueryParameters {
 
 //! @brief Longest select mask the module accepts, the length field being 8 bits wide
 constexpr size_t SELECT_MASK_MAX_BYTES{32};
+
+/*!
+  @struct QTParameters
+  @brief QT control word of an Impinj Monza 4QT
+  @details The chip keeps two memory maps and shows one at a time. Which one it shows, and
+  whether it insists on being close to the antenna before it can be switched, is what this
+  word holds (Monza 4 V10.0 Table 2-3)
+ */
+struct QTParameters {
+    //! @brief The tag answers at a reduced range once it is open or about to be
+    bool short_range{};
+    //! @brief The tag shows its public memory map rather than its private one
+    bool public_memory{};
+};
 
 /*!
   @struct SelectParameter

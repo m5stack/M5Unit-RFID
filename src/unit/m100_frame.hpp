@@ -240,6 +240,8 @@ constexpr uint8_t COMMAND_NXP_CHANGE_EAS{0xE3};
 constexpr uint8_t COMMAND_NXP_EAS_ALARM{0xE4};
 //! @brief Impinj Monza QT
 constexpr uint8_t COMMAND_MONZA_QT{0xE5};
+//! @brief Command code a Monza QT write is answered under, which is not the one it was sent as
+constexpr uint8_t COMMAND_MONZA_QT_WRITE_ANSWER{0xE6};
 ///@}
 //! @brief Fixed part of a tag notification (RSSI, PC and CRC)
 constexpr size_t TAG_NOTIFICATION_OVERHEAD{5};
@@ -890,7 +892,8 @@ inline bool error_answers_command(const uint8_t error_code, const uint8_t comman
         case Error::ResetReadProtectFail:
             return command == COMMAND_NXP_READ_PROTECT;
         case Error::QTFail:
-            return command == COMMAND_MONZA_QT;
+            // A write is answered under a code of its own, so both can be waited on
+            return command == COMMAND_MONZA_QT || command == COMMAND_MONZA_QT_WRITE_ANSWER;
         case Error::WatchDogReset:
             // The command in flight died with the reset and will never be answered
             return true;

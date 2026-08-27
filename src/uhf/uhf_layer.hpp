@@ -214,6 +214,28 @@ public:
       kill password, so a tag that was only meant to be protected becomes one that can be killed
      */
     bool kill(const Tag& tag, const uint32_t kill_password);
+    /*!
+      @brief Read the QT control word of the selected tag
+      @param[out] qt What the tag answered
+      @return True if successful
+      @note Impinj Monza 4QT only. A chip the table names and that does not have the command is
+      turned away before anything is sent; one it does not name is tried
+     */
+    bool readQTParameters(QTParameters& qt);
+    /*!
+      @brief Write the QT control word of the selected tag
+      @param qt What to write
+      @param persistent True to write it where a loss of power does not undo it
+      @return True if successful
+      @details Switching to the public map hides the tag's user memory, the longer half of its
+      EPC, and all of its TID but the first two words. The tag answers with an EPC of its own
+      kept for that purpose, so afterwards it looks like a different tag
+      @warning A volatile write lasts only while the tag is powered, which is until the reader
+      stops transmitting: the map is back to what it was before the tag is next found. Anything
+      meant to outlast that has to be persistent
+      @note Either way the tag can be switched back, so neither is a one-way door
+     */
+    bool writeQTParameters(const QTParameters& qt, const bool persistent = false);
     ///@}
 
 private:

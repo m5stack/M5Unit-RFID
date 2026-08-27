@@ -95,6 +95,8 @@ protected:
                                   const size_t len, const uint32_t access_password) override;
     virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) override;
     virtual bool kill_tag(const uint32_t kill_password) override;
+    virtual bool qt_command(uint16_t& control, const bool write, const bool persistent,
+                            const uint32_t access_password) override;
 
     //! @brief Send a command frame
     bool send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len);
@@ -106,11 +108,12 @@ protected:
       @param param_len Parameter length
       @param timeout_ms How long to wait, or 0 to wait config_t::command_timeout_ms
       @return True if successful
-      @note The module answers every command under the code it was sent, including the two the
-      protocol document says come back as something else
+      @param answer_command Code the answer comes back under, where that is not the code sent
+      @note Nearly every command is answered under the code it was sent, the two the protocol
+      document says come back as something else included. A Monza QT write is the exception
      */
     bool send_and_wait(m100::Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
-                       const uint32_t timeout_ms = 0);
+                       const uint32_t timeout_ms = 0, const uint8_t answer_command = 0);
     //! @brief Read one frame from the stream. Returns false when nothing is pending
     bool read_frame(m100::Frame& out, const uint32_t timeout_ms);
     //! @brief Throw away everything received, in the driver and in the staging buffer alike
@@ -157,7 +160,7 @@ protected:
       apart from a kill that never happened
      */
     bool send_tag_operation(m100::Frame& response, const uint8_t command, const uint8_t* param,
-                            const uint16_t param_len, const char* what);
+                            const uint16_t param_len, const char* what, const uint8_t answer_command = 0);
 
     //! Frame header. A derived class for the R200 family sets this to m100::r200::FRAME_HEADER
     uint8_t _frame_header{m100::jrd::FRAME_HEADER};
