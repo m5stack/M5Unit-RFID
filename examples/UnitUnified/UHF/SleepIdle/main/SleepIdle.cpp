@@ -184,22 +184,21 @@ bool same_selection(const m5::uhf::SelectParameter& a, const m5::uhf::SelectPara
 
 //! @brief What to put the module into, and what to call it in the report
 enum class LowPower : uint8_t {
-    UnitSleep,   //!< The module's own sleep, and nothing else
-    LayerSleep,  //!< The same sleep through the layer, which stores the mask again on the way back
-    Idle,        //!< IDLE, which keeps what the module was holding
+    Sleep,  //!< The module's own sleep, which resets the chip
+    Idle,   //!< IDLE, which keeps what the module was holding
 };
 
 //! @brief Take a selected tag down into one low power mode and back, and say what survived
 //! @param detected Tag to work on
 //! @param mode Which of the three ways down to use
 //! @return True if the module went down and came back
-//! @details The three are worth seeing side by side. The module's own sleep loses the mask.
-//! The layer stores it again on the way back. IDLE never loses it, which is what makes it the
+//! @details The two are worth seeing side by side. Sleeping loses the mask, so the tag has to
+//! be given up first and selected again after. IDLE never loses it, which is what makes it the
 //! one to reach for while a tag is being addressed
 bool selection_across(const m5::uhf::Tag& detected, const LowPower mode)
 {
     {
-        const char* who = (mode == LowPower::Idle) ? "idle" : (mode == LowPower::LayerSleep ? "layer" : "unit");
+        const char* who = (mode == LowPower::Idle) ? "idle" : "sleep";
         if (!uhf.select(detected)) {
             M5_LOGE("Failed to select the tag");
             lcd.println("select: failed");
@@ -211,18 +210,13 @@ bool selection_across(const m5::uhf::Tag& detected, const LowPower mode)
             return false;
         }
 
-        bool down{};
-        switch (mode) {
-            case LowPower::UnitSleep:
-                down = unit.sleep();
-                break;
-            case LowPower::LayerSleep:
-                down = uhf.sleep();
-                break;
-            case LowPower::Idle:
-                down = unit.writeIdle(true);
-                break;
+        // A tag being addressed is given up before sleeping: the mask does not survive it, and
+        // a layer that still believed a tag was selected would read whichever tag answered
+        const bool sleeping = (mode == LowPower::Sleep);
+        if (sleeping) {
+            uhf.deselect();
         }
+        const bool down = sleeping ? unit.sleep() : unit.writeIdle(true);
         if (!down) {
             M5_LOGE("The module would not go into %s", who);
             uhf.deselect();
@@ -230,20 +224,9 @@ bool selection_across(const m5::uhf::Tag& detected, const LowPower mode)
         }
         M5_LOGI("Down through the %s", who);
 
-        bool up{};
-        switch (mode) {
-            case LowPower::UnitSleep:
-                up = unit.wake();
-                break;
-            case LowPower::LayerSleep:
-                up = uhf.wake();
-                break;
-            case LowPower::Idle:
-                // Nothing wakes IDLE: the next command does it. Asking it to leave is only so
-                // that the report below is of a module that is fully back
-                up = unit.writeIdle(false);
-                break;
-        }
+        // Nothing wakes IDLE: the next command does it. Asking it to leave is only so that the
+        // report below is of a module that is fully back
+        const bool up = sleeping ? unit.wake() : unit.writeIdle(false);
         if (!up) {
             M5_LOGE("Failed to come back through the %s", who);
             uhf.deselect();
@@ -290,9 +273,7 @@ void loop()
         // none, the module on its own is all there is to measure
         m5::uhf::Tag detected{};
         if (detect_one(detected)) {
-            if (selection_across(detected, LowPower::UnitSleep)) {
-                selection_across(detected, LowPower::LayerSleep);
-            }
+            selection_across(detected, LowPower::Sleep);
         } else {
             measure_wake();
         }
