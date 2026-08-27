@@ -215,6 +215,34 @@ public:
      */
     bool kill(const Tag& tag, const uint32_t kill_password);
     /*!
+      @brief Read which blocks of a bank the selected tag has permanently locked
+      @param[out] mask One bit per block, the first block in the most significant bit
+      @param bank Bank the blocks are in
+      @param block_pointer First block the mask covers, in units of sixteen
+      @param block_range Words of mask to ask for, each covering sixteen blocks
+      @return True if successful
+      @note How large a block is, is the chip's to decide: an Impinj Monza 4QT divides its user
+      memory into four of 128 bits. chipPermalockBlockBits() is what says so where it is known
+      @note Gen2 leaves BlockPermalock optional. A tag without it answers with a failure
+     */
+    bool readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, const uint16_t block_pointer = 0,
+                            const uint8_t block_range = 1);
+    /*!
+      @brief Permanently lock blocks of a bank on the selected tag
+      @param bank Bank the blocks are in
+      @param mask One bit per block, the first block in the most significant bit. A bit set
+      locks that block; a bit clear leaves it as it is
+      @param mask_len Its length in bytes, which is twice block_range
+      @param allow_permanent Permit the operation, which cannot be undone
+      @param block_pointer First block the mask covers, in units of sixteen
+      @param block_range Words of mask, each covering sixteen blocks
+      @return True if successful
+      @warning A locked block is unwritable for the life of the tag. There is no way back, which
+      is why this does nothing unless allow_permanent says otherwise
+     */
+    bool blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
+                        const uint16_t block_pointer = 0, const uint8_t block_range = 1);
+    /*!
       @brief Read the QT control word of the selected tag
       @param[out] qt What the tag answered
       @return True if successful

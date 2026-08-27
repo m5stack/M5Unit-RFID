@@ -525,6 +525,42 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
     return false;
 }
 
+bool UHFLayer::readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, const uint16_t block_pointer,
+                                  const uint8_t block_range)
+{
+    mask.clear();
+    if (!_has_selection) {
+        M5_LIB_LOGE("readBlockPermalock needs a tag to have been selected");
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    return _u.block_permalock(mask, bank, block_pointer, block_range, nullptr, 0, _access_password);
+}
+
+bool UHFLayer::blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
+                              const uint16_t block_pointer, const uint8_t block_range)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("blockPermalock needs a tag to have been selected");
+        return false;
+    }
+    if (!allow_permanent) {
+        M5_LIB_LOGE("blockPermalock is permanent; pass allow_permanent to mean it");
+        return false;
+    }
+    if (mask == nullptr || mask_len == 0) {
+        M5_LIB_LOGE("blockPermalock needs a mask saying which blocks to lock");
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    std::vector<uint8_t> ignored{};
+    return _u.block_permalock(ignored, bank, block_pointer, block_range, mask, mask_len, _access_password);
+}
+
 bool UHFLayer::readQTParameters(QTParameters& qt)
 {
     qt = QTParameters{};

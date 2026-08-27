@@ -95,6 +95,9 @@ protected:
                                   const size_t len, const uint32_t access_password) override;
     virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) override;
     virtual bool kill_tag(const uint32_t kill_password) override;
+    virtual bool block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                 const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                 const uint32_t access_password) override;
     virtual bool qt_command(uint16_t& control, const bool write, const bool persistent,
                             const uint32_t access_password) override;
 

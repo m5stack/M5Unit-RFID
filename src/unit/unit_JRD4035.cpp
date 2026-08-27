@@ -32,6 +32,9 @@ constexpr uint8_t CMD_SET_HOPPING{0xAD};
 constexpr uint8_t CMD_SET_TX_POWER{0xB6};
 constexpr uint8_t CMD_GET_TX_POWER{0xB7};
 constexpr uint8_t CMD_SET_CONTINUOUS_CARRIER{0xB0};
+constexpr uint8_t CMD_BLOCK_PERMALOCK{COMMAND_BLOCK_PERMALOCK};
+//! @brief Command code a BlockPermalock lock is answered under, which the read is not
+constexpr uint8_t CMD_BLOCK_PERMALOCK_LOCK_ANSWER{COMMAND_BLOCK_PERMALOCK_LOCK_ANSWER};
 constexpr uint8_t CMD_MONZA_QT{0xE5};
 //! @brief Command code a QT write is answered under, which is not the one it was sent as
 constexpr uint8_t CMD_MONZA_QT_WRITE_ANSWER{0xE6};
@@ -635,6 +638,62 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
     // A mask already stored was built to match the round these settings describe. Changing them
     // leaves it acting on a flag the round no longer looks at, which nothing reports
     M5_LIB_LOGW("A select mask stored before this was built for the old round; store it again");
+    return true;
+}
+
+bool UnitJRD4035::block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                  const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                  const uint32_t access_password)
+{
+    out.clear();
+    const bool lock = mask != nullptr;
+    // Each word of mask covers sixteen blocks, so the two have to agree
+    if (lock && mask_len != static_cast<size_t>(block_range) * 2) {
+        M5_LIB_LOGE("A range of %u wants %u bytes of mask, not %zu", block_range, block_range * 2, mask_len);
+        return false;
+    }
+    std::vector<uint8_t> param{static_cast<uint8_t>(access_password >> 24),
+                               static_cast<uint8_t>(access_password >> 16),
+                               static_cast<uint8_t>(access_password >> 8),
+                               static_cast<uint8_t>(access_password),
+                               static_cast<uint8_t>(lock ? 0x01 : 0x00),
+                               static_cast<uint8_t>(bank),
+                               static_cast<uint8_t>(block_pointer >> 8),
+                               static_cast<uint8_t>(block_pointer),
+                               block_range};
+    if (lock) {
+        param.insert(param.end(), mask, mask + mask_len);
+    }
+
+    Frame res{};
+    // A lock is answered under a code of its own, which is the one to wait for
+    const uint8_t answer = lock ? CMD_BLOCK_PERMALOCK_LOCK_ANSWER : 0;
+    if (!send_tag_operation(res, CMD_BLOCK_PERMALOCK, param.data(), static_cast<uint16_t>(param.size()),
+                            "block_permalock", answer)) {
+        return false;
+    }
+    // Both answers begin with the tag that replied: a length byte and that many bytes of PC and
+    // EPC. A read puts the range and the mask after them, a lock a status byte
+    if (res.parameter.empty()) {
+        M5_LIB_LOGE("BlockPermalock answered with nothing");
+        return false;
+    }
+    if (lock) {
+        return true;
+    }
+    const size_t tag_len = res.parameter[0];
+    const size_t rest    = res.parameter.size() - 1;
+    if (rest < tag_len + 1) {
+        M5_LIB_LOGE("BlockPermalock read answered without a mask");
+        return false;
+    }
+    const size_t range = res.parameter[1 + tag_len];
+    if (rest < tag_len + 1 + range * 2) {
+        M5_LIB_LOGE("BlockPermalock read answered with %zu words of mask in %zu bytes", range, rest);
+        return false;
+    }
+    out.assign(res.parameter.begin() + static_cast<long>(2 + tag_len),
+               res.parameter.begin() + static_cast<long>(2 + tag_len + range * 2));
     return true;
 }
 

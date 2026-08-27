@@ -328,6 +328,21 @@ protected:
     //! @brief Kill the addressed tag permanently
     virtual bool kill_tag(const uint32_t kill_password) = 0;
     /*!
+      @brief Read or set which blocks of a bank are permanently locked
+      @param[out] out Mask read, one bit per block with the first block in the most significant
+      bit. Left alone when locking
+      @param bank Bank the blocks are in
+      @param block_pointer First block the mask covers, in units of sixteen
+      @param block_range Words of mask, each covering sixteen blocks
+      @param mask Mask to apply, or nullptr to read
+      @param mask_len Its length in bytes, which is twice block_range
+      @param access_password Access password of the tag
+      @return True if successful
+     */
+    virtual bool block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                 const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                 const uint32_t access_password) = 0;
+    /*!
       @brief Read or write the QT control word of the addressed tag
       @param[in,out] control Word read, or word to write
       @param write True to write, false to read

@@ -230,6 +230,8 @@ constexpr uint8_t COMMAND_WRITE_TAG_MEMORY{0x49};
 constexpr uint8_t COMMAND_KILL_TAG{0x65};
 constexpr uint8_t COMMAND_LOCK_TAG_MEMORY{0x82};
 constexpr uint8_t COMMAND_BLOCK_PERMALOCK{0xD3};
+//! @brief Command code a BlockPermalock lock is answered under, unlike the read
+constexpr uint8_t COMMAND_BLOCK_PERMALOCK_LOCK_ANSWER{0xD4};
 //! @brief NXP ChangeConfig
 constexpr uint8_t COMMAND_NXP_CHANGE_CONFIG{0xE0};
 //! @brief NXP ReadProtect and Reset ReadProtect, which share one command code
@@ -874,7 +876,8 @@ inline bool error_answers_command(const uint8_t error_code, const uint8_t comman
         case Error::LockFail:
             return command == COMMAND_LOCK_TAG_MEMORY;
         case Error::BlockPermalockFail:
-            return command == COMMAND_BLOCK_PERMALOCK;
+            // A lock is answered under a code of its own, so both can be waited on
+            return command == COMMAND_BLOCK_PERMALOCK || command == COMMAND_BLOCK_PERMALOCK_LOCK_ANSWER;
         case Error::InventoryFail:
             return command == COMMAND_SINGLE_POLLING || command == COMMAND_MULTIPLE_POLLING;
         case Error::AccessFail:
