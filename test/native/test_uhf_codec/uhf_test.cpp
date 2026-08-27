@@ -946,6 +946,8 @@ TEST(UHF, RouteFor)
     EXPECT_EQ(route_for(error_frame(0x09), true, COMMAND_LOCK_TAG_MEMORY), FrameRoute::Drop);
 
     // A code any command can provoke, and one this table does not name, answer whatever is sent
+    EXPECT_EQ(route_for(error_frame(0x0E), true, COMMAND_WRITE_TAG_MEMORY), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x05), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
     EXPECT_EQ(route_for(error_frame(0x17), true, COMMAND_LOCK_TAG_MEMORY), FrameRoute::Response);
     EXPECT_EQ(route_for(error_frame(0x20), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
     EXPECT_EQ(route_for(error_frame(0x7F), true, COMMAND_KILL_TAG), FrameRoute::Response);
@@ -1163,6 +1165,10 @@ TEST(UHF, WorthRetrying)
     EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::LockFail)));
     EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::KillFail)));
     EXPECT_TRUE(is_worth_retrying(static_cast<uint8_t>(Error::BlockPermalockFail)));
+
+    // A module that reset itself comes back without the mask it was holding, so the same
+    // command sent again would address whichever tag answers rather than the one that was chosen
+    EXPECT_FALSE(is_worth_retrying(static_cast<uint8_t>(Error::WatchDogReset)));
 
     // A tag that gave a reason gives the same reason however often it is asked. The memory
     // overrun a tag without user memory answers with is the one this was measured against

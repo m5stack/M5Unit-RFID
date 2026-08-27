@@ -689,7 +689,9 @@ constexpr uint8_t COMMAND_ERROR{0xFF};
   @brief Error codes carried by a failure notification
  */
 enum class Error : uint8_t {
+    WatchDogReset      = 0x05,  //!< The module's watchdog timed out and reset it
     ReadFail           = 0x09,  //!< Failed to read the tag's data memory area
+    InvalidParameter   = 0x0E,  //!< A parameter in the command frame is wrong
     WriteFail          = 0x10,  //!< Failed to write the tag's data memory area
     KillFail           = 0x12,  //!< Failed to kill the tag
     LockFail           = 0x13,  //!< Failed to lock the tag's data memory area
@@ -776,6 +778,11 @@ inline const char* error_description(const uint8_t error_code)
         }
     }
     switch (static_cast<Error>(error_code)) {
+        case Error::WatchDogReset:
+            // The module reporting that it reset itself, rather than that a command failed
+            return "The module's watchdog timed out and reset it";
+        case Error::InvalidParameter:
+            return "A parameter in the command frame is wrong";
         case Error::ReadFail:
             return "Read failed: no answer, or a CRC error";
         case Error::WriteFail:
@@ -846,9 +853,14 @@ inline bool error_answers_command(const uint8_t error_code, const uint8_t comman
             return command == COMMAND_READ_TAG_MEMORY || command == COMMAND_WRITE_TAG_MEMORY ||
                    command == COMMAND_LOCK_TAG_MEMORY || command == COMMAND_KILL_TAG ||
                    command == COMMAND_BLOCK_PERMALOCK;
+        case Error::WatchDogReset:
+            // The module resetting itself is not the answer to anything, but the command that
+            // was in flight died with the reset and will never be answered. Taking it is what
+            // ends that exchange now rather than at its timeout
+            return true;
         default:
-            // A command error or a failed hop answers whatever was sent, and so does a code
-            // this table does not name
+            // A command error, a wrong parameter or a failed hop answers whatever was sent, and
+            // so does a code this table does not name
             return true;
     }
 }
@@ -929,6 +941,11 @@ inline bool is_worth_retrying(const uint8_t error_code)
         case Error::LockFail:
         case Error::BlockPermalockFail:
             return true;
+        case Error::WatchDogReset:
+            // The module comes back from a reset having lost the mask it was holding, so the
+            // same command sent again would address whichever tag answers rather than the one
+            // that was chosen. Whoever selected the tag has to select it again first
+            return false;
         default:
             return false;
     }
