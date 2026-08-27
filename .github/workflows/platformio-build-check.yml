@@ -142,6 +142,10 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: UHF_SleepIdle
+            board: Core
+            framework: Arduino
+            espressif32: latest
 
     steps:
       - name: Checkout
