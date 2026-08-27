@@ -184,6 +184,19 @@ public:
      */
     virtual bool writeAutoSleepTime(const uint8_t minutes) = 0;
     /*!
+      @brief Put the module into IDLE, or bring it out
+      @param enter True to enter IDLE, false to leave it
+      @param minutes How long without work before the module enters IDLE by itself, 0 to 30.
+      Zero means it does not
+      @return True if successful
+      @details IDLE turns off everything but the digital part and the serial port. Unlike
+      sleep() it keeps what the module was holding, the select parameter included, and the
+      module goes on answering commands
+      @note The first tag operation after this brings the module back by itself, and that one
+      may fail where a later one would not: the radio is still settling
+     */
+    virtual bool writeIdle(const bool enter, const uint8_t minutes = 0) = 0;
+    /*!
       @brief Put the module into low power sleep
       @return True if successful
       @warning Any byte wakes a sleeping module, and the module throws that byte away. Sending

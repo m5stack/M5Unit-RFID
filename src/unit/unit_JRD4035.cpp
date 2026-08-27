@@ -31,6 +31,7 @@ constexpr uint8_t CMD_SET_CHANNEL{0xAB};
 constexpr uint8_t CMD_SET_HOPPING{0xAD};
 constexpr uint8_t CMD_SET_TX_POWER{0xB6};
 constexpr uint8_t CMD_GET_TX_POWER{0xB7};
+constexpr uint8_t CMD_IDLE_MODE{0x04};
 constexpr uint8_t CMD_SLEEP{0x17};
 constexpr uint8_t CMD_SET_AUTO_SLEEP_TIME{0x1D};
 constexpr uint8_t CMD_INSERT_CHANNEL{0xA9};
@@ -55,6 +56,10 @@ constexpr uint32_t CHANNEL_SCAN_TIMEOUT_MS{3000};
 
 // Longest inactivity period the module accepts before sleeping
 constexpr uint8_t AUTO_SLEEP_MAX_MINUTES{30};
+//! @brief Longest the module can be left to enter IDLE on its own
+constexpr uint8_t AUTO_IDLE_MAX_MINUTES{30};
+//! @brief Second parameter byte of the IDLE command. The protocol fixes it at one
+constexpr uint8_t IDLE_RESERVED{0x01};
 
 // Reserved byte of the multiple polling parameter
 constexpr uint8_t MULTIPLE_POLLING_RESERVED{0x22};
@@ -634,6 +639,20 @@ bool UnitJRD4035::writeAutoSleepTime(const uint8_t minutes)
     Frame res{};
     const uint8_t param[]{minutes};
     return send_and_wait(res, CMD_SET_AUTO_SLEEP_TIME, param, sizeof(param)) && succeeded(res, "writeAutoSleepTime");
+}
+
+bool UnitJRD4035::writeIdle(const bool enter, const uint8_t minutes)
+{
+    if (reject_while_polling("writeIdle")) {
+        return false;
+    }
+    if (minutes > AUTO_IDLE_MAX_MINUTES) {
+        M5_LIB_LOGE("Auto idle time out of range %u", minutes);
+        return false;
+    }
+    Frame res{};
+    const uint8_t param[]{static_cast<uint8_t>(enter ? 0x01 : 0x00), IDLE_RESERVED, minutes};
+    return send_and_wait(res, CMD_IDLE_MODE, param, sizeof(param)) && succeeded(res, "writeIdle");
 }
 
 bool UnitJRD4035::sleep()
