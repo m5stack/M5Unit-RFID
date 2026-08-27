@@ -674,9 +674,10 @@ bool UnitJRD4035::wake()
         return false;
     }
     // The module throws away the byte that wakes it, and the command that follows goes
-    // unanswered as well. Waiting does not stop that: a module measured across waits from
-    // nothing to twelve seconds lost its first command every time and answered the second.
-    // What waking costs is a command, so one is spent on it here rather than by the caller
+    // unanswered as well. Neither waiting nor a second byte stops that: a module measured
+    // across waits from nothing to twelve seconds lost its first command every time, and lost
+    // it just the same when two bytes were sent. What is discarded is the first byte of the
+    // first command, and only a command can be that. So one is spent here, not by the caller
     const uint8_t byte{WAKE_BYTE};
     if (writeWithTransaction(&byte, 1) != m5::hal::error::error_t::OK) {
         M5_LIB_LOGE("Failed to send the wake byte");
