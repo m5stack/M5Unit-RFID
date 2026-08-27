@@ -147,6 +147,16 @@ void print_identity(const m5::uhf::Tag& tag)
     M5_LOGI("Sizes : user=%s maxEPC=%s permalockBlock=%s", user_memory_size(tag).c_str(),
             bits_or_unknown(tag.epc_max_bits).c_str(), bits_or_unknown(tag.permalock_block_bits).c_str());
 
+    // Which blocks are already locked for good. Reading that changes nothing, and a chip
+    // without the command answers with a failure rather than doing anything
+    if (m5::uhf::chipSupportsBlockPermalock(tag.chip)) {
+        std::vector<uint8_t> locked{};
+        if (uhf.readBlockPermalock(locked, m5::uhf::Bank::User) && locked.size() >= 2) {
+            const uint16_t blocks = static_cast<uint16_t>((locked[0] << 8) | locked[1]);
+            M5_LOGI("Locked: %04X (the first block in the most significant bit)", blocks);
+        }
+    }
+
     // The one chip here that keeps two memory maps says which of them it is showing. Reading
     // that changes nothing, and no other chip answers it
     if (tag.chip == m5::uhf::Chip::ImpinjMonza4QT) {
