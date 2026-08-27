@@ -1294,6 +1294,43 @@ TEST(UHF, ParseSelectParameter)
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, too_long.data(), too_long.size()));
 }
 
+TEST(UHF, ResolveChip)
+{
+    // The TIDs the datasheets give outright, one per chip they name
+    struct Case {
+        uint8_t tid[4];
+        m5::uhf::Chip chip;
+    };
+    const Case cases[]{
+        {{0xE2, 0x00, 0x34, 0x12}, m5::uhf::Chip::AlienHiggs3},     // Higgs 3 Supplement Table 1
+        {{0xE2, 0x00, 0x34, 0x14}, m5::uhf::Chip::AlienHiggs4},     // Higgs 4 V1.3.6 TID table
+        {{0xE2, 0x00, 0x11, 0x00}, m5::uhf::Chip::ImpinjMonza4D},   // Monza 4 V10.0 Table 4-8
+        {{0xE2, 0x00, 0x11, 0x05}, m5::uhf::Chip::ImpinjMonza4QT},  //
+        {{0xE2, 0x00, 0x11, 0x0C}, m5::uhf::Chip::ImpinjMonza4E},   //
+        {{0xE2, 0x00, 0x11, 0x14}, m5::uhf::Chip::ImpinjMonza4i},   //
+        {{0xE2, 0x00, 0x11, 0x91}, m5::uhf::Chip::ImpinjM730},      // M700 Series v6.4 Table 23
+        {{0xE2, 0x00, 0x11, 0x90}, m5::uhf::Chip::ImpinjM750},      //
+        {{0xE2, 0x00, 0x11, 0xA0}, m5::uhf::Chip::ImpinjM770},      //
+        {{0xE2, 0x00, 0x11, 0xC0}, m5::uhf::Chip::ImpinjM780},      // M780 / M781 v1.1 Table 21
+        {{0xE2, 0x00, 0x11, 0xC1}, m5::uhf::Chip::ImpinjM781},      //
+        {{0xE2, 0x80, 0x68, 0x90}, m5::uhf::Chip::NxpUcode7},       // SL3S1204 Rev4.0 Table 12
+        {{0xE2, 0x80, 0x68, 0x94}, m5::uhf::Chip::NxpUcode8},       //
+        {{0xE2, 0x80, 0x69, 0x94}, m5::uhf::Chip::NxpUcode8m},      //
+    };
+    for (const auto& c : cases) {
+        EXPECT_EQ(m5::uhf::chipFromTid(c.tid, sizeof(c.tid)), c.chip);
+    }
+
+    // A chip with no user bank says so, rather than leaving the size unknown
+    EXPECT_TRUE(m5::uhf::chipHasNoUserMemory(m5::uhf::Chip::NxpUcode7));
+    EXPECT_TRUE(m5::uhf::chipHasNoUserMemory(m5::uhf::Chip::ImpinjM730));
+    EXPECT_EQ(m5::uhf::chipUserMemoryBits(m5::uhf::Chip::ImpinjM730), 0U);
+
+    // The one chip whose datasheet gives the block BlockPermalock works in
+    EXPECT_EQ(m5::uhf::chipPermalockBlockBits(m5::uhf::Chip::ImpinjMonza4QT), 128U);
+    EXPECT_EQ(m5::uhf::chipPermalockBlockBits(m5::uhf::Chip::AlienHiggs9), 0U);
+}
+
 TEST(UHF, SharedUserMemory)
 {
     // Both of these chips take their EPC out of the same pool the User bank comes from, so the

@@ -255,11 +255,22 @@ inline const VendorEntry* vendorEntries(size_t& count)
 enum class Chip : uint8_t {
     Unknown,
     AlienHiggs3,
+    AlienHiggs4,
     AlienHiggs9,
+    ImpinjMonza4D,
+    ImpinjMonza4E,
+    ImpinjMonza4i,
     ImpinjMonza4QT,
+    ImpinjM730,
+    ImpinjM750,
+    ImpinjM770,
+    ImpinjM780,
+    ImpinjM781,
     NxpUcodeG2iM,
     NxpUcodeG2iMPlus,
+    NxpUcode7,
     NxpUcode8,
+    NxpUcode8m,
     NxpUcode9,
     NxpUcode9xe,
 };
@@ -320,8 +331,28 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
             // the 96 bit it leaves the factory with. chipSharedUserMemoryBits is what sizes
             // this chip; this is the figure to fall back on when the PC is unknown
             return 688;
+        case Chip::AlienHiggs4:
+            return 128;  // Higgs 4 V1.3.6 3: "128 bits of NVM for User data"
+        // Monza 4 V10.0 Table 2-8
+        case Chip::ImpinjMonza4D:
+            return 32;
+        case Chip::ImpinjMonza4E:
+            return 128;
+        case Chip::ImpinjMonza4i:
+            return 480;
         case Chip::ImpinjMonza4QT:
             return 512;  // Monza 4 Rev8.0 2.3.1: "512 bits of user memory". 32 words, confirmed
+        // M700 Series v6.4 1, and M780 / M781 v1.1 1
+        case Chip::ImpinjM750:
+            return 32;
+        case Chip::ImpinjM770:
+            return 32;
+        case Chip::ImpinjM780:
+            return 128;
+        case Chip::ImpinjM781:
+            return 512;
+        case Chip::NxpUcode8m:
+            return 32;  // SL3S1205_15 Rev3.6 Table 7: "User Memory 32 bit"
         case Chip::NxpUcodeG2iM:
             // Rev3.7 Table 7 and Table 15. The "640 bit configurable User Memory" of the
             // general description is the whole pool, and this part keeps its EPC fixed at
@@ -348,8 +379,32 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
     switch (chip) {
         case Chip::AlienHiggs9:
             return 496;  // ALC-390: "Supports EPC size up to 496b"
+        case Chip::AlienHiggs4:
+            return 128;  // Higgs 4 V1.3.6 3: "128 bits of NVM for Electronic Product Code"
+        // Monza 4 V10.0 Table 2-8
+        case Chip::ImpinjMonza4D:
+            return 128;
+        case Chip::ImpinjMonza4E:
+            return 496;
+        case Chip::ImpinjMonza4i:
+            return 256;
         case Chip::ImpinjMonza4QT:
             return 128;  // Monza 4 Rev8.0 2.3.1: "128 bits of EPC memory"
+        // M700 Series v6.4 1, and M780 / M781 v1.1 1
+        case Chip::ImpinjM730:
+            return 128;
+        case Chip::ImpinjM750:
+            return 96;
+        case Chip::ImpinjM770:
+            return 128;
+        case Chip::ImpinjM780:
+            return 496;
+        case Chip::ImpinjM781:
+            return 128;
+        case Chip::NxpUcode7:
+            return 128;  // SL3S1204 Rev4.0 Table 8
+        case Chip::NxpUcode8m:
+            return 96;  // SL3S1205_15 Rev3.6 Table 7
         case Chip::NxpUcode8:
             // SL3S1205_15 Rev3.6 Table 6 gives 128 bit, and a real tag takes a PC of eight
             // words and refuses nine
@@ -394,6 +449,25 @@ inline uint16_t chipTidWords(const Chip chip)
 }
 
 /*!
+  @brief Size of the block BlockPermalock works in, in bits
+  @param chip Chip
+  @return Block size, or zero where it is not known
+  @details The standard leaves this to the chip, and a tag says it only through the XTID
+  segment that most chips do not carry. Where the datasheet gives it, this is where it comes
+  from instead
+ */
+inline uint32_t chipPermalockBlockBits(const Chip chip)
+{
+    switch (chip) {
+        case Chip::ImpinjMonza4QT:
+            // Monza 4 V10.0 2.3.1: "four fixed, 128-bit sections of user memory"
+            return 128;
+        default:
+            return 0;
+    }
+}
+
+/*!
   @brief Is this a chip whose datasheet says it has no User bank at all?
   @param chip Chip
   @return True when the chip is known to have none
@@ -411,6 +485,10 @@ inline bool chipHasNoUserMemory(const Chip chip)
             return true;  // SL3S1206 Rev3.5 Table 6, the same way
         case Chip::NxpUcode9xe:
             return true;  // SL3S1216 Rev3.3 Table 5, the same way
+        case Chip::NxpUcode7:
+            return true;  // SL3S1204 Rev4.0 features: "No User Memory"
+        case Chip::ImpinjM730:
+            return true;  // M700 Series v6.4 1: "128 bits of EPC memory, 0 bits of user memory"
         default:
             return false;
     }
@@ -592,12 +670,39 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
 {
     switch (vendor) {
         case Vendor::Impinj:
-            // Monza 4 datasheet Rev 8.0 Table 4-7
-            return model_number == 0x105 ? Chip::ImpinjMonza4QT : Chip::Unknown;
+            switch (model_number) {
+                // Monza 4 datasheet V10.0 Table 4-8
+                case 0x100:
+                    return Chip::ImpinjMonza4D;
+                case 0x105:
+                    return Chip::ImpinjMonza4QT;
+                case 0x10C:
+                    return Chip::ImpinjMonza4E;
+                case 0x114:
+                    return Chip::ImpinjMonza4i;
+                // M700 Series datasheet v6.4 Table 23
+                case 0x190:
+                    return Chip::ImpinjM750;
+                case 0x191:
+                    return Chip::ImpinjM730;
+                case 0x1A0:
+                    return Chip::ImpinjM770;
+                // M780 / M781 datasheet v1.1 Table 21
+                case 0x1C0:
+                    return Chip::ImpinjM780;
+                case 0x1C1:
+                    return Chip::ImpinjM781;
+                default:
+                    return Chip::Unknown;
+            }
         case Vendor::Alien:
             switch (model_number) {
                 case 0x412:
                     return Chip::AlienHiggs3;  // Higgs 3 IC datasheet, Table 1
+                case 0x414:
+                    // Higgs 4 IC Datasheet V1.3.6 TID table: "1 / 0x3414 / Alien Manufacturer
+                    // Code lower bits, Higgs 4 IC"
+                    return Chip::AlienHiggs4;
                 case 0x821:
                     // Neither Alien nor the GS1 registry publishes this one; it comes from
                     // third-party tables, and was read off a real Higgs 9 whose TID is
@@ -612,8 +717,12 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                     return Chip::NxpUcodeG2iM;  // UCODE G2iM datasheet Rev 3.7
                 case 0x80B:
                     return Chip::NxpUcodeG2iMPlus;
+                case 0x890:
+                    return Chip::NxpUcode7;  // SL3S1204 Rev4.0 Table 12: "E28068902000"
                 case 0x894:
                     return Chip::NxpUcode8;  // SL3S1205/1215 datasheet
+                case 0x994:
+                    return Chip::NxpUcode8m;  // SL3S1205_15 Rev3.6, the 8m of the same datasheet
                 case 0xA16:
                 case 0xA96:
                     // The same change of model number, made to this part at the same time. Its
@@ -652,6 +761,9 @@ inline void fillSizesFromChip(Tag& tag)
     }
     if (tag.epc_max_bits == 0) {
         tag.epc_max_bits = chipEpcMaxBits(tag.chip);
+    }
+    if (tag.permalock_block_bits == 0) {
+        tag.permalock_block_bits = chipPermalockBlockBits(tag.chip);
     }
 }
 
@@ -1025,14 +1137,36 @@ inline std::string Tag::chipAsString() const
             return "Alien Higgs-3";
         case Chip::AlienHiggs9:
             return "Alien Higgs-9";
+        case Chip::AlienHiggs4:
+            return "Alien Higgs-4";
+        case Chip::ImpinjMonza4D:
+            return "Impinj Monza 4D";
+        case Chip::ImpinjMonza4E:
+            return "Impinj Monza 4E";
+        case Chip::ImpinjMonza4i:
+            return "Impinj Monza 4i";
         case Chip::ImpinjMonza4QT:
             return "Impinj Monza 4QT";
+        case Chip::ImpinjM730:
+            return "Impinj M730";
+        case Chip::ImpinjM750:
+            return "Impinj M750";
+        case Chip::ImpinjM770:
+            return "Impinj M770";
+        case Chip::ImpinjM780:
+            return "Impinj M780";
+        case Chip::ImpinjM781:
+            return "Impinj M781";
         case Chip::NxpUcodeG2iM:
             return "NXP UCODE G2iM";
         case Chip::NxpUcodeG2iMPlus:
             return "NXP UCODE G2iM+";
+        case Chip::NxpUcode7:
+            return "NXP UCODE 7";
         case Chip::NxpUcode8:
             return "NXP UCODE 8";
+        case Chip::NxpUcode8m:
+            return "NXP UCODE 8m";
         case Chip::NxpUcode9:
             return "NXP UCODE 9";
         case Chip::NxpUcode9xe:
