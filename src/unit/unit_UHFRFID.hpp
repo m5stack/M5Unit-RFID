@@ -54,6 +54,14 @@ public:
           @note Tag operations and channel scans take far longer and carry limits of their own
          */
         uint32_t command_timeout_ms{1000};
+        /*!
+          Inactivity period after which the module sleeps by itself, 1 to 30 minutes. Zero
+          turns that off, which is the default
+          @note This is written at begin() rather than left as it was, because the module has
+          no command to say what it is set to and the setting survives a power cycle. Writing
+          it is the only way to know it
+         */
+        uint8_t auto_sleep_minutes{0};
     };
 
     virtual ~UHFRFIDComponent() = default;
@@ -178,9 +186,11 @@ public:
       @brief Write the inactivity period after which the module sleeps automatically
       @param minutes 1 to 30 minutes, or 0 to disable automatic sleep
       @return True if successful
-      @note Waking the module costs the first byte it receives and makes it reload the chip
-      firmware, so a sleeping module ignores the command that woke it. Disabling automatic
-      sleep avoids that entirely when the unit is permanently powered
+      @warning This is the same sleep as sleep(), reached without anyone calling it, so it
+      takes the select mask with it: a tag addressed before the module went to sleep is not
+      the one answering afterwards. writeIdle() takes a period of its own and keeps the mask
+      @warning The module has no command to say what this is set to, and it survives a power
+      cycle, so what a module holds now cannot be found out
      */
     virtual bool writeAutoSleepTime(const uint8_t minutes) = 0;
     /*!
@@ -203,6 +213,9 @@ public:
       a command to one therefore wakes it and loses the command, so the first command after a
       sleep goes unanswered
       @warning The select mask does not survive this. See wake()
+      @warning A tag being addressed should be given up with UHFLayer::deselect() first. The
+      mask does not survive the sleep, and a layer that still believes a tag is selected would
+      read whichever tag answers
      */
     virtual bool sleep() = 0;
     /*!
@@ -219,7 +232,8 @@ public:
       through the layer
       @warning This can return before the module answers. How long waking takes is not
       documented, and a module can take over a second
-      @note Calling this on a module that is awake costs the wait and nothing else
+      @note This spends a command of its own, so it is not free to call on a module that is
+      already awake
      */
     virtual bool wake() = 0;
     /*!

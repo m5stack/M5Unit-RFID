@@ -295,6 +295,12 @@ bool UnitJRD4035::begin()
         return false;
     }
 
+    // Unlike the region, this one is written whatever it is set to: the module has no command
+    // to say what its idle timer holds, and it keeps it across a power cycle
+    if (!writeAutoSleepTime(_cfg.auto_sleep_minutes)) {
+        M5_LIB_LOGW("Failed to write the auto sleep time; the module keeps whatever it had");
+    }
+
     return true;
 }
 
