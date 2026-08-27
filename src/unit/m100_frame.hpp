@@ -230,6 +230,16 @@ constexpr uint8_t COMMAND_WRITE_TAG_MEMORY{0x49};
 constexpr uint8_t COMMAND_KILL_TAG{0x65};
 constexpr uint8_t COMMAND_LOCK_TAG_MEMORY{0x82};
 constexpr uint8_t COMMAND_BLOCK_PERMALOCK{0xD3};
+//! @brief NXP ChangeConfig
+constexpr uint8_t COMMAND_NXP_CHANGE_CONFIG{0xE0};
+//! @brief NXP ReadProtect and Reset ReadProtect, which share one command code
+constexpr uint8_t COMMAND_NXP_READ_PROTECT{0xE1};
+//! @brief NXP Change EAS
+constexpr uint8_t COMMAND_NXP_CHANGE_EAS{0xE3};
+//! @brief NXP EAS_Alarm
+constexpr uint8_t COMMAND_NXP_EAS_ALARM{0xE4};
+//! @brief Impinj Monza QT
+constexpr uint8_t COMMAND_MONZA_QT{0xE5};
 ///@}
 //! @brief Fixed part of a tag notification (RSSI, PC and CRC)
 constexpr size_t TAG_NOTIFICATION_OVERHEAD{5};
@@ -689,17 +699,23 @@ constexpr uint8_t COMMAND_ERROR{0xFF};
   @brief Error codes carried by a failure notification
  */
 enum class Error : uint8_t {
-    WatchDogReset      = 0x05,  //!< The module's watchdog timed out and reset it
-    ReadFail           = 0x09,  //!< Failed to read the tag's data memory area
-    InvalidParameter   = 0x0E,  //!< A parameter in the command frame is wrong
-    WriteFail          = 0x10,  //!< Failed to write the tag's data memory area
-    KillFail           = 0x12,  //!< Failed to kill the tag
-    LockFail           = 0x13,  //!< Failed to lock the tag's data memory area
-    BlockPermalockFail = 0x14,  //!< BlockPermalock execution failed
-    InventoryFail      = 0x15,  //!< No tag responded or a data CRC check error occurred
-    AccessFail         = 0x16,  //!< Failed to access the tag
-    CommandError       = 0x17,  //!< Command error in the command frame
-    FHSSFail           = 0x20,  //!< Frequency hopping channel search timed out
+    WatchDogReset        = 0x05,  //!< The module's watchdog timed out and reset it
+    ReadFail             = 0x09,  //!< Failed to read the tag's data memory area
+    InvalidParameter     = 0x0E,  //!< A parameter in the command frame is wrong
+    WriteFail            = 0x10,  //!< Failed to write the tag's data memory area
+    KillFail             = 0x12,  //!< Failed to kill the tag
+    LockFail             = 0x13,  //!< Failed to lock the tag's data memory area
+    BlockPermalockFail   = 0x14,  //!< BlockPermalock execution failed
+    InventoryFail        = 0x15,  //!< No tag responded or a data CRC check error occurred
+    AccessFail           = 0x16,  //!< Failed to access the tag
+    CommandError         = 0x17,  //!< Command error in the command frame
+    ChangeConfigFail     = 0x1A,  //!< NXP ChangeConfig failed
+    ChangeEASFail        = 0x1B,  //!< NXP Change EAS failed
+    EASAlarmFail         = 0x1D,  //!< NXP EAS_Alarm found no tag answering with an alarm code
+    FHSSFail             = 0x20,  //!< Frequency hopping channel search timed out
+    ReadProtectFail      = 0x2A,  //!< NXP ReadProtect failed
+    ResetReadProtectFail = 0x2B,  //!< NXP Reset ReadProtect failed
+    QTFail               = 0x2E,  //!< Impinj Monza QT failed
 };
 
 /*!
@@ -800,6 +816,18 @@ inline const char* error_description(const uint8_t error_code)
             return "Command error in the command frame";
         case Error::FHSSFail:
             return "Frequency hopping channel search timed out";
+        case Error::ChangeConfigFail:
+            return "ChangeConfig failed: no answer, or a CRC error";
+        case Error::ChangeEASFail:
+            return "Change EAS failed: no answer, or a CRC error";
+        case Error::EASAlarmFail:
+            return "EAS_Alarm found no tag answering with an alarm code";
+        case Error::ReadProtectFail:
+            return "ReadProtect failed: no answer, or a CRC error";
+        case Error::ResetReadProtectFail:
+            return "Reset ReadProtect failed: no answer, or a CRC error";
+        case Error::QTFail:
+            return "Monza QT failed: no answer, or a CRC error";
         default:
             return "Unlisted error";
     }
@@ -852,6 +880,17 @@ inline bool error_answers_command(const uint8_t error_code, const uint8_t comman
             return command == COMMAND_READ_TAG_MEMORY || command == COMMAND_WRITE_TAG_MEMORY ||
                    command == COMMAND_LOCK_TAG_MEMORY || command == COMMAND_KILL_TAG ||
                    command == COMMAND_BLOCK_PERMALOCK;
+        case Error::ChangeConfigFail:
+            return command == COMMAND_NXP_CHANGE_CONFIG;
+        case Error::ChangeEASFail:
+            return command == COMMAND_NXP_CHANGE_EAS;
+        case Error::EASAlarmFail:
+            return command == COMMAND_NXP_EAS_ALARM;
+        case Error::ReadProtectFail:
+        case Error::ResetReadProtectFail:
+            return command == COMMAND_NXP_READ_PROTECT;
+        case Error::QTFail:
+            return command == COMMAND_MONZA_QT;
         case Error::WatchDogReset:
             // The command in flight died with the reset and will never be answered
             return true;
@@ -937,6 +976,11 @@ inline bool is_worth_retrying(const uint8_t error_code)
         case Error::KillFail:
         case Error::LockFail:
         case Error::BlockPermalockFail:
+        case Error::ChangeConfigFail:
+        case Error::ChangeEASFail:
+        case Error::ReadProtectFail:
+        case Error::ResetReadProtectFail:
+        case Error::QTFail:
             return true;
         case Error::WatchDogReset:
             // A reset loses the mask, so the same command again would address whichever tag

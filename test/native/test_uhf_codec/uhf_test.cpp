@@ -953,6 +953,15 @@ TEST(UHF, RouteFor)
     EXPECT_EQ(route_for(error_frame(0x09), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
     EXPECT_EQ(route_for(error_frame(0x09), true, COMMAND_LOCK_TAG_MEMORY), FrameRoute::Drop);
 
+    // A vendor command's failure names that command, so it cannot answer any of ours
+    EXPECT_EQ(route_for(error_frame(0x2E), true, COMMAND_MONZA_QT), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x2E), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Drop);
+    EXPECT_EQ(route_for(error_frame(0x1A), true, COMMAND_NXP_CHANGE_CONFIG), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x1A), true, COMMAND_NXP_CHANGE_EAS), FrameRoute::Drop);
+    // ReadProtect and Reset ReadProtect share one command code, so both failures answer it
+    EXPECT_EQ(route_for(error_frame(0x2A), true, COMMAND_NXP_READ_PROTECT), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x2B), true, COMMAND_NXP_READ_PROTECT), FrameRoute::Response);
+
     // A code any command can provoke, and one this table does not name, answer whatever is sent
     EXPECT_EQ(route_for(error_frame(0x0E), true, COMMAND_WRITE_TAG_MEMORY), FrameRoute::Response);
     EXPECT_EQ(route_for(error_frame(0x05), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
