@@ -186,13 +186,9 @@ public:
     /*!
       @brief Put the module into low power sleep
       @return True if successful
-      @details The module answers before it powers down, so this reports whether it accepted
-      the command rather than whether it is asleep
-      @warning Any byte reaches a sleeping module and wakes it, and the module throws that byte
-      away. A command is a run of bytes like any other, so sending one to a sleeping module
-      wakes it and loses the command doing so: the vendor's protocol document says in as many
-      words that the first command after a sleep goes unanswered. A single command that fails
-      here therefore says nothing about whether the module is reachable
+      @warning Any byte wakes a sleeping module, and the module throws that byte away. Sending
+      a command to one therefore wakes it and loses the command, so the first command after a
+      sleep goes unanswered
       @warning The select mask does not survive this. See wake()
      */
     virtual bool sleep() = 0;
@@ -201,19 +197,15 @@ public:
       @return True if successful
       @details Sends one byte to wake it and waits for the chip firmware to reload. The byte
       itself is thrown away by the module, which is why it is sent on its own rather than as
-      the first real command. Any value does: the protocol document asks for a byte and says
-      nothing about which one
-      @warning The mask the module was holding does not come back. The vendor's protocol
-      document lists what waking restores -- the power, the frequency, the hopping mode, the
-      sleep time and the demodulator parameters -- and says the select mode and the select
-      parameter are not among them. The module comes back holding a mask of zero length, which
-      matches every tag rather than none, so a read or a write goes on succeeding against
-      whichever tag answers: with one tag in the field nothing looks wrong, and with two the
-      wrong one can answer. A tag addressed before the sleep has to be selected again, and
-      UHFLayer::wake() is what does that for a caller working through the layer
-      @warning How long waking takes is not documented, and the wait here is not a measured
-      figure. A module measured on the bench was still not answering more than a second after
-      the byte was sent
+      the first real command
+      @warning Waking restores the power, the frequency, the hopping mode, the sleep time and
+      the demodulator parameters, but not the select mode or the select parameter. The module
+      comes back holding a mask of zero length, which matches every tag rather than none, so a
+      read or a write goes on succeeding against whichever tag answers. A tag addressed before
+      the sleep has to be selected again; UHFLayer::wake() does that for a caller working
+      through the layer
+      @warning This can return before the module answers. How long waking takes is not
+      documented, and a module can take over a second
       @note Calling this on a module that is awake costs the wait and nothing else
      */
     virtual bool wake() = 0;

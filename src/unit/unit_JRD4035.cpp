@@ -128,19 +128,10 @@ constexpr uint32_t RESYNC_QUIET_MS{50};
  */
 constexpr uint32_t RESYNC_LIMIT_MS{250};
 
-//! @brief Byte sent to wake the module
-//! @details The protocol document asks for a byte and says nothing about which one, so this is
-//! only what the vendor's own driver sends
+//! @brief Byte sent to wake the module. Any value does; the protocol does not name one
 constexpr uint8_t WAKE_BYTE{0x55};
-/*!
-  @brief How long waking takes
-  @details No figure for this appears in any of the vendor's documents. The module's own data
-  sheet gives a start-up time of 100ms, but that is the time to come up when the enable pin is
-  taken high, which is a different thing: waking from a sleep resets the chip and reloads its
-  firmware. A module measured on the bench was still not answering more than a second after the
-  byte was sent, so this figure is known to be short and is kept only until it is replaced by
-  one that was measured
- */
+//! @brief How long to wait after the wake byte. Known to be short: a module can take over a
+//! second to answer, and no figure for this appears in the vendor's documents
 constexpr uint32_t WAKE_DELAY_MS{100};
 
 //! @brief A bank code that is not one of the four, used to reject a bank cast in from outside
