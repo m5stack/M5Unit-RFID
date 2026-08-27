@@ -1088,6 +1088,14 @@ TEST(UHF, TidReadPlan)
     EXPECT_EQ(m5::uhf::chipFromTid(ucode9xe_old, sizeof(ucode9xe_old)), m5::uhf::Chip::NxpUcode9xe);
     EXPECT_EQ(m5::uhf::chipFromTid(ucode9xe_new, sizeof(ucode9xe_new)), m5::uhf::Chip::NxpUcode9xe);
 
+    // A Higgs 3 is the same shape as a G2iM: the XTID indicator reads zero, and four words of
+    // unique ID follow the two that name the chip (Higgs 3 Supplement, TID Bank rows 0 to 5)
+    const uint8_t higgs3[] = {0xE2, 0x00, 0x34, 0x12};
+    EXPECT_EQ(m5::uhf::chipFromTid(higgs3, sizeof(higgs3)), m5::uhf::Chip::AlienHiggs3);
+    plan = m5::uhf::tidReadPlan(higgs3, sizeof(higgs3));
+    EXPECT_EQ(plan.word_address, 2);
+    EXPECT_EQ(plan.words, 4);
+
     // A chip no table names says nothing beyond its fixed words, so the TID ends there
     const uint8_t unlisted[] = {0xE2, 0x00, 0x6F, 0xFF};
     EXPECT_EQ(m5::uhf::chipFromTid(unlisted, sizeof(unlisted)), m5::uhf::Chip::Unknown);
@@ -1284,6 +1292,26 @@ TEST(UHF, ParseSelectParameter)
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, nullptr, 19));
     std::vector<uint8_t> too_long(7 + m5::uhf::SELECT_MASK_MAX_BYTES + 1, 0);
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, too_long.data(), too_long.size()));
+}
+
+TEST(UHF, SharedUserMemory)
+{
+    // Both of these chips take their EPC out of the same pool the User bank comes from, so the
+    // size of one is what says the size of the other
+    const auto pc = [](const uint16_t epc_words) { return static_cast<uint16_t>(epc_words << 11); };
+
+    // Higgs 9, ALC-390: six words of EPC and forty-three of User as it ships
+    EXPECT_EQ(m5::uhf::chipSharedUserMemoryBits(m5::uhf::Chip::AlienHiggs9, pc(6)), 43U * 16U);
+    EXPECT_EQ(m5::uhf::chipSharedUserMemoryBits(m5::uhf::Chip::AlienHiggs9, pc(31)), 18U * 16U);
+
+    // G2iM+, Rev3.7 Tables 16 and 17: 128 bit of EPC with 640 of User, or 448 with 320
+    EXPECT_EQ(m5::uhf::chipSharedUserMemoryBits(m5::uhf::Chip::NxpUcodeG2iMPlus, pc(8)), 640U);
+    EXPECT_EQ(m5::uhf::chipSharedUserMemoryBits(m5::uhf::Chip::NxpUcodeG2iMPlus, pc(28)), 320U);
+
+    // A tag selected by its TID arrives with no PC, and a pool sized from that would be whole
+    EXPECT_EQ(m5::uhf::chipSharedUserMemoryBits(m5::uhf::Chip::NxpUcodeG2iMPlus, 0), 0U);
+    // A chip whose EPC does not come out of the User bank is not sized this way at all
+    EXPECT_EQ(m5::uhf::chipSharedUserMemoryBits(m5::uhf::Chip::NxpUcodeG2iM, pc(16)), 0U);
 }
 
 TEST(UHF, ChipSizeFallback)

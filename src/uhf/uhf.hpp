@@ -328,7 +328,10 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
             // 256 bit, which takes 128 of those bits away
             return 512;
         case Chip::NxpUcodeG2iMPlus:
-            return 640;  // G2iM Rev3.7 Table 16: 128 bit EPC and 640 bit User as it ships
+            // Rev3.7 Table 16, which is what it ships with. The EPC can be taken up to 448 bit
+            // and the User bank shrinks by as much, so chipSharedUserMemoryBits is what sizes
+            // this chip; this is the figure to fall back on when the PC is unknown
+            return 640;
         default:
             return 0;
     }
@@ -351,6 +354,8 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
             // SL3S1205_15 Rev3.6 Table 6 gives 128 bit, and a real tag takes a PC of eight
             // words and refuses nine
             return 128;
+        case Chip::NxpUcode9:
+            return 96;  // SL3S1206 Rev3.5 Table 5: "EPC (excluding 16 bit CRC-16 and 16-bit PC) 96 bit"
         case Chip::NxpUcode9xe:
             return 128;  // SL3S1216 Rev3.3 2.1.1: "128-bit of EPC memory"
         case Chip::NxpUcodeG2iM:
@@ -373,6 +378,11 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
 inline uint16_t chipTidWords(const Chip chip)
 {
     switch (chip) {
+        case Chip::AlienHiggs3:
+            // Higgs 3 IC Datasheet Supplement, TID Bank rows 0 to 5: the first two words name
+            // the chip and the four after them are Unique ID Word 0 to 3. Row 6 onwards is
+            // reserved, and the XTID indicator of this chip reads zero
+            return 6;
         case Chip::NxpUcodeG2iM:
         case Chip::NxpUcodeG2iMPlus:
             // SL3S1003_1013 Rev3.7 Table 8: 30h to 5Fh is a permalocked serial number, under an
@@ -419,14 +429,31 @@ inline bool chipHasNoUserMemory(const Chip chip)
  */
 inline uint32_t chipSharedUserMemoryBits(const Chip chip, const uint16_t pc)
 {
+    // ALC-390: 6 words of EPC and 43 of User as it ships, and every word the EPC grows by is a
+    // word the User bank loses
+    constexpr uint16_t HIGGS9_POOL_WORDS{49};
+    // Rev3.7 Tables 16 and 17: 128 bit of EPC with 640 of User, or 448 with 320. Both come to
+    // 768 bit, which the datasheet says moves "in steps of 64 bit"
+    constexpr uint16_t G2IM_PLUS_POOL_WORDS{48};
+
+    uint16_t pool{};
+    switch (chip) {
+        case Chip::AlienHiggs9:
+            pool = HIGGS9_POOL_WORDS;
+            break;
+        case Chip::NxpUcodeG2iMPlus:
+            pool = G2IM_PLUS_POOL_WORDS;
+            break;
+        default:
+            return 0;
+    }
     // A tag selected by its TID reaches identify() with no PC, and a bank sized from a length
     // of zero would be the whole pool. Returning 0 rather than a wrong size
-    if (chip != Chip::AlienHiggs9 || pc == 0) {
+    if (pc == 0) {
         return 0;
     }
-    constexpr uint16_t HIGGS9_POOL_WORDS{49};
     const uint16_t epc_words = static_cast<uint16_t>((pc >> 11) & 0x1F);
-    return epc_words < HIGGS9_POOL_WORDS ? static_cast<uint32_t>(HIGGS9_POOL_WORDS - epc_words) * 16U : 0U;
+    return epc_words < pool ? static_cast<uint32_t>(pool - epc_words) * 16U : 0U;
 }
 
 //! @brief ISO/IEC 15963 allocation class identifier used by EPCglobal tags
@@ -595,8 +622,9 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                     return Chip::NxpUcode9xe;
                 case 0x995:
                 case 0x915:
-                    // NXP moved UCODE 9 from 995h to 915h in PCN 202301029F01 without renaming
-                    // the part, so both are in the field
+                    // The model number changed without the part being renamed, and the
+                    // datasheet gives both TIDs: "HEX E280 6995 ... or HEX E280 6915 ..."
+                    // (SL3S1206 Rev3.5 Table 6 note 1)
                     return Chip::NxpUcode9;
                 default:
                     return Chip::Unknown;
