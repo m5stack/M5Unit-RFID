@@ -75,6 +75,9 @@ public:
       for a tag that is not in the field and the failure surfaces at the first access
       @note The password is not checked here: an unlocked bank answers whatever it is. A wrong
       one shows up as a memory-locked error the first time a locked area is touched
+      @warning Impinj M700 and M800 series chips hold one 32-bit password that answers at both
+      the access and the kill address, so an access password is a kill password as well. See
+      kill()
      */
     bool select(const Tag& tag, const uint32_t access_password = 0, const bool verify = true);
     //! @brief Select by EPC, for a tag the caller holds nothing else of
@@ -195,6 +198,9 @@ public:
       @return True if successful
       @warning PermanentLock leaves an area unwritable for the life of the tag and PermanentOpen
       leaves it impossible to ever lock. There is no way back from either
+      @warning Impinj M700 and M800 series chips hold one 32-bit password that answers at both
+      the access and the kill address, so locking one locks the other. They refuse a Lock that
+      asks for anything else, and the two have to be given the same setting
      */
     bool lock(const std::vector<LockSetting>& settings, const bool allow_permanent = false);
     /*!
@@ -203,6 +209,9 @@ public:
       @param kill_password Kill password; a tag whose kill password is zero refuses to be killed
       @return True if successful
       @warning The tag stops answering for good. There is no way to revive it
+      @warning Impinj M700 and M800 series chips hold one 32-bit password that answers at both
+      the access and the kill address. Giving such a tag an access password gives it the same
+      kill password, so a tag that was only meant to be protected becomes one that can be killed
      */
     bool kill(const Tag& tag, const uint32_t kill_password);
     ///@}
