@@ -215,25 +215,26 @@ enum class LowPower : uint8_t {
     Idle,        //!< IDLE, which keeps what the module was holding
 };
 
-//! @brief Take a selected tag through each of the low power modes and see what survives
+//! @brief Take a selected tag down into one low power mode and back, and say what survived
 //! @param detected Tag to work on
+//! @param mode Which of the three ways down to use
+//! @return True if the module went down and came back
 //! @details The three are worth seeing side by side. The module's own sleep loses the mask.
 //! The layer stores it again on the way back. IDLE never loses it, which is what makes it the
-//! one to reach for when a tag is being addressed
-void selection_across_sleep(const m5::uhf::Tag& detected)
+//! one to reach for while a tag is being addressed
+bool selection_across(const m5::uhf::Tag& detected, const LowPower mode)
 {
-    const LowPower modes[]{LowPower::UnitSleep, LowPower::LayerSleep, LowPower::Idle};
-    for (const LowPower mode : modes) {
+    {
         const char* who = (mode == LowPower::Idle) ? "idle" : (mode == LowPower::LayerSleep ? "layer" : "unit");
         if (!uhf.select(detected)) {
             M5_LOGE("Failed to select the tag");
             lcd.println("select: failed");
-            return;
+            return false;
         }
         m5::uhf::SelectParameter before{};
-        if (!report_selection("Before the sleep", before)) {
+        if (!report_selection("Before going down", before)) {
             uhf.deselect();
-            return;
+            return false;
         }
 
         bool down{};
@@ -251,7 +252,7 @@ void selection_across_sleep(const m5::uhf::Tag& detected)
         if (!down) {
             M5_LOGE("The module would not go into %s", who);
             uhf.deselect();
-            return;
+            return false;
         }
         M5_LOGI("Down through the %s", who);
 
@@ -272,11 +273,11 @@ void selection_across_sleep(const m5::uhf::Tag& detected)
         if (!up) {
             M5_LOGE("Failed to come back through the %s", who);
             uhf.deselect();
-            return;
+            return false;
         }
 
         m5::uhf::SelectParameter after{};
-        if (report_selection("After waking", after)) {
+        if (report_selection("After coming back", after)) {
             const bool kept = same_selection(before, after);
             M5_LOGI("Through the %s, the mask the module holds: %s", who, kept ? "is the one it had" : "IS NOT");
             lcd.printf("%s: mask %s\n", who, kept ? "kept" : "lost");
@@ -286,6 +287,7 @@ void selection_across_sleep(const m5::uhf::Tag& detected)
         M5_LOGI("Through the %s, reading the tag as before: %s", who, epc_word_reads() ? "it answers" : "nothing does");
         uhf.deselect();
     }
+    return true;
 }
 }  // namespace
 
@@ -296,9 +298,10 @@ void setup()
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
-    lcd.println("A: how long waking takes");
-    lcd.println("A hold: with a tag");
-    lcd.println("(sleep vs idle)");
+    lcd.println("A: sleep, with a tag");
+    lcd.println("   or without, how long");
+    lcd.println("   waking takes");
+    lcd.println("A hold: idle, with a tag");
 }
 
 void loop()
@@ -309,16 +312,26 @@ void loop()
     if (M5.BtnA.wasClicked()) {
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
-        // How long waking takes, and then what a sleeping module does with a command
-        measure_wake_time();
-        sleep_then_probe();
+        // With a tag to hand, what a sleep does to a selection is the thing worth seeing. With
+        // none, the module on its own is all there is to measure
+        m5::uhf::Tag detected{};
+        if (detect_one(detected)) {
+            if (selection_across(detected, LowPower::UnitSleep)) {
+                selection_across(detected, LowPower::LayerSleep);
+            }
+        } else {
+            measure_wake_time();
+            sleep_then_probe();
+        }
     }
     if (M5.BtnA.wasHold()) {
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
+        // IDLE on its own. Sleeping is unreliable enough that running it first would keep this
+        // from being reached at all, and this is the mode worth reaching for
         m5::uhf::Tag detected{};
         if (detect_one(detected)) {
-            selection_across_sleep(detected);
+            selection_across(detected, LowPower::Idle);
         }
     }
 }
