@@ -639,6 +639,14 @@ TEST(UHF, XtidTotalWords)
     EXPECT_EQ(m5::uhf::xtidTotalWords(0x3E00), 6U + 1U + 4U + 2U + 1U);
     // The largest TID the standard can describe still fits in what identify() keeps
     EXPECT_EQ(m5::uhf::xtidTotalWords(0xFE00) * 2, m5::uhf::TID_MAX_BYTES);
+
+    // Two chips whose datasheets lay out the whole TID, which is what pins the segment widths
+    // to something other than the standard's own arithmetic. RAMXEED MB97R8110
+    // (DS411-00007-3v1-E Table 4.2.2) reads 3C00h and has thirteen words of TID; the same
+    // header is the worked example in TDS 2.3 16.2
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0x3C00), 13U);
+    // RAMXEED MB97R8050 (DS411-00005-4v1-E) reads 3800h and has eleven
+    EXPECT_EQ(m5::uhf::xtidTotalWords(0x3800), 11U);
 }
 
 TEST(UHF, DecodeXtidSegments)
