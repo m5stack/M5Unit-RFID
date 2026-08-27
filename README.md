@@ -72,8 +72,13 @@ Support may be expanded in future updates to cover PICCs not listed here.
 |---|---|---|---|
 | EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C | Yes | Yes | Select, identify, read, write, lock and kill |
 
-Chips identified from the TID so far: NXP UCODE 8, Alien Higgs 9 and Impinj Monza 4QT. A chip that
-is not listed still reports its mask designer and model number, so it can be recognised by hand.
+Chip-specific commands: the Impinj Monza 4QT keeps two memory maps and can be switched between
+them. Two ways of drawing less current are offered: IDLE keeps everything the module was holding,
+while sleep resets the chip and loses the mask naming the tag being addressed.
+
+Chips seen on the bench: NXP UCODE 8, NXP UCODE G2iM, Alien Higgs-9 and Impinj Monza 4QT. More are
+recognised from their datasheets, and a chip in neither still reports its mask designer and model
+number, so it can be recognised by hand.
 
 ### A Tag Resting On The Antenna
 
