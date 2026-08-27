@@ -261,6 +261,7 @@ enum class Chip : uint8_t {
     NxpUcodeG2iMPlus,
     NxpUcode8,
     NxpUcode9,
+    NxpUcode9xe,
 };
 
 /*!
@@ -350,6 +351,8 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
             // SL3S1205_15 Rev3.6 Table 6 gives 128 bit, and a real tag takes a PC of eight
             // words and refuses nine
             return 128;
+        case Chip::NxpUcode9xe:
+            return 128;  // SL3S1216 Rev3.3 2.1.1: "128-bit of EPC memory"
         case Chip::NxpUcodeG2iM:
             return 256;  // G2iM Rev3.7: "256 bit of EPC memory"
         case Chip::NxpUcodeG2iMPlus:
@@ -396,6 +399,8 @@ inline bool chipHasNoUserMemory(const Chip chip)
             return true;
         case Chip::NxpUcode9:
             return true;  // SL3S1206 Rev3.5 Table 6, the same way
+        case Chip::NxpUcode9xe:
+            return true;  // SL3S1216 Rev3.3 Table 5, the same way
         default:
             return false;
     }
@@ -582,6 +587,12 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                     return Chip::NxpUcodeG2iMPlus;
                 case 0x894:
                     return Chip::NxpUcode8;  // SL3S1205/1215 datasheet
+                case 0xA16:
+                case 0xA96:
+                    // The same change of model number, made to this part at the same time. Its
+                    // datasheet gives both TIDs outright: "HEX E280 6A16 ... or HEX E280 6A96"
+                    // (SL3S1216 Rev3.3 Table 5 note 1)
+                    return Chip::NxpUcode9xe;
                 case 0x995:
                 case 0x915:
                     // NXP moved UCODE 9 from 995h to 915h in PCN 202301029F01 without renaming
@@ -996,6 +1007,8 @@ inline std::string Tag::chipAsString() const
             return "NXP UCODE 8";
         case Chip::NxpUcode9:
             return "NXP UCODE 9";
+        case Chip::NxpUcode9xe:
+            return "NXP UCODE 9xe";
         default:
             return "Unknown";
     }

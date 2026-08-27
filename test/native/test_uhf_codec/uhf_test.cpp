@@ -1062,6 +1062,13 @@ TEST(UHF, TidReadPlan)
     EXPECT_EQ(plan.words, 0);
     EXPECT_TRUE(m5::uhf::tidTellsTagsApart(g2im_read, sizeof(g2im_read)));
 
+    // The UCODE 9xe datasheet gives both of its TIDs outright, one for each model number the
+    // part has carried (SL3S1216 Rev3.3 Table 5 note 1). Both name the same chip
+    const uint8_t ucode9xe_old[] = {0xE2, 0x80, 0x6A, 0x16};
+    const uint8_t ucode9xe_new[] = {0xE2, 0x80, 0x6A, 0x96};
+    EXPECT_EQ(m5::uhf::chipFromTid(ucode9xe_old, sizeof(ucode9xe_old)), m5::uhf::Chip::NxpUcode9xe);
+    EXPECT_EQ(m5::uhf::chipFromTid(ucode9xe_new, sizeof(ucode9xe_new)), m5::uhf::Chip::NxpUcode9xe);
+
     // A chip no table names says nothing beyond its fixed words, so the TID ends there
     const uint8_t unlisted[] = {0xE2, 0x00, 0x6F, 0xFF};
     EXPECT_EQ(m5::uhf::chipFromTid(unlisted, sizeof(unlisted)), m5::uhf::Chip::Unknown);
