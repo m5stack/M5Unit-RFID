@@ -340,63 +340,40 @@ void UnitJRD4035::route_frame(const Frame& f)
 {
     note_frame_arrival();
 
-    // Tag notification. The protocol document is inconsistent about the Type byte of a tag
-    // notification, so the command code is used to route it
-    if (f.command == COMMAND_SINGLE_POLLING || f.command == COMMAND_MULTIPLE_POLLING) {
-        M5_LIB_LOGD("Tag notification: type=%02X cmd=%02X", f.type, f.command);
-        m5::uhf::Tag tag{};
-        if (parse_tag_notification(tag, f.parameter.data(), f.parameter.size())) {
-            // The module already rejects tags failing the CRC check (Inventory Fail 0x15), so a
-            // mismatch here points at our own parsing rather than at RF corruption. Warn and keep
-            // the tag so the problem is visible instead of silently losing detections
-            if (!m5::uhf::verify_tag_crc(tag)) {
-                M5_LIB_LOGW("Gen2 CRC-16 mismatch (reported %04X)", tag.crc);
+    switch (route_for(f, _response_pending, _awaiting_command)) {
+        case FrameRoute::TagNotification: {
+            M5_LIB_LOGD("Tag notification: type=%02X cmd=%02X", f.type, f.command);
+            m5::uhf::Tag tag{};
+            if (parse_tag_notification(tag, f.parameter.data(), f.parameter.size())) {
+                // The module already rejects tags failing the CRC check (Inventory Fail 0x15), so a
+                // mismatch here points at our own parsing rather than at RF corruption. Warn and keep
+                // the tag so the problem is visible instead of silently losing detections
+                if (!m5::uhf::verify_tag_crc(tag)) {
+                    M5_LIB_LOGW("Gen2 CRC-16 mismatch (reported %04X)", tag.crc);
+                }
+                push_tag(tag);
             }
-            push_tag(tag);
+            break;
         }
-        return;
-    }
-
-    // Failure notification
-    if (is_error_frame(f.command)) {
-        const uint8_t code = f.parameter.empty() ? 0x00 : f.parameter[0];
-        // Inventory Fail answers a polling command and nothing else: every tag operation has a
-        // failure code of its own. It arrives once per empty round, and the rounds already under
-        // way keep arriving after a stop, so anywhere but in front of a polling command it is a
-        // leftover rather than the answer to whatever was sent last
-        const bool awaiting_inventory = _response_pending && (_awaiting_command == COMMAND_SINGLE_POLLING ||
-                                                              _awaiting_command == COMMAND_MULTIPLE_POLLING);
-        if (is_no_tag(code) && !awaiting_inventory) {
-            return;
-        }
-        // Whether this matters is not known here: a retry may still succeed. Saying so is left
-        // to succeeded(), which is reached only once the operation has given up
-        M5_LIB_LOGD("Error frame %02X", code);
-        if (_response_pending) {
-            // An error code names the operation it came from, so one that cannot have come from
-            // the command being waited on is left over from an exchange that already gave up.
-            // Taking it would answer this command with someone else's failure
-            if (!error_answers_command(code, _awaiting_command)) {
-                M5_LIB_LOGD("Error %02X cannot answer %02X; dropped", code, _awaiting_command);
-                return;
-            }
+        case FrameRoute::Response:
+            // Whether a failure here matters is not known yet: a retry may still succeed. Saying
+            // so is left to succeeded(), which is reached only once the operation has given up
             _response         = f;
             _response_pending = false;
-        }
-        return;
+            break;
+        case FrameRoute::Drop:
+            // An empty round reports itself once per round, which is ordinary and not worth a line
+            if (f.parameter.empty() || !is_no_tag(f.parameter[0])) {
+                M5_LIB_LOGD("Left over from an earlier exchange: cmd=%02X code=%02X", f.command,
+                            f.parameter.empty() ? 0x00 : f.parameter[0]);
+            }
+            break;
+        case FrameRoute::Unexpected:
+            M5_LIB_LOGW("Unhandled frame: type=%02X cmd=%02X len=%u%s", f.type, f.command,
+                        static_cast<unsigned>(f.parameter.size()),
+                        _response_pending ? ", while waiting for a response" : "");
+            break;
     }
-
-    // Response to a pending command
-    if (_response_pending && f.command == _awaiting_command) {
-        _response         = f;
-        _response_pending = false;
-        return;
-    }
-
-    // Nobody asked for this one. A module answering under a command code we are not expecting is
-    // exactly how an exchange slips by one frame, so it is said out loud rather than dropped
-    M5_LIB_LOGW("Unhandled frame: type=%02X cmd=%02X len=%u%s", f.type, f.command,
-                static_cast<unsigned>(f.parameter.size()), _response_pending ? ", while waiting for a response" : "");
 }
 
 bool UnitJRD4035::pump(const uint32_t timeout_ms)

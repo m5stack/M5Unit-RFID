@@ -854,6 +854,58 @@ inline bool error_answers_command(const uint8_t error_code, const uint8_t comman
 }
 
 /*!
+  @brief What is to be done with a frame that has just been read
+ */
+enum class FrameRoute : uint8_t {
+    TagNotification,  //!< A tag the module found. Parse it and queue it
+    Response,         //!< The answer to the command being waited on
+    Drop,             //!< Left over from an exchange that has already given up
+    Unexpected,       //!< Nobody asked for this one
+};
+
+/*!
+  @brief Decide what a received frame answers
+  @param f Frame that has been read
+  @param response_pending Is a command waiting for its answer?
+  @param awaiting_command Command code being waited on, where there is one
+  @return What is to be done with the frame
+  @details A frame carries nothing to say which exchange it belongs to, so the command code and
+  the error code are all there is to go on. One that cannot have come from the command being
+  waited on is left over from an exchange that already gave up, and answering with it would
+  shift every later exchange by one
+ */
+inline FrameRoute route_for(const Frame& f, const bool response_pending, const uint8_t awaiting_command)
+{
+    // The protocol document is inconsistent about the Type byte of a tag notification, so the
+    // command code is what routes it
+    if (f.command == COMMAND_SINGLE_POLLING || f.command == COMMAND_MULTIPLE_POLLING) {
+        return FrameRoute::TagNotification;
+    }
+    if (is_error_frame(f.command)) {
+        const uint8_t code = f.parameter.empty() ? 0x00 : f.parameter[0];
+        // Inventory Fail answers a polling command and nothing else: every tag operation has a
+        // failure code of its own. It arrives once per empty round, and the rounds already under
+        // way keep arriving after a stop, so anywhere but in front of a polling command it is a
+        // leftover rather than the answer to whatever was sent last
+        const bool awaiting_inventory = response_pending && (awaiting_command == COMMAND_SINGLE_POLLING ||
+                                                             awaiting_command == COMMAND_MULTIPLE_POLLING);
+        if (is_no_tag(code) && !awaiting_inventory) {
+            return FrameRoute::Drop;
+        }
+        if (!response_pending) {
+            return FrameRoute::Drop;
+        }
+        return error_answers_command(code, awaiting_command) ? FrameRoute::Response : FrameRoute::Drop;
+    }
+    if (response_pending && f.command == awaiting_command) {
+        return FrameRoute::Response;
+    }
+    // A module answering under a command code nobody is waiting for is exactly how an exchange
+    // slips by one frame, so this is worth saying out loud rather than dropping quietly
+    return FrameRoute::Unexpected;
+}
+
+/*!
   @brief Is this failure worth sending the same command again for?
   @param error_code Error code carried by the failure notification
   @return True when a repeat has a chance of succeeding

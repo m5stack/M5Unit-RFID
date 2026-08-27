@@ -912,6 +912,57 @@ TEST(UHF, ExtractFrame)
     }
 }
 
+TEST(UHF, RouteFor)
+{
+    auto error_frame = [](const uint8_t code) {
+        Frame f{};
+        f.type      = 0x01;
+        f.command   = COMMAND_ERROR;
+        f.parameter = {code};
+        return f;
+    };
+    auto plain_frame = [](const uint8_t command) {
+        Frame f{};
+        f.type    = 0x01;
+        f.command = command;
+        return f;
+    };
+
+    // A tag notification is a tag notification whether or not anything is being waited on
+    EXPECT_EQ(route_for(plain_frame(COMMAND_SINGLE_POLLING), false, 0x00), FrameRoute::TagNotification);
+    EXPECT_EQ(route_for(plain_frame(COMMAND_MULTIPLE_POLLING), true, COMMAND_READ_TAG_MEMORY),
+              FrameRoute::TagNotification);
+
+    // An empty round answers a polling command and is a leftover in front of anything else
+    EXPECT_EQ(route_for(error_frame(0x15), true, COMMAND_SINGLE_POLLING), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x15), true, COMMAND_MULTIPLE_POLLING), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x15), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Drop);
+    EXPECT_EQ(route_for(error_frame(0x15), false, 0x00), FrameRoute::Drop);
+
+    // An error names the operation it came from, so it can only answer that one
+    EXPECT_EQ(route_for(error_frame(0xA3), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0xA3), true, COMMAND_WRITE_TAG_MEMORY), FrameRoute::Drop);
+    EXPECT_EQ(route_for(error_frame(0x09), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x09), true, COMMAND_LOCK_TAG_MEMORY), FrameRoute::Drop);
+
+    // A code any command can provoke, and one this table does not name, answer whatever is sent
+    EXPECT_EQ(route_for(error_frame(0x17), true, COMMAND_LOCK_TAG_MEMORY), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x20), true, COMMAND_READ_TAG_MEMORY), FrameRoute::Response);
+    EXPECT_EQ(route_for(error_frame(0x7F), true, COMMAND_KILL_TAG), FrameRoute::Response);
+
+    // An error arriving with nothing pending is left over, whatever it says
+    EXPECT_EQ(route_for(error_frame(0x09), false, 0x00), FrameRoute::Drop);
+    EXPECT_EQ(route_for(error_frame(0x17), false, 0x00), FrameRoute::Drop);
+
+    // An ordinary response is matched on the command code alone
+    EXPECT_EQ(route_for(plain_frame(0x12), true, 0x12), FrameRoute::Response);
+    EXPECT_EQ(route_for(plain_frame(0x12), true, 0x0B), FrameRoute::Unexpected);
+
+    // The answer to a command that has already timed out cannot fill the slot the next one is
+    // waiting on: nothing is pending between the timeout and the next send
+    EXPECT_EQ(route_for(plain_frame(0x03), false, 0x00), FrameRoute::Unexpected);
+}
+
 TEST(UHF, ErrorAnswersCommand)
 {
     using namespace m5::unit::m100;
