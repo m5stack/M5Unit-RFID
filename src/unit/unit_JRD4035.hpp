@@ -48,6 +48,15 @@ public:
     virtual bool writeQueryParameters(const m5::uhf::QueryParameters& qp) override;
     virtual bool writeAutoSleepTime(const uint8_t minutes) override;
     virtual bool writeIdle(const bool enter, const uint8_t minutes = 0) override;
+    /*!
+      @brief Put the module into low power sleep
+      @return True if successful
+      @warning Sleeping and waking repeatedly has been seen to leave this module answering
+      nothing for tens of seconds, reporting a watchdog reset when it comes back. It does come
+      back on its own, but nothing on the host can hurry it: on Unit UHF-RFID the module's
+      enable pin is tied high on the board, and the connector carries only power and the
+      serial port
+     */
     virtual bool sleep() override;
     virtual bool wake() override;
     virtual bool writeOperatingChannels(const std::vector<uint8_t>& channels) override;
