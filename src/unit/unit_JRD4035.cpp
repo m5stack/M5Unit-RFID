@@ -107,16 +107,26 @@ constexpr uint32_t TAG_OPERATION_TIMEOUT_MS{2000};
 constexpr int TAG_OPERATION_ATTEMPTS{3};
 
 /*!
-  @brief How long to wait for the rest of a frame that has already started
-  @details A frame is sent in one go, and the longest the module can send is 517 bytes, which
-  at 115200 baud takes about 45ms. This is the ceiling on how long a stream that stops halfway
-  can hold the caller up, and it is deliberately not the configured timeout: that one is for a
-  frame arriving at all, which is a different wait and a far longer one
+  @brief Longest gap between two bytes of the same frame
+  @details The module sends a frame in one go, so a pause longer than a couple of dozen byte
+  times means it has finished sending rather than that more is coming
  */
-// Longest gap between two bytes of the same frame. The module sends a frame in one go, so a
-// pause longer than a couple of dozen byte times means it has finished sending rather than that
-// more is coming
 constexpr uint32_t BYTE_GAP_TIMEOUT_MS{2};
+
+/*!
+  @brief How long the link has to stay silent before the next command is sent
+  @details The answer to a command that timed out can still arrive afterwards, and a response
+  frame carries nothing but the command code to say what it answers. A gap this long says the
+  answer is not on its way, which is what makes the next command's answer its own
+ */
+constexpr uint32_t RESYNC_QUIET_MS{50};
+
+/*!
+  @brief Longest a resynchronisation may take
+  @details Tag notifications keep arriving while a round is running, so the link does not fall
+  silent on its own during one. This bounds the wait for that case
+ */
+constexpr uint32_t RESYNC_LIMIT_MS{250};
 
 //! @brief Byte sent to wake the module. Any value does; this is what the vendor's driver sends
 constexpr uint8_t WAKE_BYTE{0x55};
@@ -401,6 +411,21 @@ bool UnitJRD4035::pump(const uint32_t timeout_ms)
     return handled;
 }
 
+void UnitJRD4035::resynchronize()
+{
+    // Nothing is pending, so route_frame queues tag notifications as usual and drops answers.
+    // Reading on until the link falls silent is what keeps a late answer out of the next exchange
+    const unsigned long give_up_at = m5::utility::millis() + RESYNC_LIMIT_MS;
+    Frame f{};
+    while (m5::utility::millis() < give_up_at) {
+        if (!read_frame(f, RESYNC_QUIET_MS)) {
+            return;
+        }
+        route_frame(f);
+    }
+    M5_LIB_LOGW("The link did not fall silent; the next answer may belong to an earlier command");
+}
+
 bool UnitJRD4035::send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len)
 {
     std::vector<uint8_t> frame{};
@@ -415,10 +440,9 @@ bool UnitJRD4035::send_command(const uint8_t command, const uint8_t* param, cons
 bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
                                 const uint32_t timeout_ms)
 {
-    // The response to a command that timed out can still arrive afterwards, and would then be
-    // taken for the answer to this one, shifting every later exchange by one frame. Whatever is
-    // already in flight is therefore consumed first: route_frame queues tag notifications as
-    // usual and drops the stale responses, because nothing is pending yet.
+    // Anything that arrived since the last exchange is taken first: route_frame queues tag
+    // notifications as usual and drops answers, because nothing is pending yet. That clears what
+    // has already come in; an answer still on its way is waited out where the timeout happens
     pump(1);
 
     _awaiting_command = command;
@@ -445,6 +469,9 @@ bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const ui
     }
     _response_pending = false;
     M5_LIB_LOGE("Timeout waiting for the response to %02X", command);
+    // The answer may still be on its way, and nothing but the command code says what a response
+    // answers. Leaving it there would make it the answer to whatever is sent next
+    resynchronize();
     return false;
 }
 

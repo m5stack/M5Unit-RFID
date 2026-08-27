@@ -106,6 +106,8 @@ protected:
     void flush_rx();
     //! @brief Route a received frame
     void route_frame(const m100::Frame& f);
+    //! @brief Wait out an answer that may still be on its way, so that it cannot answer the next command
+    void resynchronize();
     //! @brief Read the module information for one kind (0x00 hardware / 0x01 software / 0x02 manufacturer)
     bool read_module_information_kind(std::string& out, const uint8_t kind);
     //! @brief Run one of the channel scans and decode its contiguous range of levels
