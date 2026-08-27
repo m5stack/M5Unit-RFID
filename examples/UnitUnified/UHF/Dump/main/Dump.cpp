@@ -137,8 +137,13 @@ void print_identity(const m5::uhf::Tag& tag)
     } else {
         M5_LOGI("XTID  : no");
     }
+    // The XTID says whether a tag has BlockPermalock, but hardly any chip carries the segment
+    // that says it. Where the chip's datasheet gives the answer instead, that is used; where
+    // neither does, saying "no" would be inventing one
+    const char* permalock =
+        (tag.supports_block_permalock || m5::uhf::chipSupportsBlockPermalock(tag.chip)) ? "yes" : "unknown";
     M5_LOGI("Flags : security=%u file=%u blockPermalock=%s", tag.supports_security ? 1 : 0, tag.supports_file ? 1 : 0,
-            tag.supports_block_permalock ? "yes" : "no");
+            permalock);
     M5_LOGI("Sizes : user=%s maxEPC=%s permalockBlock=%s", user_memory_size(tag).c_str(),
             bits_or_unknown(tag.epc_max_bits).c_str(), bits_or_unknown(tag.permalock_block_bits).c_str());
 

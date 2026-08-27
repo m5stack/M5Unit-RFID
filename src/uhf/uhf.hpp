@@ -303,7 +303,11 @@ struct Tag {
     bool has_xtid{};                  //!< XTID indicator (TID bit 08h)
     bool supports_security{};         //!< Security indicator (TID bit 09h)
     bool supports_file{};             //!< File indicator (TID bit 0Ah)
-    bool supports_block_permalock{};  //!< BlockPermaLock support, as the XTID reports it
+    //! @brief BlockPermaLock support, as the XTID reports it
+    //! @warning False means the XTID did not say so, which is not the same as the tag not
+    //! having it: hardly any chip carries the segment that would. chipSupportsBlockPermalock()
+    //! is what answers for the chips whose datasheets do
+    bool supports_block_permalock{};
 
     //! @brief Holds a usable EPC?
     inline bool valid() const
@@ -445,6 +449,29 @@ inline uint16_t chipTidWords(const Chip chip)
             return 6;
         default:
             return 0;
+    }
+}
+
+/*!
+  @brief Is this a chip whose datasheet gives it BlockPermalock?
+  @param chip Chip
+  @return True where the datasheet says it has it
+  @details Gen2 leaves BlockPermalock optional, and a tag says whether it has it only through
+  an XTID segment that almost no chip carries. Where the datasheet says so, this is where the
+  answer comes from instead
+ */
+inline bool chipSupportsBlockPermalock(const Chip chip)
+{
+    switch (chip) {
+        case Chip::NxpUcodeG2iM:
+        case Chip::NxpUcodeG2iMPlus:
+            // SL3S1003_1013 Rev3.7 Table 13: "BlockPermalock ... yes ... yes"
+            return true;
+        case Chip::ImpinjMonza4QT:
+            // Monza 4 V10.0 2.3.1, the four 128-bit sections it can lock
+            return true;
+        default:
+            return false;
     }
 }
 
