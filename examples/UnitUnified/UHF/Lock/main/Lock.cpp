@@ -135,9 +135,10 @@ bool has_user_bank(m5::uhf::Tag& tag)
 }
 
 //! @brief Write one word and put it back, to see whether the lock stops it
-//! @details Putting the word back is tried more than once. A probe that fails costs nothing,
-//! while a word left overwritten is a change to the tag that was never asked for, and this
-//! module drops a write now and then even when the tag is well within range
+//! @details The word is written with something it did not already hold, since a write of what
+//! is there comes back done whatever the lock says. Putting it back is tried more than once: a
+//! probe that fails costs nothing, while a word left overwritten is a change to the tag that
+//! was never asked for, and this module drops a write now and then even well within range
 void write_probe(const char* when)
 {
     constexpr uint8_t RESTORE_ATTEMPTS{4};

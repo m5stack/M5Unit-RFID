@@ -189,6 +189,9 @@ public:
       failure already on the tag, and says in the log how far it got
       @note Writing the EPC bank changes the very bytes an EPC mask matches on, so a selection
       made from an EPC is dropped afterwards and has to be made again
+      @warning A write reported as done is not proof the memory could be written: a write of the
+      value a word already holds has come back done even on locked and permalocked memory. Only a
+      write carrying something else says anything
      */
     bool writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len);
     /*!
