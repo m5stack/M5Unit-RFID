@@ -525,6 +525,52 @@ inline bool parse_tag_operation(TagOperationResult& out, const uint8_t* param, c
 }
 
 /*!
+  @brief Parse the answer to a BlockPermalock that locked
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True when the module says it carried the lock out
+  @details The tag that replied comes first, and a single byte after it says how it went. A
+  frame that reached this far still has to be read: the module answers a lock under a command
+  code of its own whether or not the tag did anything
+ */
+inline bool parse_block_permalock_lock(const uint8_t* param, const size_t len)
+{
+    TagOperationResult r{};
+    if (!parse_tag_operation(r, param, len)) {
+        return false;
+    }
+    return r.data_len >= 1 && r.data[0] == TAG_OPERATION_SUCCESS;
+}
+
+/*!
+  @brief Parse the answer to a BlockPermalock that read
+  @param[out] mask Permalock bits, one word for every sixteen blocks, the first block being the
+  most significant bit
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True if successful
+  @details The tag that replied comes first, then the range the answer covers and that many
+  words of mask. The range is counted in sixteens, which is what one word of mask holds
+ */
+inline bool parse_block_permalock_read(std::vector<uint8_t>& mask, const uint8_t* param, const size_t len)
+{
+    mask.clear();
+    TagOperationResult r{};
+    if (!parse_tag_operation(r, param, len)) {
+        return false;
+    }
+    if (r.data_len < 1) {
+        return false;
+    }
+    const size_t range = r.data[0];
+    if (range == 0 || r.data_len < 1 + range * 2) {
+        return false;
+    }
+    mask.assign(r.data + 1, r.data + 1 + range * 2);
+    return true;
+}
+
+/*!
   @name Bit positions of the Query parameter fields
   @details The fields pack into the 16-bit word from the top down as DR(1) M(2) TRext(1) Sel(2)
   Session(2) Target(1) Q(4), leaving the bottom three bits unused. The vendor documents the

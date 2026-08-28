@@ -982,6 +982,54 @@ TEST(UHF, RouteFor)
     EXPECT_EQ(route_for(plain_frame(0x03), false, 0x00), FrameRoute::Unexpected);
 }
 
+TEST(UHF, BlockPermalockAnswers)
+{
+    // The tag that replied comes first everywhere: a byte counting the PC and EPC, then those
+    // bytes. A lock puts one status byte after them, a read the range and that many words of mask
+    const std::vector<uint8_t> tag{0x0E, 0x34, 0x00, 0xE2, 0x80, 0x11, 0x05, 0x20,
+                                   0x00, 0x81, 0x1D, 0x67, 0xC1, 0x0B, 0x13};
+    auto answer = [&tag](const std::vector<uint8_t>& tail) {
+        std::vector<uint8_t> out{tag};
+        out.insert(out.end(), tail.begin(), tail.end());
+        return out;
+    };
+
+    // A lock says how it went, and only one value means it went
+    auto locked = answer({0x00});
+    EXPECT_TRUE(parse_block_permalock_lock(locked.data(), locked.size()));
+    for (const uint8_t status : {0x01, 0x03, 0x04, 0xFF}) {
+        auto refused = answer({status});
+        EXPECT_FALSE(parse_block_permalock_lock(refused.data(), refused.size())) << "status " << (int)status;
+    }
+    // Nothing after the tag is not an answer at all
+    EXPECT_FALSE(parse_block_permalock_lock(tag.data(), tag.size()));
+    EXPECT_FALSE(parse_block_permalock_lock(nullptr, 0));
+
+    // A read carries a range counted in sixteens and one word of mask for each
+    std::vector<uint8_t> mask{};
+    auto one_word = answer({0x01, 0x10, 0x00});
+    EXPECT_TRUE(parse_block_permalock_read(mask, one_word.data(), one_word.size()));
+    EXPECT_EQ(mask, (std::vector<uint8_t>{0x10, 0x00}));
+
+    auto two_words = answer({0x02, 0x80, 0x00, 0x00, 0x01});
+    EXPECT_TRUE(parse_block_permalock_read(mask, two_words.data(), two_words.size()));
+    EXPECT_EQ(mask, (std::vector<uint8_t>{0x80, 0x00, 0x00, 0x01}));
+
+    // A range the mask cannot cover, or none at all, leaves nothing to report
+    auto short_mask = answer({0x02, 0x80, 0x00});
+    EXPECT_FALSE(parse_block_permalock_read(mask, short_mask.data(), short_mask.size()));
+    EXPECT_TRUE(mask.empty());
+    auto no_range = answer({0x00});
+    EXPECT_FALSE(parse_block_permalock_read(mask, no_range.data(), no_range.size()));
+    EXPECT_FALSE(parse_block_permalock_read(mask, tag.data(), tag.size()));
+
+    // A count that overruns the frame is not a tag, however much follows it
+    auto overrun = answer({0x01, 0x10, 0x00});
+    overrun[0]   = 0x40;
+    EXPECT_FALSE(parse_block_permalock_read(mask, overrun.data(), overrun.size()));
+    EXPECT_FALSE(parse_block_permalock_lock(overrun.data(), overrun.size()));
+}
+
 TEST(UHF, ErrorAnswersCommand)
 {
     using namespace m5::unit::m100;

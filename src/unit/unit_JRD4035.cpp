@@ -674,26 +674,17 @@ bool UnitJRD4035::block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank
     }
     // Both answers begin with the tag that replied: a length byte and that many bytes of PC and
     // EPC. A read puts the range and the mask after them, a lock a status byte
-    if (res.parameter.empty()) {
-        M5_LIB_LOGE("BlockPermalock answered with nothing");
-        return false;
-    }
     if (lock) {
+        if (!parse_block_permalock_lock(res.parameter.data(), res.parameter.size())) {
+            M5_LIB_LOGE("BlockPermalock did not say it locked anything");
+            return false;
+        }
         return true;
     }
-    const size_t tag_len = res.parameter[0];
-    const size_t rest    = res.parameter.size() - 1;
-    if (rest < tag_len + 1) {
-        M5_LIB_LOGE("BlockPermalock read answered without a mask");
+    if (!parse_block_permalock_read(out, res.parameter.data(), res.parameter.size())) {
+        M5_LIB_LOGE("Malformed BlockPermalock read answer");
         return false;
     }
-    const size_t range = res.parameter[1 + tag_len];
-    if (rest < tag_len + 1 + range * 2) {
-        M5_LIB_LOGE("BlockPermalock read answered with %zu words of mask in %zu bytes", range, rest);
-        return false;
-    }
-    out.assign(res.parameter.begin() + static_cast<long>(2 + tag_len),
-               res.parameter.begin() + static_cast<long>(2 + tag_len + range * 2));
     return true;
 }
 
