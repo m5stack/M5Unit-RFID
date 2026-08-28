@@ -21,6 +21,11 @@ namespace uhf {
   @brief EPC Gen2 semantics layer for UHF-RFID reader units
   @details Holds semantics defined by the EPC Gen2 standard, which stay the same across
   reader chips. The frame level belongs to the unit class.
+  @warning A tag's write range is shorter than its read range: writing takes more power, and
+  these memories erase before they program, of which erasing is the cheaper half. A tag well
+  within reading distance can therefore have a word erased and not programmed, leaving it
+  neither as it was nor as it was asked to be. A command that goes unanswered is not a command
+  that did nothing
  */
 class UHFLayer {
 public:
