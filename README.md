@@ -121,18 +121,6 @@ Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
 
 > **Note:** GROVE port support may be added in a future update if SoftwareI2C performance improves.
 
-### UnitUHFRFID Stops Answering After a Host Reset
-
-The JRD-4035 module sometimes stops answering the UART after the host MCU resets, and resetting the
-host again does not bring it back. `begin()` then fails after about three seconds.
-
-Check the cable and the connectors first. If they are sound, disconnect the unit for a few seconds
-and reconnect it, or power the host down completely instead of pressing reset.
-
-> **Note:** The cause is not known. Nothing sent over the UART recovers the module once it reaches
-> that state, and the module's `EN` pin is tied to +5V on this unit and is not brought out to the
-> GROVE connector, so the host cannot reset it either.
-
 ## Related Link
 
 - [Unit RFID2 & Datasheet](https://docs.m5stack.com/en/unit/rfid2)
