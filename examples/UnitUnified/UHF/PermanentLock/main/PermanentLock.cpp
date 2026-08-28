@@ -173,7 +173,7 @@ bool look(m5::uhf::Tag& tag, uint16_t& locked)
 
     // A Monza 4QT showing its public map has no user memory to lock, and the chip is documented
     // as ignoring BlockPermalock outright while it does
-    if (m5::uhf::chipSupportsQT(tag.chip)) {
+    if (m5::uhf::tagQTSupport(tag) != m5::uhf::Support::No) {
         m5::uhf::QTParameters qt{};
         if (uhf.readQTParameters(qt)) {
             M5_LOGI("QT memory map: %s", qt.public_memory ? "public" : "private");

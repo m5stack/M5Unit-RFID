@@ -569,9 +569,9 @@ bool UHFLayer::readQTParameters(QTParameters& qt)
         M5_LIB_LOGE("readQTParameters needs a tag to have been selected");
         return false;
     }
-    // Only a chip that is known not to have the command is turned away. One this table does
-    // not name is tried: not knowing is not the same as knowing it cannot
-    if (_selected.chip != Chip::Unknown && !chipSupportsQT(_selected.chip)) {
+    // Only a tag that can be said not to have the command is turned away. One nothing has
+    // said either way about is tried: not knowing is not the same as knowing it cannot
+    if (tagQTSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s has no QT command", _selected.chipAsString().c_str());
         return false;
     }
@@ -593,9 +593,9 @@ bool UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
         M5_LIB_LOGE("writeQTParameters needs a tag to have been selected");
         return false;
     }
-    // Only a chip that is known not to have the command is turned away. One this table does
-    // not name is tried: not knowing is not the same as knowing it cannot
-    if (_selected.chip != Chip::Unknown && !chipSupportsQT(_selected.chip)) {
+    // Only a tag that can be said not to have the command is turned away. One nothing has
+    // said either way about is tried: not knowing is not the same as knowing it cannot
+    if (tagQTSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s has no QT command", _selected.chipAsString().c_str());
         return false;
     }
@@ -664,6 +664,83 @@ bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
     _u.writeSelectEnabled(false);
     resume_polling();
     return true;
+}
+
+bool UHFLayer::readNxpConfigWord(uint16_t& config)
+{
+    return toggleNxpConfigWord(config, 0);
+}
+
+bool UHFLayer::toggleNxpConfigWord(uint16_t& config, const uint16_t toggle)
+{
+    config = 0;
+    if (!_has_selection) {
+        M5_LIB_LOGE("The Config-Word needs a tag to have been selected");
+        return false;
+    }
+    // Only a tag that can be said not to have these is turned away. One nothing has said
+    // either way about is tried: not knowing is not the same as knowing it cannot
+    if (tagNxpCustomCommandSupport(_selected) == Support::No) {
+        M5_LIB_LOGE("%s does not implement the commands NXP added of its own", _selected.chipAsString().c_str());
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    return _u.nxpChangeConfig(config, toggle, _access_password);
+}
+
+bool UHFLayer::writeNxpEAS(const bool enable)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("writeNxpEAS needs a tag to have been selected");
+        return false;
+    }
+    // Only a tag that can be said not to have these is turned away. One nothing has said
+    // either way about is tried: not knowing is not the same as knowing it cannot
+    if (tagNxpCustomCommandSupport(_selected) == Support::No) {
+        M5_LIB_LOGE("%s does not implement the commands NXP added of its own", _selected.chipAsString().c_str());
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    return _u.nxpChangeEAS(enable, _access_password);
+}
+
+bool UHFLayer::nxpEASAlarm(std::vector<uint8_t>& alarm)
+{
+    alarm.clear();
+    // The alarm asks the field rather than one tag, so nothing has to have been selected
+    if (!pause_polling()) {
+        return false;
+    }
+    return _u.nxpEASAlarm(alarm);
+}
+
+bool UHFLayer::nxpReadProtect(const bool protect)
+{
+    if (!_has_selection) {
+        M5_LIB_LOGE("nxpReadProtect needs a tag to have been selected");
+        return false;
+    }
+    // Only a tag that can be said not to have these is turned away. One nothing has said
+    // either way about is tried: not knowing is not the same as knowing it cannot
+    if (tagNxpCustomCommandSupport(_selected) == Support::No) {
+        M5_LIB_LOGE("%s does not implement the commands NXP added of its own", _selected.chipAsString().c_str());
+        return false;
+    }
+    if (!pause_polling()) {
+        return false;
+    }
+    // Protecting hides the very bytes an EPC mask matches on, so the mask stops picking this
+    // tag out. The same is true of putting it back, which reveals them again
+    const bool ok = _u.nxpReadProtect(protect, _access_password);
+    if (ok && _mask_bank == Bank::Epc) {
+        M5_LIB_LOGW("The EPC this tag was selected by has changed; select it again");
+        deselect();
+    }
+    return ok;
 }
 
 }  // namespace uhf

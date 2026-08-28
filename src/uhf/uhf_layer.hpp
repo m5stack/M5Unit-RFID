@@ -268,6 +268,59 @@ public:
       @note Either way the tag can be switched back, so neither is a one-way door
      */
     bool writeQTParameters(const QTParameters& qt, const bool persistent = false);
+    /*!
+      @brief Read the Config-Word of an NXP UCODE G2X
+      @param[out] config Word the tag holds
+      @return True if successful
+      @details The word carries the read protection, the Product Status Flag and the range
+      reduction among other things. Which bit is which is in the chip's own datasheet
+     */
+    bool readNxpConfigWord(uint16_t& config);
+    /*!
+      @brief Invert bits of the Config-Word of an NXP UCODE G2X
+      @param[out] config Word the tag holds afterwards
+      @param toggle Bits to invert
+      @return True if successful
+      @details The word is toggled rather than assigned: a one inverts the bit it stands over
+      and a zero leaves it alone, so sending the same bits twice puts the word back. That is
+      the command the chip offers, and calling it a write would say something else
+      @warning A tag answers a toggle from the secured state alone. From the open state it
+      hands back the word it already had and changes nothing, and says nothing about having
+      refused (UCODE G2iM SL3S1003_1013 Rev3.7 Table 12). Reading costs nothing either way
+      @warning A bit inverted by mistake changes what the tag will answer at all
+     */
+    bool toggleNxpConfigWord(uint16_t& config, const uint16_t toggle);
+    /*!
+      @brief Set or clear the Product Status Flag of an NXP UCODE G2X
+      @param enable True to assert the flag, false to clear it
+      @return True if successful
+      @details A tag whose flag is asserted answers nxpEASAlarm()
+      @warning A tag whose access password is zero ignores this command outright. Give it one
+      first
+     */
+    bool writeNxpEAS(const bool enable);
+    /*!
+      @brief Ask the field whether any tag has its Product Status Flag asserted
+      @param[out] alarm Code the tag backscattered, or empty when nothing answered
+      @return True when the question was put and an answer came back
+      @note This asks the field rather than one tag, so it needs no selection. Nothing being
+      flagged is an answer and not a failure, which is why an empty code is reported apart
+      from whether the question could be asked at all
+     */
+    bool nxpEASAlarm(std::vector<uint8_t>& alarm);
+    /*!
+      @brief Turn the read protection of an NXP UCODE G2X on or off
+      @param protect True to protect, false to put it back
+      @return True if successful
+      @details Protected memory reads back as zeroes rather than falling silent, so the tag
+      goes on answering an inventory round and can be addressed again to undo this
+      @warning The EPC and the TID are protected together, so every protected tag reads back
+      the same all-zero EPC and they can no longer be told apart. Undo this with one tag in
+      the field
+      @warning A tag whose access password is zero ignores this command outright. Give it one
+      first
+     */
+    bool nxpReadProtect(const bool protect);
     ///@}
 
 private:

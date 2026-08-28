@@ -37,6 +37,13 @@ constexpr uint8_t CMD_BLOCK_PERMALOCK{COMMAND_BLOCK_PERMALOCK};
 constexpr uint8_t CMD_BLOCK_PERMALOCK_LOCK_ANSWER{COMMAND_BLOCK_PERMALOCK_LOCK_ANSWER};
 constexpr uint8_t CMD_MONZA_QT{0xE5};
 //! @brief Command code a QT write is answered under, which is not the one it was sent as
+constexpr uint8_t CMD_NXP_CHANGE_CONFIG{COMMAND_NXP_CHANGE_CONFIG};
+constexpr uint8_t CMD_NXP_READ_PROTECT{COMMAND_NXP_READ_PROTECT};
+constexpr uint8_t CMD_NXP_CHANGE_EAS{COMMAND_NXP_CHANGE_EAS};
+constexpr uint8_t CMD_NXP_EAS_ALARM{COMMAND_NXP_EAS_ALARM};
+//! @brief What ReadProtect carries to protect, and to put it back (M100 protocol 2.32)
+constexpr uint8_t NXP_READ_PROTECT_ON{0x00};
+constexpr uint8_t NXP_READ_PROTECT_OFF{0x01};
 constexpr uint8_t CMD_MONZA_QT_WRITE_ANSWER{0xE6};
 constexpr uint8_t CMD_IDLE_MODE{0x04};
 constexpr uint8_t CMD_SLEEP{0x17};
@@ -733,6 +740,86 @@ bool UnitJRD4035::qtCommand(uint16_t& control, const bool write, const bool pers
         control = static_cast<uint16_t>((res.parameter[1 + tag_len] << 8) | res.parameter[2 + tag_len]);
     }
     return true;
+}
+
+bool UnitJRD4035::nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password)
+{
+    config = 0;
+    if (reject_while_polling("nxpChangeConfig") || reject_without_selection("nxpChangeConfig")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_nxp_change_config(param, access_password, toggle)) {
+        return false;
+    }
+    Frame res{};
+    if (!send_tag_operation(res, CMD_NXP_CHANGE_CONFIG, param.data(), static_cast<uint16_t>(param.size()),
+                            "nxpChangeConfig")) {
+        return false;
+    }
+    if (!parse_nxp_change_config(config, res.parameter.data(), res.parameter.size())) {
+        M5_LIB_LOGE("nxpChangeConfig answered without a Config-Word");
+        return false;
+    }
+    return true;
+}
+
+bool UnitJRD4035::nxpChangeEAS(const bool enable, const uint32_t access_password)
+{
+    if (reject_while_polling("nxpChangeEAS") || reject_without_selection("nxpChangeEAS")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_nxp_password_and_flag(param, access_password, enable ? 0x01 : 0x00)) {
+        return false;
+    }
+    Frame res{};
+    return send_tag_operation(res, CMD_NXP_CHANGE_EAS, param.data(), static_cast<uint16_t>(param.size()),
+                              "nxpChangeEAS") &&
+           tag_carried_it_out(res, "nxpChangeEAS");
+}
+
+bool UnitJRD4035::nxpEASAlarm(std::vector<uint8_t>& alarm)
+{
+    alarm.clear();
+    // Alone among these, the alarm asks the field rather than one tag, so no mask is needed
+    if (reject_while_polling("nxpEASAlarm")) {
+        return false;
+    }
+    Frame res{};
+    if (!send_and_wait(res, CMD_NXP_EAS_ALARM, nullptr, 0, TAG_OPERATION_TIMEOUT_MS)) {
+        return false;
+    }
+    // Nothing answering is what the question was asked to find out, so it is an answer and not
+    // a failure, and saying so in the log would be saying something went wrong
+    if (is_error_frame(res.command)) {
+        const uint8_t code = res.parameter.empty() ? 0x00 : res.parameter[0];
+        if (static_cast<Error>(code) == Error::EASAlarmFail) {
+            M5_LIB_LOGD("nxpEASAlarm: nothing in the field is flagged");
+            return true;
+        }
+        return succeeded(res, "nxpEASAlarm");
+    }
+    if (!parse_nxp_eas_alarm(alarm, res.parameter.data(), res.parameter.size())) {
+        M5_LIB_LOGE("nxpEASAlarm answered with nothing");
+        return false;
+    }
+    return true;
+}
+
+bool UnitJRD4035::nxpReadProtect(const bool protect, const uint32_t access_password)
+{
+    if (reject_while_polling("nxpReadProtect") || reject_without_selection("nxpReadProtect")) {
+        return false;
+    }
+    std::vector<uint8_t> param{};
+    if (!build_nxp_password_and_flag(param, access_password, protect ? NXP_READ_PROTECT_ON : NXP_READ_PROTECT_OFF)) {
+        return false;
+    }
+    Frame res{};
+    return send_tag_operation(res, CMD_NXP_READ_PROTECT, param.data(), static_cast<uint16_t>(param.size()),
+                              "nxpReadProtect") &&
+           tag_carried_it_out(res, "nxpReadProtect");
 }
 
 bool UnitJRD4035::writeContinuousCarrier(const bool enable)

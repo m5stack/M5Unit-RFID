@@ -525,6 +525,89 @@ inline bool parse_tag_operation(TagOperationResult& out, const uint8_t* param, c
 }
 
 /*!
+  @brief Build the parameter of NXP ChangeConfig (0xE0)
+  @param[out] out Parameter
+  @param access_password Access password of the tag
+  @param toggle Bits to invert in the Config-Word. Zero reads it without changing anything
+  @return True if successful
+  @details The word is not assigned but toggled: a one inverts the bit it stands over and a
+  zero leaves it alone (M100 protocol 2.35), which is why nothing here is called a write
+ */
+inline bool build_nxp_change_config(std::vector<uint8_t>& out, const uint32_t access_password, const uint16_t toggle)
+{
+    out.clear();
+    out.reserve(6);
+    out.push_back(static_cast<uint8_t>(access_password >> 24));
+    out.push_back(static_cast<uint8_t>(access_password >> 16));
+    out.push_back(static_cast<uint8_t>(access_password >> 8));
+    out.push_back(static_cast<uint8_t>(access_password));
+    out.push_back(static_cast<uint8_t>(toggle >> 8));
+    out.push_back(static_cast<uint8_t>(toggle));
+    return true;
+}
+
+/*!
+  @brief Build the parameter of NXP Change EAS (0xE3) or ReadProtect (0xE1)
+  @param[out] out Parameter
+  @param access_password Access password of the tag
+  @param flag Value of the single byte the command carries
+  @return True if successful
+  @details Both commands are an access password and one byte saying which way to go, so they
+  are built the same way and only the command code tells them apart
+ */
+inline bool build_nxp_password_and_flag(std::vector<uint8_t>& out, const uint32_t access_password, const uint8_t flag)
+{
+    out.clear();
+    out.reserve(5);
+    out.push_back(static_cast<uint8_t>(access_password >> 24));
+    out.push_back(static_cast<uint8_t>(access_password >> 16));
+    out.push_back(static_cast<uint8_t>(access_password >> 8));
+    out.push_back(static_cast<uint8_t>(access_password));
+    out.push_back(flag);
+    return true;
+}
+
+/*!
+  @brief Parse the answer to NXP ChangeConfig (0xE0)
+  @param[out] config Config-Word the tag holds once the command has been carried out
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True if successful
+  @details The tag that replied comes first, and the word it ended up with after it
+ */
+inline bool parse_nxp_change_config(uint16_t& config, const uint8_t* param, const size_t len)
+{
+    config = 0;
+    TagOperationResult r{};
+    if (!parse_tag_operation(r, param, len) || r.data_len < 2) {
+        return false;
+    }
+    config = static_cast<uint16_t>((r.data[0] << 8) | r.data[1]);
+    return true;
+}
+
+/*!
+  @brief Parse the answer to NXP EAS_Alarm (0xE4)
+  @param[out] alarm Alarm code the tag backscattered
+  @param param Parameter of the response frame
+  @param len Length of param
+  @return True when something answered
+  @details Alone among these, this answer carries no tag at all: the alarm asks the field
+  rather than one tag, and what comes back is the code itself. An NXP UCODE G2iM answers with
+  a fixed 64-bit one (SL3S1003_1013 Rev3.7 10.7.8), so eight bytes is what to expect, but the
+  length is left to the tag rather than insisted on here
+ */
+inline bool parse_nxp_eas_alarm(std::vector<uint8_t>& alarm, const uint8_t* param, const size_t len)
+{
+    alarm.clear();
+    if (param == nullptr || len == 0) {
+        return false;
+    }
+    alarm.assign(param, param + len);
+    return true;
+}
+
+/*!
   @brief Parse the answer to a BlockPermalock that locked
   @param param Parameter of the response frame
   @param len Length of param

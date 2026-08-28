@@ -154,6 +154,14 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: UHF_NxpG2X
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_NxpReadProtect
+            board: Core
+            framework: Arduino
+            espressif32: latest
 
     steps:
       - name: Checkout

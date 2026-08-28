@@ -97,6 +97,10 @@ public:
                                 const uint32_t access_password, const bool allow_permanent) override;
     virtual bool qtCommand(uint16_t& control, const bool write, const bool persistent,
                            const uint32_t access_password) override;
+    virtual bool nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password) override;
+    virtual bool nxpChangeEAS(const bool enable, const uint32_t access_password) override;
+    virtual bool nxpEASAlarm(std::vector<uint8_t>& alarm) override;
+    virtual bool nxpReadProtect(const bool protect, const uint32_t access_password) override;
 
 protected:
     virtual bool pump(const uint32_t timeout_ms) override;

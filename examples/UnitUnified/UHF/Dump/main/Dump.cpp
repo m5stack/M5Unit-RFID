@@ -140,9 +140,7 @@ void print_identity(const m5::uhf::Tag& tag)
     // The XTID says whether a tag has BlockPermalock, but hardly any chip carries the segment
     // that says it. Where the chip's datasheet gives the answer instead, that is used; where
     // neither does, saying "no" would be inventing one
-    const char* permalock = (tag.supports_block_permalock || m5::uhf::chipSupportsBlockPermalock(tag.chip))
-                                ? "yes"
-                                : (m5::uhf::chipHasNoBlockPermalock(tag.chip) ? "no" : "unknown");
+    const char* permalock = m5::uhf::supportAsString(m5::uhf::tagBlockPermalockSupport(tag));
     M5_LOGI("Flags : security=%u file=%u blockPermalock=%s", tag.supports_security ? 1 : 0, tag.supports_file ? 1 : 0,
             permalock);
     M5_LOGI("Sizes : user=%s maxEPC=%s permalockBlock=%s", user_memory_size(tag).c_str(),
@@ -150,7 +148,7 @@ void print_identity(const m5::uhf::Tag& tag)
 
     // Which blocks are already locked for good. Reading that changes nothing, and a chip
     // without the command answers with a failure rather than doing anything
-    if (m5::uhf::chipSupportsBlockPermalock(tag.chip)) {
+    if (m5::uhf::tagBlockPermalockSupport(tag) == m5::uhf::Support::Yes) {
         std::vector<uint8_t> locked{};
         if (uhf.readBlockPermalock(locked, m5::uhf::Bank::User) && locked.size() >= 2) {
             const uint16_t blocks = static_cast<uint16_t>((locked[0] << 8) | locked[1]);

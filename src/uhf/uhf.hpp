@@ -308,7 +308,7 @@ struct Tag {
     bool supports_file{};             //!< File indicator (TID bit 0Ah)
     //! @brief BlockPermaLock support, as the XTID reports it
     //! @warning False means the XTID did not say so, which is not the same as the tag not
-    //! having it: hardly any chip carries the segment that would. chipSupportsBlockPermalock()
+    //! having it: hardly any chip carries the segment that would. tagBlockPermalockSupport()
     //! is what answers for the chips whose datasheets do
     bool supports_block_permalock{};
 
@@ -488,71 +488,103 @@ inline uint16_t chipPermalockBlockCount(const Chip chip)
 }
 
 /*!
-  @brief Is this a chip whose datasheet says it has no BlockPermalock?
-  @param chip Chip
-  @return True where the datasheet says it has none
-  @details The other side of chipSupportsBlockPermalock(): a chip in neither is one nothing
-  has said anything about
+  @enum Support
+  @brief What can be said about a chip having a command
+  @details Three answers, not two. A datasheet that lists what a chip implements can say yes
+  or no; one that is not to hand says neither, and that is not the same as no. Keeping the
+  third answer means a chip nothing has been read about is tried rather than turned away
  */
-inline bool chipHasNoBlockPermalock(const Chip chip)
+enum class Support : uint8_t {
+    Unknown,  //!< Nothing that has been read says either way
+    No,       //!< Said not to have it
+    Yes       //!< Said to have it
+};
+
+//! @brief Spell out a Support
+inline const char* supportAsString(const Support support)
 {
-    switch (chip) {
-        case Chip::NxpUcode8:
-        case Chip::NxpUcode8m:
-        case Chip::NxpUcode9:
-        case Chip::NxpUcode9xe:
-            // The optional commands these list are Access, BlockWrite and Untraceable
-            return true;
+    switch (support) {
+        case Support::Yes:
+            return "yes";
+        case Support::No:
+            return "no";
         default:
-            return false;
+            return "unknown";
     }
 }
 
 /*!
-  @brief Is this a chip whose datasheet gives it BlockPermalock?
+  @brief What the chip's datasheet says about it having BlockPermalock
   @param chip Chip
-  @return True where the datasheet says it has it
+  @return Yes, No, or Unknown where nothing to hand says either
   @details Gen2 leaves BlockPermalock optional, and a tag says whether it has it only through
   an XTID segment that almost no chip carries. Where the datasheet says so, this is where the
   answer comes from instead
  */
-inline bool chipSupportsBlockPermalock(const Chip chip)
+inline Support chipBlockPermalockSupport(const Chip chip)
 {
     switch (chip) {
         case Chip::NxpUcodeG2iM:
         case Chip::NxpUcodeG2iMPlus:
             // SL3S1003_1013 Rev3.7 Table 13: "BlockPermalock ... yes ... yes"
-            return true;
+            return Support::Yes;
         case Chip::ImpinjMonza4QT:
             // Monza 4 V10.0 2.3.1, the four 128-bit sections it can lock
-            return true;
+            return Support::Yes;
         case Chip::NxpUcode7xm1k:
         case Chip::NxpUcode7xm2k:
         case Chip::NxpUcode7xmPlus:
-            return true;  // SL3S10X4 p.3 and p.12
+            return Support::Yes;  // SL3S10X4 p.3 and p.12
         case Chip::AlienHiggs3:
-            return true;  // Higgs 3 Supplement, optional commands
+            return Support::Yes;  // Higgs 3 Supplement, optional commands
+        case Chip::NxpUcode8:
+        case Chip::NxpUcode8m:
+        case Chip::NxpUcode9:
+        case Chip::NxpUcode9xe:
+            // The optional commands these list are Access, BlockWrite and Untraceable
+            return Support::No;
         default:
-            return false;
+            return Support::Unknown;
     }
 }
 
 /*!
-  @brief Is this a chip whose datasheet gives it the QT command?
+  @brief What the chip's datasheet says about it having the Impinj QT command
   @param chip Chip
-  @return True where the datasheet says it has it
-  @details Only a chip that is known not to have it can be turned away. A chip this table does
-  not name is worth trying rather than refusing: not knowing is not the same as knowing it
-  cannot
+  @return Yes, No, or Unknown where nothing to hand says either
  */
-inline bool chipSupportsQT(const Chip chip)
+inline Support chipQTSupport(const Chip chip)
 {
     switch (chip) {
         case Chip::ImpinjMonza4QT:
             // Monza 4 V10.0 Table 2-8, the only part of the family with the column ticked
-            return true;
+            return Support::Yes;
         default:
-            return false;
+            return Support::Unknown;
+    }
+}
+
+/*!
+  @brief What the chip's datasheet says about it having the commands NXP added of its own
+  @param chip Chip
+  @return Yes, No, or Unknown where nothing to hand says either
+  @details ChangeConfig, ReadProtect, ChangeEAS and EAS_Alarm belong to the UCODE G2X line and
+  the chips backward compatible with it. NXP's later parts dropped them
+ */
+inline Support chipNxpCustomCommandSupport(const Chip chip)
+{
+    switch (chip) {
+        case Chip::NxpUcodeG2iM:
+        case Chip::NxpUcodeG2iMPlus:
+            // SL3S1003_1013 Rev3.7 8: the custom commands, "backward compatible to UCODE G2X".
+            // The G2X and G2iL that line came from are not in this table
+            return Support::Yes;
+        case Chip::NxpUcode8:
+        case Chip::NxpUcode8m:
+            // SL3S1205_15 Rev3.6 9.4: ACCESS, Block Write and Untraceable, and nothing else
+            return Support::No;
+        default:
+            return Support::Unknown;
     }
 }
 
@@ -1118,6 +1150,92 @@ struct QueryParameters {
 constexpr size_t SELECT_MASK_MAX_BYTES{32};
 
 /*!
+  @name Bits of the Config-Word of an NXP UCODE G2iM and G2iM+
+  @details Named so that a toggle can say what it is inverting. The chip addresses these as
+  bits 200h to 20Fh of the EPC bank, which is the word at address 20h counted from its most
+  significant bit (SL3S1003_1013 Rev3.7 Table 13 and Table 14)
+  @warning These are the bits of the UCODE G2iM and G2iM+ alone. Other NXP chips lay the word
+  out differently, and reading one of them through these names would say something untrue
+ */
+///@{
+constexpr uint16_t NXP_CONFIG_TAMPER_ALARM{0x8000};       //!< Read only. Tag Tamper Alarm
+constexpr uint16_t NXP_CONFIG_EXTERNAL_SUPPLY{0x4000};    //!< Read only. External supply present
+constexpr uint16_t NXP_CONFIG_INVERT_OUTPUT{0x0800};      //!< Cleared when the tag loses power
+constexpr uint16_t NXP_CONFIG_TRANSPARENT_MODE{0x0400};   //!< Cleared when the tag loses power
+constexpr uint16_t NXP_CONFIG_RAW_DATA_MODE{0x0200};      //!< Cleared when the tag loses power
+constexpr uint16_t NXP_CONFIG_CONDITIONAL_RANGE{0x0100};  //!< Conditional read range reduction
+constexpr uint16_t NXP_CONFIG_CONDITIONAL_SHORT{0x0080};  //!< Which way the condition is read
+constexpr uint16_t NXP_CONFIG_MAX_BACKSCATTER{0x0040};    //!< Set as the chip leaves the factory
+constexpr uint16_t NXP_CONFIG_DIGITAL_OUTPUT{0x0020};     //!< Drives the chip's output pad
+constexpr uint16_t NXP_CONFIG_RANGE_REDUCTION{0x0010};    //!< Range reduction, G2iM+ only
+constexpr uint16_t NXP_CONFIG_PROTECT_USER{0x0008};       //!< User memory reads back as zeroes
+constexpr uint16_t NXP_CONFIG_PROTECT_EPC{0x0004};        //!< EPC reads back as zeroes
+constexpr uint16_t NXP_CONFIG_PROTECT_TID{0x0002};        //!< TID reads back as zeroes
+constexpr uint16_t NXP_CONFIG_PSF_ALARM{0x0001};          //!< Product Status Flag, read by EAS
+///@}
+
+/*!
+  @struct NxpConfigWord
+  @brief Config-Word of an NXP UCODE G2iM or G2iM+, spelled out
+  @details Three kinds of bit live in this word. Two are indicators the chip sets for itself
+  and no command can change. Three are temporary and go back to zero when the tag loses power.
+  The rest are permanent and are what a toggle is usually aimed at
+  @warning This is the layout of the UCODE G2iM and G2iM+ alone (SL3S1003_1013 Rev3.7 Table 13
+  and Table 14). Other NXP chips keep a Config-Word too and lay it out differently
+ */
+struct NxpConfigWord {
+    //! @name Indicators the chip sets for itself
+    ///@{
+    bool tamper_alarm{};     //!< The tamper loop has been broken
+    bool external_supply{};  //!< A supply is present on the chip's input
+    ///@}
+    //! @name Cleared when the tag loses power
+    ///@{
+    bool invert_output{};
+    bool transparent_mode{};
+    bool raw_data_mode{};
+    ///@}
+    //! @name Kept until something changes them
+    ///@{
+    bool conditional_range{};  //!< Reduce the range when the condition holds
+    bool conditional_short{};  //!< Which state of the condition is the one that reduces it
+    bool max_backscatter{};    //!< Answer as loudly as the chip can. Set from the factory
+    bool digital_output{};
+    bool range_reduction{};  //!< G2iM+ only
+    bool protect_user{};     //!< User memory reads back as zeroes
+    bool protect_epc{};      //!< EPC reads back as zeroes
+    bool protect_tid{};      //!< TID reads back as zeroes
+    bool psf_alarm{};        //!< Product Status Flag. A tag holding this answers EAS_Alarm
+    ///@}
+};
+
+/*!
+  @brief Spell out the Config-Word of an NXP UCODE G2iM or G2iM+
+  @param word Word as the chip reported it
+  @return The bits it holds
+  @warning Only the UCODE G2iM and G2iM+ lay the word out this way
+ */
+inline NxpConfigWord decodeNxpConfigWord(const uint16_t word)
+{
+    NxpConfigWord out{};
+    out.tamper_alarm      = (word & NXP_CONFIG_TAMPER_ALARM) != 0;
+    out.external_supply   = (word & NXP_CONFIG_EXTERNAL_SUPPLY) != 0;
+    out.invert_output     = (word & NXP_CONFIG_INVERT_OUTPUT) != 0;
+    out.transparent_mode  = (word & NXP_CONFIG_TRANSPARENT_MODE) != 0;
+    out.raw_data_mode     = (word & NXP_CONFIG_RAW_DATA_MODE) != 0;
+    out.conditional_range = (word & NXP_CONFIG_CONDITIONAL_RANGE) != 0;
+    out.conditional_short = (word & NXP_CONFIG_CONDITIONAL_SHORT) != 0;
+    out.max_backscatter   = (word & NXP_CONFIG_MAX_BACKSCATTER) != 0;
+    out.digital_output    = (word & NXP_CONFIG_DIGITAL_OUTPUT) != 0;
+    out.range_reduction   = (word & NXP_CONFIG_RANGE_REDUCTION) != 0;
+    out.protect_user      = (word & NXP_CONFIG_PROTECT_USER) != 0;
+    out.protect_epc       = (word & NXP_CONFIG_PROTECT_EPC) != 0;
+    out.protect_tid       = (word & NXP_CONFIG_PROTECT_TID) != 0;
+    out.psf_alarm         = (word & NXP_CONFIG_PSF_ALARM) != 0;
+    return out;
+}
+
+/*!
   @struct QTParameters
   @brief QT control word of an Impinj Monza 4QT
   @details The chip keeps two memory maps and shows one at a time. Which one it shows, and
@@ -1265,6 +1383,53 @@ inline std::string Tag::vendorAsString() const
         }
     }
     return "Unknown";
+}
+
+/*!
+  @brief What can be said about this tag having BlockPermalock
+  @param tag Tag, identified as far as it has been
+  @return Yes, No, or Unknown
+  @details The tag itself is asked first. Where its XTID carries the segment that says so, that
+  settles it whatever the chip turns out to be. Otherwise it comes down to what the chip's
+  datasheet says
+ */
+inline Support tagBlockPermalockSupport(const Tag& tag)
+{
+    if (tag.supports_block_permalock) {
+        return Support::Yes;
+    }
+    return chipBlockPermalockSupport(tag.chip);
+}
+
+/*!
+  @brief What can be said about this tag having the Impinj QT command
+  @param tag Tag, identified as far as it has been
+  @return Yes, No, or Unknown
+  @details The command is Impinj's own, so a tag whose mask designer is somebody else does not
+  have it whatever the chip is. That answer holds even where the chip could not be named
+ */
+inline Support tagQTSupport(const Tag& tag)
+{
+    if (tag.vendor != Vendor::Unknown && tag.vendor != Vendor::Impinj) {
+        return Support::No;
+    }
+    return chipQTSupport(tag.chip);
+}
+
+/*!
+  @brief What can be said about this tag having the commands NXP added of its own
+  @param tag Tag, identified as far as it has been
+  @return Yes, No, or Unknown
+  @details Two things can say no. The commands are NXP's own, so a tag whose mask designer is
+  somebody else does not have them whatever the chip is; and NXP's own later parts dropped
+  them, which is what the chip table names. A tag whose TID has not been read says neither
+ */
+inline Support tagNxpCustomCommandSupport(const Tag& tag)
+{
+    if (tag.vendor != Vendor::Unknown && tag.vendor != Vendor::NXP) {
+        return Support::No;
+    }
+    return chipNxpCustomCommandSupport(tag.chip);
 }
 
 inline std::string Tag::chipAsString() const

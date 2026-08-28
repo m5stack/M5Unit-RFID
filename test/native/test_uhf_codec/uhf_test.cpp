@@ -1030,6 +1030,107 @@ TEST(UHF, BlockPermalockAnswers)
     EXPECT_FALSE(parse_block_permalock_lock(overrun.data(), overrun.size()));
 }
 
+TEST(UHF, CommandSupport)
+{
+    using namespace m5::uhf;
+
+    // A datasheet that lists what a chip implements can say yes or no. One that is not to hand
+    // says neither, and Unknown is what keeps those two apart
+    EXPECT_EQ(chipNxpCustomCommandSupport(Chip::NxpUcodeG2iM), Support::Yes);
+    EXPECT_EQ(chipNxpCustomCommandSupport(Chip::NxpUcode8), Support::No);
+    EXPECT_EQ(chipNxpCustomCommandSupport(Chip::NxpUcode8m), Support::No);
+    EXPECT_EQ(chipNxpCustomCommandSupport(Chip::NxpUcode9), Support::Unknown);
+    EXPECT_EQ(chipNxpCustomCommandSupport(Chip::Unknown), Support::Unknown);
+
+    EXPECT_EQ(chipBlockPermalockSupport(Chip::ImpinjMonza4QT), Support::Yes);
+    EXPECT_EQ(chipBlockPermalockSupport(Chip::AlienHiggs3), Support::Yes);
+    EXPECT_EQ(chipBlockPermalockSupport(Chip::NxpUcode8), Support::No);
+    EXPECT_EQ(chipBlockPermalockSupport(Chip::AlienHiggs9), Support::Unknown);
+
+    EXPECT_EQ(chipQTSupport(Chip::ImpinjMonza4QT), Support::Yes);
+    EXPECT_EQ(chipQTSupport(Chip::NxpUcodeG2iM), Support::Unknown);
+
+    // A designer other than the one whose command it is settles it, whatever the chip
+    Tag tag{};
+    tag.vendor = Vendor::Impinj;
+    tag.chip   = Chip::Unknown;
+    EXPECT_EQ(tagNxpCustomCommandSupport(tag), Support::No);
+    EXPECT_EQ(tagQTSupport(tag), Support::Unknown) << "an Impinj chip nothing is known about";
+
+    tag.vendor = Vendor::NXP;
+    EXPECT_EQ(tagQTSupport(tag), Support::No);
+    EXPECT_EQ(tagNxpCustomCommandSupport(tag), Support::Unknown) << "NXP, but which chip is not known";
+
+    tag.chip = Chip::NxpUcode8;
+    EXPECT_EQ(tagNxpCustomCommandSupport(tag), Support::No) << "NXP, and this one dropped them";
+    tag.chip = Chip::NxpUcodeG2iM;
+    EXPECT_EQ(tagNxpCustomCommandSupport(tag), Support::Yes);
+
+    // A tag whose TID has not been read says nothing either way
+    tag.vendor = Vendor::Unknown;
+    tag.chip   = Chip::Unknown;
+    EXPECT_EQ(tagNxpCustomCommandSupport(tag), Support::Unknown);
+    EXPECT_EQ(tagQTSupport(tag), Support::Unknown);
+    EXPECT_EQ(tagBlockPermalockSupport(tag), Support::Unknown);
+
+    // The tag's own word outranks the table: an XTID segment saying so settles it
+    tag.supports_block_permalock = true;
+    EXPECT_EQ(tagBlockPermalockSupport(tag), Support::Yes);
+    tag.chip = Chip::NxpUcode8;
+    EXPECT_EQ(tagBlockPermalockSupport(tag), Support::Yes) << "the tag said so, whatever the table says";
+
+    EXPECT_STREQ(supportAsString(Support::Yes), "yes");
+    EXPECT_STREQ(supportAsString(Support::No), "no");
+    EXPECT_STREQ(supportAsString(Support::Unknown), "unknown");
+}
+
+TEST(UHF, NxpCommands)
+{
+    const std::vector<uint8_t> tag{0x0E, 0x30, 0x00, 0x30, 0x75, 0x1F, 0xEB, 0x70,
+                                   0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70};
+    auto answer = [&tag](const std::vector<uint8_t>& tail) {
+        std::vector<uint8_t> out{tag};
+        out.insert(out.end(), tail.begin(), tail.end());
+        return out;
+    };
+    std::vector<uint8_t> param{};
+
+    // ChangeConfig carries the password and the bits to invert. All zeroes reads the word
+    EXPECT_TRUE(build_nxp_change_config(param, 0x0000FFFF, 0x0000));
+    EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00}));
+    EXPECT_TRUE(build_nxp_change_config(param, 0x0000FFFF, 0x0041));
+    EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0xFF, 0xFF, 0x00, 0x41}));
+
+    // Change EAS and ReadProtect are a password and one byte, and only the command differs
+    EXPECT_TRUE(build_nxp_password_and_flag(param, 0x0000FFFF, 0x01));
+    EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0xFF, 0xFF, 0x01}));
+    EXPECT_TRUE(build_nxp_password_and_flag(param, 0, 0x00));
+    EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0x00, 0x00, 0x00}));
+
+    // The ChangeConfig answer carries the tag, then the word it ended up with
+    uint16_t config{0xFFFF};
+    auto changed = answer({0x00, 0x41});
+    EXPECT_TRUE(parse_nxp_change_config(config, changed.data(), changed.size()));
+    EXPECT_EQ(config, 0x0041);
+    // A word cut short is no word
+    auto half = answer({0x00});
+    EXPECT_FALSE(parse_nxp_change_config(config, half.data(), half.size()));
+    EXPECT_EQ(config, 0x0000);
+    EXPECT_FALSE(parse_nxp_change_config(config, tag.data(), tag.size()));
+    EXPECT_FALSE(parse_nxp_change_config(config, nullptr, 0));
+
+    // The alarm answers with the code itself and no tag at all. A UCODE G2iM sends 64 bits of
+    // it, which is what one was measured doing
+    std::vector<uint8_t> alarm{};
+    const uint8_t code[]{0x69, 0x0A, 0xEC, 0x7C, 0xD2, 0x15, 0xD8, 0xF9};
+    EXPECT_TRUE(parse_nxp_eas_alarm(alarm, code, sizeof(code)));
+    EXPECT_EQ(alarm, (std::vector<uint8_t>{0x69, 0x0A, 0xEC, 0x7C, 0xD2, 0x15, 0xD8, 0xF9}));
+    // Nothing at all is not an answer, and leaves nothing behind
+    EXPECT_FALSE(parse_nxp_eas_alarm(alarm, nullptr, 0));
+    EXPECT_TRUE(alarm.empty());
+    EXPECT_FALSE(parse_nxp_eas_alarm(alarm, code, 0));
+}
+
 TEST(UHF, ErrorAnswersCommand)
 {
     using namespace m5::unit::m100;

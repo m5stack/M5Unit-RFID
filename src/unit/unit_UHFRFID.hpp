@@ -387,6 +387,60 @@ public:
      */
     virtual bool qtCommand(uint16_t& control, const bool write, const bool persistent,
                            const uint32_t access_password) = 0;
+    /*!
+      @brief Read the Config-Word of an NXP UCODE G2X, or invert bits of it
+      @param[out] config Word the tag holds once the command has been carried out
+      @param toggle Bits to invert. Zero reads the word without changing anything
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @details The word is toggled rather than assigned: a one inverts the bit it stands over
+      and a zero leaves it alone. Sending the same bits twice puts the word back
+      @warning Reading costs nothing, but a tag answers a toggle from the secured state alone.
+      From the open state it hands back the word it already had and changes nothing, and says
+      nothing about having refused (UCODE G2iM SL3S1003_1013 Rev3.7 Table 12)
+      @warning The Config-Word carries the read protection and the range reduction among other
+      things, so a bit inverted by mistake changes what the tag will answer at all
+     */
+    virtual bool nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password) = 0;
+    /*!
+      @brief Set or clear the Product Status Flag of an NXP UCODE G2X
+      @param enable True to assert the flag, false to clear it
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @details A tag whose flag is asserted answers nxpEASAlarm(), which is what an article
+      surveillance gate listens for
+      @warning A tag whose access password is zero ignores this command outright. Give it one
+      first
+     */
+    virtual bool nxpChangeEAS(const bool enable, const uint32_t access_password) = 0;
+    /*!
+      @brief Ask the field whether any tag has its Product Status Flag asserted
+      @param[out] alarm Code the tag backscattered, or empty when nothing answered
+      @return True when the question was put and an answer came back
+      @details This asks the field rather than one tag, so it needs neither a selection nor a
+      password. What answers hands back a code rather than a name: an NXP UCODE G2iM sends a
+      fixed 64-bit one
+      @note Nothing being flagged is an answer and not a failure, which is why an empty code
+      is reported apart from whether the question could be asked at all
+     */
+    virtual bool nxpEASAlarm(std::vector<uint8_t>& alarm) = 0;
+    /*!
+      @brief Turn the read protection of an NXP UCODE G2X on or off
+      @param protect True to protect, false to put it back
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @details Protected memory reads back as zeroes rather than falling silent, so the tag
+      still answers an inventory round and can be addressed again to undo this
+      @warning Both the EPC and the TID are protected at once, so every protected tag reads
+      back the same all-zero EPC and they can no longer be told apart. Undo this with one tag
+      in the field
+      @warning A tag whose access password is zero ignores this command outright. Give it one
+      first
+     */
+    virtual bool nxpReadProtect(const bool protect, const uint32_t access_password) = 0;
     ///@}
 
     virtual bool begin() override;
