@@ -161,7 +161,8 @@ void report_settings()
         M5_LOGI("Channel: %u", channel);
     }
     // Which tags an inventory round invites. A select mask aimed at SL does nothing while this
-    // reads All, which is what the reader ships set to
+    // reads All, which is what the reader ships set to. A mask is also stored against the
+    // session and the flag the round names, so these decide which tag a selection addresses
     m5::uhf::QueryParameters qp{};
     if (unit.readQueryParameters(qp)) {
         M5_LOGI("Query: Q=%u session=S%u target=%c sel=%s", qp.q, (unsigned)qp.session,
@@ -172,13 +173,6 @@ void report_settings()
     if (unit.readDemodulatorParameters(dp)) {
         M5_LOGI("Demodulator: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
                 m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
-    }
-    // A mask is stored against the session and the flag the round names, so these decide which
-    // tag a selection ends up addressing
-    m5::uhf::QueryParameters qp{};
-    if (unit.readQueryParameters(qp)) {
-        M5_LOGI("Query: Q=%u session=S%u target=%c filter=%u", qp.q, static_cast<uint8_t>(qp.session),
-                qp.target == m5::uhf::Target::A ? 'A' : 'B', static_cast<uint8_t>(qp.filter));
     }
 }
 
