@@ -231,8 +231,11 @@ void probe_blocks(const m5::uhf::Tag& tag)
     const uint32_t block_bits = m5::uhf::chipPermalockBlockBits(tag.chip);
     for (uint16_t block = 0; block < blocks; ++block) {
         const uint16_t first = first_word_of(tag, block);
-        const uint16_t last  = static_cast<uint16_t>(first + block_bits / 16U - 1);
-        const bool takes     = word_takes(first);
+        // The last block can run out before it is full: the user memory does not have to be a
+        // multiple of the block size, and what is past its end is nobody's to lock
+        const uint32_t bits_here = (block + 1 == blocks) ? m5::uhf::chipPermalockLastBlockBits(tag.chip) : block_bits;
+        const uint16_t last      = static_cast<uint16_t>(first + bits_here / 16U - 1);
+        const bool takes         = word_takes(first);
         M5_LOGI("Block %u (words %u to %u): %s", block, first, last, takes ? "takes a write" : "REFUSES");
     }
 }

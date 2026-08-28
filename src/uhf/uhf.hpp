@@ -478,6 +478,8 @@ inline uint16_t chipPermalockBlockCount(const Chip chip)
     switch (chip) {
         case Chip::ImpinjMonza4QT:
             return 4;  // Monza 4 V10.0 2.3.1: "four fixed, 128-bit sections of user memory"
+        case Chip::ImpinjMonza4i:
+            return 4;  // Monza 4 V10.0 Table 2-16
         case Chip::AlienHiggs3:
             // Higgs 3 Supplement: "BlockPermaLock: Block lengths are 32 bits and a total of
             // 4 blocks"
@@ -530,6 +532,10 @@ inline Support chipBlockPermalockSupport(const Chip chip)
             return Support::Yes;
         case Chip::ImpinjMonza4QT:
             // Monza 4 V10.0 2.3.1, the four 128-bit sections it can lock
+            return Support::Yes;
+        case Chip::ImpinjMonza4i:
+            // Monza 4 V10.0 Table 2-14: "User Memory in Monza 4QT (in Private mode) and
+            // Monza 4i only"
             return Support::Yes;
         case Chip::NxpUcode7xm1k:
         case Chip::NxpUcode7xm2k:
@@ -595,6 +601,9 @@ inline Support chipNxpCustomCommandSupport(const Chip chip)
   @details The standard leaves this to the chip, and a tag says it only through the XTID
   segment that most chips do not carry. Where the datasheet gives it, this is where it comes
   from instead
+  @note One size covers every block: Gen2 has a manufacturer "predefine a single fixed,
+  unchangeable block size" (v2.1 6.3.2.11.3). Where the user memory does not divide by it the
+  last block is the one that comes up short, which is what chipPermalockLastBlockBits() says
  */
 inline uint32_t chipPermalockBlockBits(const Chip chip)
 {
@@ -608,11 +617,41 @@ inline uint32_t chipPermalockBlockBits(const Chip chip)
             // SL3S10X4: "BlockPermalock (block size of 256-bit)". The UCODE G2iM has the command
             // as well and says nothing about how large its blocks are, so it is left out
             return 256;
+        case Chip::ImpinjMonza4i:
+            // Monza 4 V10.0 Table 2-16: three blocks of 128 bits and a fourth of 96, which is
+            // 128 all along with the user memory running out 32 bits into the last one
+            return 128;
         case Chip::AlienHiggs3:
             return 32;  // Higgs 3 Supplement: "Block lengths are 32 bits"
         default:
             return 0;
     }
+}
+
+/*!
+  @brief How many bits the last block of a chip actually covers
+  @param chip Chip
+  @return Bits in the last block, or zero where the layout is not known
+  @details Every block is the same size, but the user memory does not have to be a multiple of
+  it. Where it is not, the last block is the one that runs out early: an Impinj Monza 4i has
+  480 bits of user memory in blocks of 128, so its fourth block holds 96 of them. Locking it
+  locks what is there; the bits past the end are not any tag's to lock
+ */
+inline uint32_t chipPermalockLastBlockBits(const Chip chip)
+{
+    const uint32_t bits  = chipPermalockBlockBits(chip);
+    const uint16_t count = chipPermalockBlockCount(chip);
+    if (bits == 0 || count == 0) {
+        return 0;
+    }
+    const uint32_t user = chipUserMemoryBits(chip);
+    const uint32_t upto = bits * count;
+    // Blocks that stop short of the bank cover the whole of themselves; Alien's Higgs-3 has
+    // four 32-bit blocks over 512 bits of user memory and none of them is cut off
+    if (user == 0 || user >= upto) {
+        return bits;
+    }
+    return user - bits * (count - 1);
 }
 
 /*!

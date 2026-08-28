@@ -1043,7 +1043,20 @@ TEST(UHF, CommandSupport)
     EXPECT_EQ(chipNxpCustomCommandSupport(Chip::Unknown), Support::Unknown);
 
     EXPECT_EQ(chipBlockPermalockSupport(Chip::ImpinjMonza4QT), Support::Yes);
+    EXPECT_EQ(chipBlockPermalockSupport(Chip::ImpinjMonza4i), Support::Yes);
     EXPECT_EQ(chipBlockPermalockSupport(Chip::AlienHiggs3), Support::Yes);
+    // One size covers every block, and the user memory is what decides whether the last of
+    // them is whole. A Monza 4QT divides exactly; a Monza 4i runs out 32 bits into its fourth
+    EXPECT_EQ(chipPermalockBlockCount(Chip::ImpinjMonza4QT), 4);
+    EXPECT_EQ(chipPermalockBlockBits(Chip::ImpinjMonza4QT), 128u);
+    EXPECT_EQ(chipPermalockLastBlockBits(Chip::ImpinjMonza4QT), 128u);
+    EXPECT_EQ(chipPermalockBlockCount(Chip::ImpinjMonza4i), 4);
+    EXPECT_EQ(chipPermalockBlockBits(Chip::ImpinjMonza4i), 128u);
+    EXPECT_EQ(chipPermalockLastBlockBits(Chip::ImpinjMonza4i), 96u) << "480 = 128 * 3 + 96";
+    // Blocks that stop short of the bank are all whole: four 32-bit ones over 512 bits
+    EXPECT_EQ(chipPermalockLastBlockBits(Chip::AlienHiggs3), 32u);
+    // Nothing to go on, nothing to say
+    EXPECT_EQ(chipPermalockLastBlockBits(Chip::NxpUcodeG2iM), 0u);
     EXPECT_EQ(chipBlockPermalockSupport(Chip::NxpUcode8), Support::No);
     EXPECT_EQ(chipBlockPermalockSupport(Chip::AlienHiggs9), Support::Unknown);
 
