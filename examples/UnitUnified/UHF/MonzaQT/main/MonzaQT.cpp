@@ -21,9 +21,16 @@
 
   What is written here has to outlast the tag losing power, because it does: the reader stops
   transmitting between one operation and the next, and a volatile switch is gone by the time
-  the tag is looked for again. So the switch is written to stay, and switched back at the end.
-  Neither direction is a one-way door, and a tag left public can be found by the EPC it shows
-  and switched back by running this again.
+  the tag is looked for again. So the switch is written to stay.
+
+  Clicking switches the tag and switches it straight back, which shows both maps and leaves
+  the tag as it was found. Holding switches it and stops there, which is what to do to have a
+  tag on its public map to work with.
+
+  Neither direction is a one-way door. A tag left on its public map answers under an EPC of
+  all zeroes, has no user memory and gives up only the two words of TID that name the chip,
+  so every other example will find much less of it than before. Holding the button again puts
+  it back.
 */
 #include <M5Unified.h>
 #include <M5UnitUnified.h>
@@ -127,9 +134,10 @@ bool look(m5::uhf::Tag& tag, m5::uhf::QTParameters& qt)
 }
 
 //! @brief Show the tag as it is, switch it to the other map, and show it again
+//! @param keep Leave the tag on the map it was switched to, rather than putting it back
 //! @details Both halves are worth seeing. What the private map holds is what the public one
 //! hides, and the tag answers under a different EPC afterwards, so it has to be found again
-void switch_map()
+void switch_map(const bool keep)
 {
     m5::uhf::Tag before{};
     if (!detect_one(before)) {
@@ -163,6 +171,13 @@ void switch_map()
     if (!look(after, qt_after)) {
         return;
     }
+    if (keep) {
+        M5_LOGW("Left on the %s map; hold the button again to put it back",
+                qt_after.public_memory ? "public" : "private");
+        lcd.printf("left %s\n", qt_after.public_memory ? "public" : "private");
+        uhf.deselect();
+        return;
+    }
     // Whichever way it went, the tag is put back the way it was found
     M5_LOGI("Switching back to the %s map", qt.public_memory ? "public" : "private");
     if (!uhf.writeQTParameters(qt, true)) {
@@ -184,9 +199,9 @@ void setup()
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
-    lcd.println("A: switch the map");
+    lcd.println("A: show both maps");
+    lcd.println("A hold: switch and stay");
     lcd.println("(Monza 4QT only)");
-    lcd.println("and switch it back");
 }
 
 void loop()
@@ -197,7 +212,12 @@ void loop()
     if (M5.BtnA.wasClicked()) {
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
-        switch_map();
+        switch_map(false);
+    }
+    if (M5.BtnA.wasHold()) {
+        lcd.fillScreen(TFT_DARKGREEN);
+        lcd.setCursor(0, 0);
+        switch_map(true);
     }
 }
 
