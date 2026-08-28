@@ -81,25 +81,25 @@ public:
     ///@}
     ///@}
 
+    virtual bool writeSelectParameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
+                                      const size_t mask_len) override;
+    virtual bool writeSelectEnabled(const bool enable) override;
+    virtual bool readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                               const uint16_t word_count, const uint32_t access_password) override;
+    virtual bool writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                const size_t len, const uint32_t access_password) override;
+    virtual bool lockTagMemory(const uint32_t payload, const uint32_t access_password) override;
+    virtual bool killTag(const uint32_t kill_password) override;
+    virtual bool blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                const uint32_t access_password, const bool allow_permanent) override;
+    virtual bool qtCommand(uint16_t& control, const bool write, const bool persistent,
+                           const uint32_t access_password) override;
+
 protected:
     virtual bool pump(const uint32_t timeout_ms) override;
     virtual bool start_polling_command(const uint16_t count) override;
     virtual bool stop_polling_command() override;
-
-    virtual bool write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
-                                        const size_t mask_len) override;
-    virtual bool write_select_enabled(const bool enable) override;
-    virtual bool read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
-                                 const uint16_t word_count, const uint32_t access_password) override;
-    virtual bool write_tag_memory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
-                                  const size_t len, const uint32_t access_password) override;
-    virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) override;
-    virtual bool kill_tag(const uint32_t kill_password) override;
-    virtual bool block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
-                                 const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
-                                 const uint32_t access_password) override;
-    virtual bool qt_command(uint16_t& control, const bool write, const bool persistent,
-                            const uint32_t access_password) override;
 
     //! @brief Send a command frame
     bool send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len);

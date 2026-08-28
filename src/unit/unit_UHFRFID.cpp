@@ -75,6 +75,15 @@ bool UHFRFIDComponent::reject_while_polling(const char* what) const
     return false;
 }
 
+bool UHFRFIDComponent::reject_without_selection(const char* what) const
+{
+    if (_select_mask_stored && _select_enabled) {
+        return false;
+    }
+    M5_LIB_LOGE("%s needs a mask picking one tag out; store one and apply it first", what);
+    return true;
+}
+
 void UHFRFIDComponent::push_tag(const m5::uhf::Tag& tag)
 {
     if (!_tags) {

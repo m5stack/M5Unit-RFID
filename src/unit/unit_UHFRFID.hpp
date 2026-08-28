@@ -280,6 +280,115 @@ public:
     virtual bool readSelectParameter(m5::uhf::SelectParameter& sp) = 0;
     ///@}
 
+    ///@name Tag operations
+    ///@{
+    /*!
+      @brief Store the mask that picks out one tag
+      @param bank Bank the mask is matched against; Reserved is not selectable
+      @param pointer_bits Where the mask starts, as a bit address inside the bank
+      @param mask Mask bytes
+      @param mask_len Length of mask in bytes
+      @return True if successful
+      @note Storing a mask does not talk to any tag, so this succeeds for a tag that is not in
+      the field. Reading the tag back is the only way to learn whether it answered
+      @note A mask of zero length matches every tag rather than none, so it is refused here
+     */
+    virtual bool writeSelectParameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
+                                      const size_t mask_len) = 0;
+    /*!
+      @brief Apply the stored mask to tag operations, or stop applying it
+      @param enable True to address only the selected tag, false to address any tag
+      @return True if successful
+      @note Inventory is left unfiltered either way, so polling keeps reporting every tag in
+      the field while Read, Write, Lock and Kill are narrowed down to the selected one
+     */
+    virtual bool writeSelectEnabled(const bool enable) = 0;
+    /*!
+      @brief Read word_count 16-bit words from bank, starting at word_address
+      @param[out] out Bytes read
+      @param bank Memory bank
+      @param word_address Start address in 16-bit words
+      @param word_count Number of 16-bit words
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+     */
+    virtual bool readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                               const uint16_t word_count, const uint32_t access_password) = 0;
+    /*!
+      @brief Write len bytes to bank, starting at word_address
+      @param bank Memory bank
+      @param word_address Start address in 16-bit words
+      @param data Bytes to write
+      @param len Their length, which has to be even
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @warning Writing the EPC bank changes the very bytes an EPC mask matches on, so the mask
+      in force stops picking this tag out. Store it again from what the tag now holds
+     */
+    virtual bool writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                const size_t len, const uint32_t access_password) = 0;
+    /*!
+      @brief Apply a 20-bit Gen2 lock payload
+      @param payload Lock payload, see m5::uhf::buildLockPayload
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @warning A payload asking for a permanent lock cannot be undone. m5::uhf::LockAction
+      names which of them those are
+     */
+    virtual bool lockTagMemory(const uint32_t payload, const uint32_t access_password) = 0;
+    /*!
+      @brief Kill the addressed tag permanently
+      @param kill_password Kill password the tag holds, which may not be zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @warning A killed tag never answers again. Nothing here can say whether the mask in force
+      picks out the tag that was meant rather than another one in the field, so what is about
+      to die is worth reading back first
+      @code
+      std::vector<uint8_t> epc{};
+      if (unit.readTagMemory(epc, m5::uhf::Bank::Epc, 2, 6, 0) && epc == expected) {
+          unit.killTag(password);
+      }
+      @endcode
+     */
+    virtual bool killTag(const uint32_t kill_password) = 0;
+    /*!
+      @brief Read or set which blocks of a bank are permanently locked
+      @param[out] out Mask read, one bit per block with the first block in the most significant
+      bit. Left alone when locking
+      @param bank Bank the blocks are in
+      @param block_pointer First block the mask covers, in units of sixteen
+      @param block_range Words of mask, each covering sixteen blocks
+      @param mask Mask to apply, or nullptr to read
+      @param mask_len Its length in bytes, which is twice block_range
+      @param access_password Access password the tag holds, or zero
+      @param allow_permanent Say so to mean a lock, which is refused without it
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @warning A block locked this way is unwritable for the life of the tag. Reading it is
+      unaffected, and so is every other block
+     */
+    virtual bool blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                const uint32_t access_password, const bool allow_permanent) = 0;
+    /*!
+      @brief Read or write the QT control word of the addressed tag
+      @param[in,out] control Word read, or word to write
+      @param write True to write, false to read
+      @param persistent True to write where a loss of power does not undo it
+      @param access_password Access password the tag holds, or zero
+      @return True if successful
+      @pre A mask has to have been stored and applied, or this is refused
+      @warning Switching an Impinj Monza 4QT to its public map changes the EPC it answers
+      under, so the mask in force stops picking it out
+     */
+    virtual bool qtCommand(uint16_t& control, const bool write, const bool persistent,
+                           const uint32_t access_password) = 0;
+    ///@}
+
     virtual bool begin() override;
     virtual void update(const bool force = false) override;
 
@@ -295,65 +404,6 @@ protected:
     //! @brief Issue the stop polling command
     virtual bool stop_polling_command() = 0;
 
-    ///@name Tag operations, driven by m5::uhf::UHFLayer
-    ///@{
-    /*!
-      @brief Store the mask that picks out one tag
-      @param bank Bank the mask is matched against; Reserved is not selectable
-      @param pointer_bits Where the mask starts, as a bit address inside the bank
-      @param mask Mask bytes
-      @param mask_len Length of mask in bytes
-      @return True if successful
-      @note Storing a mask does not talk to any tag, so this succeeds for a tag that is not in
-      the field
-     */
-    virtual bool write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
-                                        const size_t mask_len) = 0;
-    /*!
-      @brief Apply the stored mask to tag operations, or stop applying it
-      @param enable True to address only the selected tag, false to address any tag
-      @return True if successful
-      @note Inventory is left unfiltered either way, so polling keeps reporting every tag in
-      the field while Read, Write, Lock and Kill are narrowed down to the selected one
-     */
-    virtual bool write_select_enabled(const bool enable) = 0;
-    //! @brief Read word_count 16-bit words from bank, starting at word_address
-    virtual bool read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
-                                 const uint16_t word_count, const uint32_t access_password) = 0;
-    //! @brief Write len bytes to bank, starting at word_address. len must be even
-    virtual bool write_tag_memory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
-                                  const size_t len, const uint32_t access_password) = 0;
-    //! @brief Apply a 20-bit Gen2 lock payload, see m5::uhf::buildLockPayload
-    virtual bool lock_tag_memory(const uint32_t payload, const uint32_t access_password) = 0;
-    //! @brief Kill the addressed tag permanently
-    virtual bool kill_tag(const uint32_t kill_password) = 0;
-    /*!
-      @brief Read or set which blocks of a bank are permanently locked
-      @param[out] out Mask read, one bit per block with the first block in the most significant
-      bit. Left alone when locking
-      @param bank Bank the blocks are in
-      @param block_pointer First block the mask covers, in units of sixteen
-      @param block_range Words of mask, each covering sixteen blocks
-      @param mask Mask to apply, or nullptr to read
-      @param mask_len Its length in bytes, which is twice block_range
-      @param access_password Access password of the tag
-      @return True if successful
-     */
-    virtual bool block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
-                                 const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
-                                 const uint32_t access_password) = 0;
-    /*!
-      @brief Read or write the QT control word of the addressed tag
-      @param[in,out] control Word read, or word to write
-      @param write True to write, false to read
-      @param persistent True to write where a loss of power does not undo it
-      @param access_password Access password of the tag
-      @return True if successful
-     */
-    virtual bool qt_command(uint16_t& control, const bool write, const bool persistent,
-                            const uint32_t access_password) = 0;
-    ///@}
-
     /*!
       @brief Refuse a reader setting while polling is running
       @param what Name of the operation, used in the warning
@@ -362,6 +412,16 @@ protected:
       settings are rejected outright instead of failing later with a timeout
      */
     bool reject_while_polling(const char* what) const;
+
+    /*!
+      @brief Refuse a tag operation while no mask is picking a tag out
+      @param what Name of the operation, used in the warning
+      @return True when the caller must give up
+      @details A mask of zero length matches every tag rather than none, so an operation sent
+      without one does not fail: it succeeds against whichever tag answers. A write lands on a
+      tag nobody chose and a kill cannot be taken back, so these are rejected outright
+     */
+    bool reject_without_selection(const char* what) const;
 
     //! @brief Push a tag into the queue, counting a drop when it overflows
     void push_tag(const m5::uhf::Tag& tag);
@@ -377,6 +437,10 @@ protected:
     bool _polling{};
     //! Whether the module is believed to still be running rounds. Only a confirmed stop clears it
     bool _rounds_running{};
+    //! Whether a mask of some length has been stored in the module
+    bool _select_mask_stored{};
+    //! Whether the stored mask is being applied to tag operations
+    bool _select_enabled{};
     uint16_t _polling_count{};
     unsigned long _last_frame_at{};
     unsigned long _polling_issued_at{};

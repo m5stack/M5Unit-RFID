@@ -641,12 +641,20 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
     return true;
 }
 
-bool UnitJRD4035::block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
-                                  const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
-                                  const uint32_t access_password)
+bool UnitJRD4035::blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                 const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                 const uint32_t access_password, const bool allow_permanent)
 {
     out.clear();
+    if (reject_while_polling("blockPermalock") || reject_without_selection("blockPermalock")) {
+        return false;
+    }
     const bool lock = mask != nullptr;
+    // Locking blocks cannot be undone, so it is refused unless the caller says the word
+    if (lock && !allow_permanent) {
+        M5_LIB_LOGE("blockPermalock is permanent; pass allow_permanent to mean it");
+        return false;
+    }
     // Each word of mask covers sixteen blocks, so the two have to agree
     if (lock && mask_len != static_cast<size_t>(block_range) * 2) {
         M5_LIB_LOGE("A range of %u wants %u bytes of mask, not %zu", block_range, block_range * 2, mask_len);
@@ -669,7 +677,7 @@ bool UnitJRD4035::block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank
     // A lock is answered under a code of its own, which is the one to wait for
     const uint8_t answer = lock ? CMD_BLOCK_PERMALOCK_LOCK_ANSWER : 0;
     if (!send_tag_operation(res, CMD_BLOCK_PERMALOCK, param.data(), static_cast<uint16_t>(param.size()),
-                            "block_permalock", answer)) {
+                            "blockPermalock", answer)) {
         return false;
     }
     // Both answers begin with the tag that replied: a length byte and that many bytes of PC and
@@ -688,8 +696,11 @@ bool UnitJRD4035::block_permalock(std::vector<uint8_t>& out, const m5::uhf::Bank
     return true;
 }
 
-bool UnitJRD4035::qt_command(uint16_t& control, const bool write, const bool persistent, const uint32_t access_password)
+bool UnitJRD4035::qtCommand(uint16_t& control, const bool write, const bool persistent, const uint32_t access_password)
 {
+    if (reject_while_polling("qtCommand") || reject_without_selection("qtCommand")) {
+        return false;
+    }
     const uint8_t param[]{static_cast<uint8_t>(access_password >> 24), static_cast<uint8_t>(access_password >> 16),
                           static_cast<uint8_t>(access_password >> 8),  static_cast<uint8_t>(access_password),
                           static_cast<uint8_t>(write ? 0x01 : 0x00),   static_cast<uint8_t>(persistent ? 0x01 : 0x00),
@@ -698,7 +709,7 @@ bool UnitJRD4035::qt_command(uint16_t& control, const bool write, const bool per
     // A write is answered under a code of its own, which is the one to wait for. Like any other
     // tag operation this is worth repeating: 0x2E covers a tag that said nothing at all
     const uint8_t answer = write ? CMD_MONZA_QT_WRITE_ANSWER : 0;
-    if (!send_tag_operation(res, CMD_MONZA_QT, param, sizeof(param), "qt_command", answer)) {
+    if (!send_tag_operation(res, CMD_MONZA_QT, param, sizeof(param), "qtCommand", answer)) {
         return false;
     }
     // Both answers carry the tag that replied before anything else: a length byte, then that
@@ -769,6 +780,9 @@ bool UnitJRD4035::sleep()
     if (reject_while_polling("sleep")) {
         return false;
     }
+    // The module comes back from this holding no mask at all, so nothing is selected any more
+    _select_mask_stored = false;
+    _select_enabled     = false;
     // The module answers before it powers down, so the response is awaited as usual
     Frame res{};
     return send_and_wait(res, CMD_SLEEP, nullptr, 0) && succeeded(res, "sleep");
@@ -949,10 +963,16 @@ bool UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, con
     return succeeded(response, what);
 }
 
-bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
-                                         const size_t mask_len)
+bool UnitJRD4035::writeSelectParameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
+                                       const size_t mask_len)
 {
-    if (reject_while_polling("write_select_parameter")) {
+    if (reject_while_polling("writeSelectParameter")) {
+        return false;
+    }
+    // A mask of no length matches every tag rather than none, which is the opposite of what a
+    // Select is for
+    if (mask == nullptr || mask_len == 0) {
+        M5_LIB_LOGE("A mask of no length matches every tag; give one that picks a tag out");
         return false;
     }
     if (mask_len * 8 > SELECT_MASK_MAX_BITS) {
@@ -986,35 +1006,46 @@ bool UnitJRD4035::write_select_parameter(const m5::uhf::Bank bank, const uint32_
     if (!send_and_wait(res, CMD_SET_SELECT_PARAMETER, param.data(), static_cast<uint16_t>(param.size()))) {
         return false;
     }
-    if (!succeeded(res, "write_select_parameter")) {
+    if (!succeeded(res, "writeSelectParameter")) {
         return false;
     }
+    _select_mask_stored = true;
     m5::utility::delay(SELECT_SETTLE_MS);
     return true;
 }
 
-bool UnitJRD4035::write_select_enabled(const bool enable)
+bool UnitJRD4035::writeSelectEnabled(const bool enable)
 {
-    if (reject_while_polling("write_select_enabled")) {
+    if (reject_while_polling("writeSelectEnabled")) {
         return false;
     }
     // Setting the parameter already switches the module to SELECT_MODE_NON_INVENTORY on its own,
     // so this is only needed to turn the mask back off, and to put it back on afterwards
     const uint8_t param[] = {enable ? SELECT_MODE_NON_INVENTORY : SELECT_MODE_NEVER};
+    // Whatever was in force stops being so the moment this is asked for, whether or not the
+    // module answers
+    _select_enabled = false;
     Frame res{};
     // The protocol document has Set Select Mode answering under the command code of Set Select
     // Parameter, but an M100 running V2.3.5 answers under 0x12, its own. Measured, not read
     if (!send_and_wait(res, CMD_SET_SELECT_MODE, param, sizeof(param))) {
         return false;
     }
-    return succeeded(res, "write_select_enabled");
+    if (!succeeded(res, "writeSelectEnabled")) {
+        return false;
+    }
+    _select_enabled = enable;
+    return true;
 }
 
-bool UnitJRD4035::read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
-                                  const uint16_t word_count, const uint32_t access_password)
+bool UnitJRD4035::readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                const uint16_t word_count, const uint32_t access_password)
 {
     out.clear();
-    if (reject_while_polling("read_tag_memory")) {
+    if (reject_while_polling("readTagMemory")) {
+        return false;
+    }
+    if (reject_without_selection("readTagMemory")) {
         return false;
     }
     std::vector<uint8_t> param{};
@@ -1028,7 +1059,7 @@ bool UnitJRD4035::read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank
     }
     Frame res{};
     if (!send_tag_operation(res, CMD_READ_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                            "read_tag_memory")) {
+                            "readTagMemory")) {
         return false;
     }
 
@@ -1047,10 +1078,13 @@ bool UnitJRD4035::read_tag_memory(std::vector<uint8_t>& out, const m5::uhf::Bank
     return true;
 }
 
-bool UnitJRD4035::write_tag_memory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
-                                   const size_t len, const uint32_t access_password)
+bool UnitJRD4035::writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                 const size_t len, const uint32_t access_password)
 {
-    if (reject_while_polling("write_tag_memory")) {
+    if (reject_while_polling("writeTagMemory")) {
+        return false;
+    }
+    if (reject_without_selection("writeTagMemory")) {
         return false;
     }
     std::vector<uint8_t> param{};
@@ -1068,13 +1102,16 @@ bool UnitJRD4035::write_tag_memory(const m5::uhf::Bank bank, const uint16_t word
     // up with 0x49 in the command byte; 0x39 would make it 0x99. Same kind of slip as the one
     // Set Select Mode carries, and the same resolution: follow the bytes
     return send_tag_operation(res, CMD_WRITE_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                              "write_tag_memory") &&
-           tag_carried_it_out(res, "write_tag_memory");
+                              "writeTagMemory") &&
+           tag_carried_it_out(res, "writeTagMemory");
 }
 
-bool UnitJRD4035::lock_tag_memory(const uint32_t payload, const uint32_t access_password)
+bool UnitJRD4035::lockTagMemory(const uint32_t payload, const uint32_t access_password)
 {
-    if (reject_while_polling("lock_tag_memory")) {
+    if (reject_while_polling("lockTagMemory")) {
+        return false;
+    }
+    if (reject_without_selection("lockTagMemory")) {
         return false;
     }
     std::vector<uint8_t> param{};
@@ -1084,13 +1121,16 @@ bool UnitJRD4035::lock_tag_memory(const uint32_t payload, const uint32_t access_
     }
     Frame res{};
     return send_tag_operation(res, CMD_LOCK_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                              "lock_tag_memory") &&
-           tag_carried_it_out(res, "lock_tag_memory");
+                              "lockTagMemory") &&
+           tag_carried_it_out(res, "lockTagMemory");
 }
 
-bool UnitJRD4035::kill_tag(const uint32_t kill_password)
+bool UnitJRD4035::killTag(const uint32_t kill_password)
 {
-    if (reject_while_polling("kill_tag")) {
+    if (reject_while_polling("killTag")) {
+        return false;
+    }
+    if (reject_without_selection("killTag")) {
         return false;
     }
     std::vector<uint8_t> param{};
@@ -1099,8 +1139,8 @@ bool UnitJRD4035::kill_tag(const uint32_t kill_password)
         return false;
     }
     Frame res{};
-    return send_tag_operation(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()), "kill_tag") &&
-           tag_carried_it_out(res, "kill_tag");
+    return send_tag_operation(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()), "killTag") &&
+           tag_carried_it_out(res, "killTag");
 }
 
 bool UnitJRD4035::tag_carried_it_out(const Frame& response, const char* what) const

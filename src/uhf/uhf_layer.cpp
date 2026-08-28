@@ -127,13 +127,13 @@ bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, con
         return false;
     }
 
-    if (!_u.write_select_parameter(bank, pointer_bits, mask, mask_len)) {
+    if (!_u.writeSelectParameter(bank, pointer_bits, mask, mask_len)) {
         resume_polling();
         return false;
     }
     // Storing the parameter is documented to switch the module over on its own, but saying so
     // explicitly is what makes the state the same whether or not a deselect() came before
-    if (!_u.write_select_enabled(true)) {
+    if (!_u.writeSelectEnabled(true)) {
         resume_polling();
         return false;
     }
@@ -144,7 +144,7 @@ bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, con
 
     if (verify && !verify_selection()) {
         _has_selection = false;
-        _u.write_select_enabled(false);
+        _u.writeSelectEnabled(false);
         resume_polling();
         return false;
     }
@@ -156,7 +156,7 @@ bool UHFLayer::verify_selection()
     // One word of the EPC bank, which every tag has. Reading it goes down the same path as the
     // Read and Write that follow, so it proves the selection the way the caller will use it
     std::vector<uint8_t> word{};
-    if (!_u.read_tag_memory(word, Bank::Epc, EPC_FIRST_WORD, 1, _access_password)) {
+    if (!_u.readTagMemory(word, Bank::Epc, EPC_FIRST_WORD, 1, _access_password)) {
         M5_LIB_LOGW("The selected tag did not answer");
         return false;
     }
@@ -224,7 +224,7 @@ bool UHFLayer::deselect()
     _has_selection      = false;
     _selected           = Tag{};
     _access_password    = 0;
-    const bool switched = _u.write_select_enabled(false);
+    const bool switched = _u.writeSelectEnabled(false);
     resume_polling();
     return switched;
 }
@@ -253,7 +253,7 @@ bool UHFLayer::identify(Tag& tag)
             break;
         }
         std::vector<uint8_t> part{};
-        if (!_u.read_tag_memory(part, Bank::Tid, plan.word_address, plan.words, _access_password)) {
+        if (!_u.readTagMemory(part, Bank::Tid, plan.word_address, plan.words, _access_password)) {
             // A tag can promise more TID than it has: an Impinj Monza 4QT showing its public
             // map still says it has an extended TID, and answers with a memory overrun when
             // asked for one. What was read before that already names the chip, so it is kept
@@ -391,7 +391,7 @@ bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16
     if (!pause_polling()) {
         return false;
     }
-    return _u.read_tag_memory(out, bank, word_address, word_count, _access_password);
+    return _u.readTagMemory(out, bank, word_address, word_count, _access_password);
 }
 
 bool UHFLayer::readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
@@ -459,7 +459,7 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uin
         // An odd start costs one single-word write to reach the even address the pair needs
         const uint16_t words = (at % 2) ? 1 : chunk_words;
         const uint16_t chunk = std::min(static_cast<uint16_t>(data_len - written), static_cast<uint16_t>(words * 2));
-        if (!_u.write_tag_memory(bank, at, data + written, chunk, _access_password)) {
+        if (!_u.writeTagMemory(bank, at, data + written, chunk, _access_password)) {
             M5_LIB_LOGE("Wrote %u of %u words, then failed in the %u from word %u", written / 2, data_len / 2,
                         chunk / 2, at);
             // Part of what the mask matches on may have been replaced, which leaves a selection
@@ -517,7 +517,7 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
         if (attempt && !reapply_selection()) {
             break;
         }
-        if (_u.lock_tag_memory(payload, _access_password)) {
+        if (_u.lockTagMemory(payload, _access_password)) {
             return true;
         }
         m5::utility::delay(RETRY_INTERVAL_MS);
@@ -536,7 +536,7 @@ bool UHFLayer::readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, c
     if (!pause_polling()) {
         return false;
     }
-    return _u.block_permalock(mask, bank, block_pointer, block_range, nullptr, 0, _access_password);
+    return _u.blockPermalock(mask, bank, block_pointer, block_range, nullptr, 0, _access_password, false);
 }
 
 bool UHFLayer::blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
@@ -558,7 +558,8 @@ bool UHFLayer::blockPermalock(const Bank bank, const uint8_t* mask, const size_t
         return false;
     }
     std::vector<uint8_t> ignored{};
-    return _u.block_permalock(ignored, bank, block_pointer, block_range, mask, mask_len, _access_password);
+    return _u.blockPermalock(ignored, bank, block_pointer, block_range, mask, mask_len, _access_password,
+                             allow_permanent);
 }
 
 bool UHFLayer::readQTParameters(QTParameters& qt)
@@ -578,7 +579,7 @@ bool UHFLayer::readQTParameters(QTParameters& qt)
         return false;
     }
     uint16_t control{};
-    if (!_u.qt_command(control, false, false, _access_password)) {
+    if (!_u.qtCommand(control, false, false, _access_password)) {
         return false;
     }
     qt.short_range   = (control & QT_SHORT_RANGE) != 0;
@@ -603,7 +604,7 @@ bool UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
     }
     uint16_t control =
         static_cast<uint16_t>((qt.short_range ? QT_SHORT_RANGE : 0) | (qt.public_memory ? QT_PUBLIC_MEMORY : 0));
-    if (!_u.qt_command(control, true, persistent, _access_password)) {
+    if (!_u.qtCommand(control, true, persistent, _access_password)) {
         return false;
     }
     // The public map answers with an EPC of its own, so a mask built from the private one stops
@@ -618,12 +619,12 @@ bool UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
 bool UHFLayer::reapply_selection()
 {
     if (_mask_bank == Bank::Tid && !_selected.tid.empty()) {
-        return _u.write_select_parameter(Bank::Tid, TID_MASK_POINTER_BITS, _selected.tid.begin(), _selected.tid.size) &&
-               _u.write_select_enabled(true);
+        return _u.writeSelectParameter(Bank::Tid, TID_MASK_POINTER_BITS, _selected.tid.begin(), _selected.tid.size) &&
+               _u.writeSelectEnabled(true);
     }
     if (_mask_bank == Bank::Epc && !_selected.epc.empty()) {
-        return _u.write_select_parameter(Bank::Epc, EPC_MASK_POINTER_BITS, _selected.epc.begin(), _selected.epc.size) &&
-               _u.write_select_enabled(true);
+        return _u.writeSelectParameter(Bank::Epc, EPC_MASK_POINTER_BITS, _selected.epc.begin(), _selected.epc.size) &&
+               _u.writeSelectEnabled(true);
     }
     M5_LIB_LOGW("Nothing to build a mask from; the selection cannot be put back");
     return false;
@@ -654,13 +655,13 @@ bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
     if (!pause_polling()) {
         return false;
     }
-    if (!_u.kill_tag(kill_password)) {
+    if (!_u.killTag(kill_password)) {
         return false;
     }
     // Nothing answers to the mask any more
     _has_selection = false;
     _selected      = Tag{};
-    _u.write_select_enabled(false);
+    _u.writeSelectEnabled(false);
     resume_polling();
     return true;
 }
