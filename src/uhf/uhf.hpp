@@ -269,6 +269,9 @@ enum class Chip : uint8_t {
     NxpUcodeG2iM,
     NxpUcodeG2iMPlus,
     NxpUcode7,
+    NxpUcode7xm1k,
+    NxpUcode7xm2k,
+    NxpUcode7xmPlus,
     NxpUcode8,
     NxpUcode8m,
     NxpUcode9,
@@ -357,6 +360,12 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
             return 512;
         case Chip::NxpUcode8m:
             return 32;  // SL3S1205_15 Rev3.6 Table 7: "User Memory 32 bit"
+        // SL3S10X4 memory tables
+        case Chip::NxpUcode7xm1k:
+            return 1024;
+        case Chip::NxpUcode7xm2k:
+        case Chip::NxpUcode7xmPlus:
+            return 2048;
         case Chip::NxpUcodeG2iM:
             // Rev3.7 Table 7 and Table 15. The "640 bit configurable User Memory" of the
             // general description is the whole pool, and this part keeps its EPC fixed at
@@ -409,6 +418,10 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
             return 128;  // SL3S1204 Rev4.0 Table 8
         case Chip::NxpUcode8m:
             return 96;  // SL3S1205_15 Rev3.6 Table 7
+        case Chip::NxpUcode7xm1k:
+        case Chip::NxpUcode7xm2k:
+        case Chip::NxpUcode7xmPlus:
+            return 448;  // SL3S10X4 memory tables: "EPC (excluding CRC, PC) 448 bit"
         case Chip::NxpUcode8:
             // SL3S1205_15 Rev3.6 Table 6 gives 128 bit, and a real tag takes a PC of eight
             // words and refuses nine
@@ -453,6 +466,49 @@ inline uint16_t chipTidWords(const Chip chip)
 }
 
 /*!
+  @brief How many blocks a chip divides its user memory into for BlockPermalock
+  @param chip Chip
+  @return Number of blocks, or zero where it is not known
+  @details Not the user memory divided by the block size: an Alien Higgs-3 has 32-bit blocks
+  and says it has four of them, which covers 128 of its bits and not the whole bank. Only a
+  datasheet can say how many there are
+ */
+inline uint16_t chipPermalockBlockCount(const Chip chip)
+{
+    switch (chip) {
+        case Chip::ImpinjMonza4QT:
+            return 4;  // Monza 4 V10.0 2.3.1: "four fixed, 128-bit sections of user memory"
+        case Chip::AlienHiggs3:
+            // Higgs 3 Supplement: "BlockPermaLock: Block lengths are 32 bits and a total of
+            // 4 blocks"
+            return 4;
+        default:
+            return 0;
+    }
+}
+
+/*!
+  @brief Is this a chip whose datasheet says it has no BlockPermalock?
+  @param chip Chip
+  @return True where the datasheet says it has none
+  @details The other side of chipSupportsBlockPermalock(): a chip in neither is one nothing
+  has said anything about
+ */
+inline bool chipHasNoBlockPermalock(const Chip chip)
+{
+    switch (chip) {
+        case Chip::NxpUcode8:
+        case Chip::NxpUcode8m:
+        case Chip::NxpUcode9:
+        case Chip::NxpUcode9xe:
+            // The optional commands these list are Access, BlockWrite and Untraceable
+            return true;
+        default:
+            return false;
+    }
+}
+
+/*!
   @brief Is this a chip whose datasheet gives it BlockPermalock?
   @param chip Chip
   @return True where the datasheet says it has it
@@ -470,6 +526,12 @@ inline bool chipSupportsBlockPermalock(const Chip chip)
         case Chip::ImpinjMonza4QT:
             // Monza 4 V10.0 2.3.1, the four 128-bit sections it can lock
             return true;
+        case Chip::NxpUcode7xm1k:
+        case Chip::NxpUcode7xm2k:
+        case Chip::NxpUcode7xmPlus:
+            return true;  // SL3S10X4 p.3 and p.12
+        case Chip::AlienHiggs3:
+            return true;  // Higgs 3 Supplement, optional commands
         default:
             return false;
     }
@@ -508,6 +570,14 @@ inline uint32_t chipPermalockBlockBits(const Chip chip)
         case Chip::ImpinjMonza4QT:
             // Monza 4 V10.0 2.3.1: "four fixed, 128-bit sections of user memory"
             return 128;
+        case Chip::NxpUcode7xm1k:
+        case Chip::NxpUcode7xm2k:
+        case Chip::NxpUcode7xmPlus:
+            // SL3S10X4: "BlockPermalock (block size of 256-bit)". The UCODE G2iM has the command
+            // as well and says nothing about how large its blocks are, so it is left out
+            return 256;
+        case Chip::AlienHiggs3:
+            return 32;  // Higgs 3 Supplement: "Block lengths are 32 bits"
         default:
             return 0;
     }
@@ -765,6 +835,13 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                     return Chip::NxpUcodeG2iMPlus;
                 case 0x890:
                     return Chip::NxpUcode7;  // SL3S1204 Rev4.0 Table 12: "E28068902000"
+                // SL3S10X4 TID table: E2806D12, E2806F12 and E2806D92
+                case 0xD12:
+                    return Chip::NxpUcode7xm1k;
+                case 0xF12:
+                    return Chip::NxpUcode7xm2k;
+                case 0xD92:
+                    return Chip::NxpUcode7xmPlus;
                 case 0x894:
                     return Chip::NxpUcode8;  // SL3S1205/1215 datasheet
                 case 0x994:
@@ -1225,6 +1302,12 @@ inline std::string Tag::chipAsString() const
             return "NXP UCODE 7";
         case Chip::NxpUcode8:
             return "NXP UCODE 8";
+        case Chip::NxpUcode7xm1k:
+            return "NXP UCODE 7xm-1k";
+        case Chip::NxpUcode7xm2k:
+            return "NXP UCODE 7xm-2k";
+        case Chip::NxpUcode7xmPlus:
+            return "NXP UCODE 7xm+";
         case Chip::NxpUcode8m:
             return "NXP UCODE 8m";
         case Chip::NxpUcode9:

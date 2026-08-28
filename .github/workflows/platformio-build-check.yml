@@ -150,6 +150,10 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: UHF_PermanentLock
+            board: Core
+            framework: Arduino
+            espressif32: latest
 
     steps:
       - name: Checkout
