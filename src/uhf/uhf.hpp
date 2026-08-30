@@ -257,6 +257,8 @@ enum class Chip : uint8_t {
     AlienHiggs3,
     AlienHiggs4,
     AlienHiggs9,
+    Em4423SmallEpc,
+    Em4423LargeEpc,
     ImpinjMonza4D,
     ImpinjMonza4E,
     ImpinjMonza4i,
@@ -340,6 +342,13 @@ inline uint32_t chipUserMemoryBits(const Chip chip)
             return 688;
         case Chip::AlienHiggs4:
             return 128;  // Higgs 4 V1.3.6 3: "128 bits of NVM for User data"
+        // EM4423 4423-DS-02 v6.0 7: "The small EPC memory configuration provides 128 bits for
+        // encoding and 160 bits of USER memory", and 224 with 64 for the large one. Which of
+        // the two a tag is, is in its model number, so neither size has to be shared
+        case Chip::Em4423SmallEpc:
+            return 160;
+        case Chip::Em4423LargeEpc:
+            return 64;
         // Monza 4 V10.0 Table 2-8
         case Chip::ImpinjMonza4D:
             return 32;
@@ -394,6 +403,11 @@ inline uint32_t chipEpcMaxBits(const Chip chip)
             return 496;  // ALC-390: "Supports EPC size up to 496b"
         case Chip::AlienHiggs4:
             return 128;  // Higgs 4 V1.3.6 3: "128 bits of NVM for Electronic Product Code"
+        // EM4423 4423-DS-02 v6.0 7
+        case Chip::Em4423SmallEpc:
+            return 128;
+        case Chip::Em4423LargeEpc:
+            return 224;
         // Monza 4 V10.0 Table 2-8
         case Chip::ImpinjMonza4D:
             return 128;
@@ -484,6 +498,12 @@ inline uint16_t chipPermalockBlockCount(const Chip chip)
             // Higgs 3 Supplement: "BlockPermaLock: Block lengths are 32 bits and a total of
             // 4 blocks"
             return 4;
+        // EM4423 4423-DS-02 v6.0, the Gen2V2config word: the small EPC layout names Block 0
+        // Locked through Block 4 Locked, and the large one stops at Block 1 Locked
+        case Chip::Em4423SmallEpc:
+            return 5;
+        case Chip::Em4423LargeEpc:
+            return 2;
         default:
             return 0;
     }
@@ -543,6 +563,10 @@ inline Support chipBlockPermalockSupport(const Chip chip)
             return Support::Yes;  // SL3S10X4 p.3 and p.12
         case Chip::AlienHiggs3:
             return Support::Yes;  // Higgs 3 Supplement, optional commands
+        case Chip::Em4423SmallEpc:
+        case Chip::Em4423LargeEpc:
+            // EM4423 4423-DS-02 v6.0 8: "BlockPermalock '11001001' Optional"
+            return Support::Yes;
         case Chip::NxpUcode8:
         case Chip::NxpUcode8m:
         case Chip::NxpUcode9:
@@ -565,6 +589,10 @@ inline Support chipQTSupport(const Chip chip)
         case Chip::ImpinjMonza4QT:
             // Monza 4 V10.0 Table 2-8, the only part of the family with the column ticked
             return Support::Yes;
+        case Chip::Em4423SmallEpc:
+        case Chip::Em4423LargeEpc:
+            // EM4423 4423-DS-02 v6.0 8 sets out "all implemented commands", and QT is not one
+            return Support::No;
         default:
             return Support::Unknown;
     }
@@ -588,6 +616,11 @@ inline Support chipNxpCustomCommandSupport(const Chip chip)
         case Chip::NxpUcode8:
         case Chip::NxpUcode8m:
             // SL3S1205_15 Rev3.6 9.4: ACCESS, Block Write and Untraceable, and nothing else
+            return Support::No;
+        case Chip::Em4423SmallEpc:
+        case Chip::Em4423LargeEpc:
+            // EM4423 4423-DS-02 v6.0 8 sets out "all implemented commands", and none of these
+            // is one. They are NXP's, and this chip is EM Microelectronic's
             return Support::No;
         default:
             return Support::Unknown;
@@ -623,6 +656,10 @@ inline uint32_t chipPermalockBlockBits(const Chip chip)
             return 128;
         case Chip::AlienHiggs3:
             return 32;  // Higgs 3 Supplement: "Block lengths are 32 bits"
+        case Chip::Em4423SmallEpc:
+        case Chip::Em4423LargeEpc:
+            // EM4423 4423-DS-02 v6.0 8: "USER memory block size is two words."
+            return 32;
         default:
             return 0;
     }
@@ -895,6 +932,18 @@ inline Chip resolveChip(const Vendor vendor, const uint16_t model_number)
                     // third-party tables, and was read off a real Higgs 9 whose TID is
                     // E2803821 2000 6820042E3E3B
                     return Chip::AlienHiggs9;
+                default:
+                    return Chip::Unknown;
+            }
+        case Vendor::EMMicroelectronic:
+            switch (model_number) {
+                // EM4423 4423-DS-02 v6.0, the TID memory bank: word 1 holds "Tag MDID LSB's
+                // (Bh)" and then the model number, whose last bit is note 1, "EPC size, where
+                // 0 indicates small EPC memory and 1 indicates large EPC memory"
+                case 0x0A0:
+                    return Chip::Em4423SmallEpc;
+                case 0x0A1:
+                    return Chip::Em4423LargeEpc;
                 default:
                     return Chip::Unknown;
             }
@@ -1480,6 +1529,10 @@ inline std::string Tag::chipAsString() const
             return "Alien Higgs-9";
         case Chip::AlienHiggs4:
             return "Alien Higgs-4";
+        case Chip::Em4423SmallEpc:
+            return "EM Microelectronic EM4423 (small EPC)";
+        case Chip::Em4423LargeEpc:
+            return "EM Microelectronic EM4423 (large EPC)";
         case Chip::ImpinjMonza4D:
             return "Impinj Monza 4D";
         case Chip::ImpinjMonza4E:

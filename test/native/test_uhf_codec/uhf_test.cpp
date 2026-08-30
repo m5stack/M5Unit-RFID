@@ -1464,8 +1464,12 @@ TEST(UHF, ResolveChip)
         m5::uhf::Chip chip;
     };
     const Case cases[]{
-        {{0xE2, 0x00, 0x34, 0x12}, m5::uhf::Chip::AlienHiggs3},     // Higgs 3 Supplement Table 1
-        {{0xE2, 0x00, 0x34, 0x14}, m5::uhf::Chip::AlienHiggs4},     // Higgs 4 V1.3.6 TID table
+        {{0xE2, 0x00, 0x34, 0x12}, m5::uhf::Chip::AlienHiggs3},  // Higgs 3 Supplement Table 1
+        {{0xE2, 0x00, 0x34, 0x14}, m5::uhf::Chip::AlienHiggs4},  // Higgs 4 V1.3.6 TID table
+        // EM4423 4423-DS-02 v6.0 TID table, whose model number ends in the bit that says
+        // which of the two EPC sizes the part was made with
+        {{0xE2, 0x80, 0xB0, 0xA0}, m5::uhf::Chip::Em4423SmallEpc},  //
+        {{0xE2, 0x80, 0xB0, 0xA1}, m5::uhf::Chip::Em4423LargeEpc},  //
         {{0xE2, 0x00, 0x11, 0x00}, m5::uhf::Chip::ImpinjMonza4D},   // Monza 4 V10.0 Table 4-8
         {{0xE2, 0x00, 0x11, 0x05}, m5::uhf::Chip::ImpinjMonza4QT},  //
         {{0xE2, 0x00, 0x11, 0x0C}, m5::uhf::Chip::ImpinjMonza4E},   //
@@ -1491,6 +1495,13 @@ TEST(UHF, ResolveChip)
     // The one chip whose datasheet gives the block BlockPermalock works in
     EXPECT_EQ(m5::uhf::chipPermalockBlockBits(m5::uhf::Chip::ImpinjMonza4QT), 128U);
     EXPECT_EQ(m5::uhf::chipPermalockBlockBits(m5::uhf::Chip::AlienHiggs9), 0U);
+
+    // One part with two model numbers: the bit telling the two apart swaps the size of the
+    // banks as well, so the pair only reads correctly the right way round
+    EXPECT_EQ(m5::uhf::chipEpcMaxBits(m5::uhf::Chip::Em4423SmallEpc), 128U);
+    EXPECT_EQ(m5::uhf::chipUserMemoryBits(m5::uhf::Chip::Em4423SmallEpc), 160U);
+    EXPECT_EQ(m5::uhf::chipEpcMaxBits(m5::uhf::Chip::Em4423LargeEpc), 224U);
+    EXPECT_EQ(m5::uhf::chipUserMemoryBits(m5::uhf::Chip::Em4423LargeEpc), 64U);
 }
 
 TEST(UHF, SharedUserMemory)
