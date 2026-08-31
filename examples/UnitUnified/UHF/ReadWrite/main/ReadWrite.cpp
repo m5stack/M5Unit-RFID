@@ -174,16 +174,19 @@ void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
     }
 
     const unsigned long began = m5::utility::millis();
-    if (!uhf.writeBank(m5::uhf::Bank::User, 0, pattern.data(), static_cast<uint16_t>(pattern.size()))) {
-        M5_LOGE("write %u words: failed", words);
+    const auto wrote = uhf.writeBank(m5::uhf::Bank::User, 0, pattern.data(), static_cast<uint16_t>(pattern.size()));
+    if (!wrote) {
+        M5_LOGE("write %u words: %s", words, m5::uhf::reasonAsString(wrote.error()));
         uhf.deselect();
         return;
     }
     const unsigned long took = m5::utility::millis() - began;
 
     std::vector<uint8_t> readback{};
-    if (!uhf.readBank(readback, m5::uhf::Bank::User, 0, words)) {
-        M5_LOGE("write %u words: wrote but could not read back, so the tag now holds the pattern", words);
+    const auto reread = uhf.readBank(readback, m5::uhf::Bank::User, 0, words);
+    if (!reread) {
+        M5_LOGE("write %u words: wrote but could not read back (%s), so the tag now holds the pattern", words,
+                m5::uhf::reasonAsString(reread.error()));
         uhf.deselect();
         return;
     }
@@ -194,8 +197,10 @@ void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
 
     // Put it back the way it was, and say so loudly if that does not work: the tag is left
     // holding the pattern in that case
-    if (!uhf.writeBank(m5::uhf::Bank::User, 0, original.data(), static_cast<uint16_t>(original.size()))) {
-        M5_LOGE("write %u words: FAILED TO RESTORE; the tag still holds the pattern", words);
+    const auto restore = uhf.writeBank(m5::uhf::Bank::User, 0, original.data(), static_cast<uint16_t>(original.size()));
+    if (!restore) {
+        M5_LOGE("write %u words: FAILED TO RESTORE (%s); the tag still holds the pattern", words,
+                m5::uhf::reasonAsString(restore.error()));
         uhf.deselect();
         return;
     }
@@ -205,6 +210,76 @@ void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
     }
     uhf.dump(m5::uhf::Bank::User, 0, words);
     uhf.deselect();
+}
+
+/*!
+  @brief Find one tag, name it, and say how much User memory it holds
+  @param[out] tag The tag that was found, as its TID describes it
+  @param[out] words Words of User memory, zero when there are none or the size is not known
+  @return True when a tag was found and identified
+  @details Only the TID says which chip this is, and which chip it is says how large the bank
+  is, so both go together
+ */
+bool find_and_size(m5::uhf::Tag& tag, uint16_t& words)
+{
+    words = 0;
+    m5::uhf::Tag detected{};
+    if (!detect_one(detected)) {
+        return false;
+    }
+    if (!uhf.select(detected)) {
+        M5_LOGE("Failed to select the tag");
+        lcd.println("select: failed");
+        return false;
+    }
+    const bool identified = uhf.identify(tag);
+    uhf.deselect();
+    if (!identified) {
+        M5_LOGE("Failed to identify the tag");
+        lcd.println("identify: failed");
+        return false;
+    }
+
+    words = static_cast<uint16_t>(tag.user_memory_bits / 16);
+    M5_LOGI("%s: user memory %s", tag.chipAsString().c_str(),
+            words ? m5::utility::formatString("%u words", words).c_str()
+                  : (m5::uhf::chipHasNoUserMemory(tag.chip) ? "none" : "size not known"));
+    lcd.printf("%s\n", tag.chipAsString().c_str());
+    return true;
+}
+
+/*!
+  @brief Write zeros over the whole User bank
+  @param tag Tag to write to
+  @param words Words of User memory to cover
+  @details A write test puts a pattern in and takes it out again, but one that fails part way
+  leaves what it managed in place, and the run after it reads that as the original. Zeros are
+  what gets the bank back to a state that is known
+  @note Writing zeros comes to the same thing however many times it is done, so a try that
+  stops part way is simply made again from the start
+ */
+void wipe_user(const m5::uhf::Tag& tag, const uint16_t words)
+{
+    constexpr uint8_t ATTEMPTS{3};
+
+    const std::vector<uint8_t> zeros(static_cast<size_t>(words) * 2, 0x00);
+    for (uint8_t attempt = 1; attempt <= ATTEMPTS; ++attempt) {
+        if (!uhf.select(tag)) {
+            continue;
+        }
+        const auto wiped = uhf.writeBank(m5::uhf::Bank::User, 0, zeros.data(), static_cast<uint16_t>(zeros.size()));
+        if (wiped) {
+            M5_LOGI("User memory: %u words cleared", words);
+            lcd.printf("cleared %u words\n", words);
+            uhf.dump(m5::uhf::Bank::User, 0, words);
+            uhf.deselect();
+            return;
+        }
+        M5_LOGW("Clearing stopped: %s (attempt %u of %u)", m5::uhf::reasonAsString(wiped.error()), attempt, ATTEMPTS);
+        uhf.deselect();
+    }
+    M5_LOGE("The bank could not be cleared; hold again with the tag closer");
+    lcd.println("clear: failed");
 }
 }  // namespace
 
@@ -217,6 +292,7 @@ void setup()
     lcd.setCursor(0, 0);
     lcd.println("A: write User memory");
     lcd.println("(restores it afterwards)");
+    lcd.println("A hold: fill it with zeros");
 }
 
 void loop()
@@ -227,32 +303,11 @@ void loop()
     if (M5.BtnA.wasClicked()) {
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
-        m5::uhf::Tag detected{};
-        if (!detect_one(detected)) {
-            return;
-        }
-        // How much user memory there is decides what is worth writing, and only the TID says
-        // which chip this is
-        if (!uhf.select(detected)) {
-            M5_LOGE("Failed to select the tag");
-            lcd.println("select: failed");
-            return;
-        }
         m5::uhf::Tag tag{};
-        const bool identified = uhf.identify(tag);
-        uhf.deselect();
-        if (!identified) {
-            M5_LOGE("Failed to identify the tag");
-            lcd.println("identify: failed");
+        uint16_t bank{};
+        if (!find_and_size(tag, bank)) {
             return;
         }
-
-        const uint16_t bank = static_cast<uint16_t>(tag.user_memory_bits / 16);
-        M5_LOGI("%s: user memory %s", tag.chipAsString().c_str(),
-                bank ? m5::utility::formatString("%u words", bank).c_str()
-                     : (m5::uhf::chipHasNoUserMemory(tag.chip) ? "none" : "size not known"));
-        lcd.printf("%s\n", tag.chipAsString().c_str());
-
         if (bank == 0 && m5::uhf::chipHasNoUserMemory(tag.chip)) {
             M5_LOGI("Nothing to write to on this tag");
             lcd.println("no user memory");
@@ -269,6 +324,25 @@ void loop()
         } else if (bank) {
             M5_LOGI("The whole bank fits in one command, so there is no split to exercise");
         }
+    }
+
+    // A write test that stopped part way leaves what it managed behind, and the run after it
+    // takes that for the original. This is what puts the bank back to zero
+    if (M5.BtnA.wasHold()) {
+        lcd.fillScreen(TFT_DARKGREEN);
+        lcd.setCursor(0, 0);
+        m5::uhf::Tag tag{};
+        uint16_t bank{};
+        if (!find_and_size(tag, bank)) {
+            return;
+        }
+        if (bank == 0) {
+            M5_LOGI("Nothing to clear on this tag");
+            lcd.println("no user memory");
+            return;
+        }
+        M5_LOGW("Filling %u words of User memory with zeros", bank);
+        wipe_user(tag, bank);
     }
 }
 

@@ -145,20 +145,24 @@ void write_probe(const char* when)
     constexpr uint32_t RESTORE_INTERVAL_MS{20};
 
     const std::vector<uint8_t> pattern{0x5A, 0xA5};
-    const bool wrote = uhf.writeBank(m5::uhf::Bank::User, 0, pattern.data(), static_cast<uint16_t>(pattern.size()));
-    M5_LOGI("Writing one word %s: %s", when, wrote ? "allowed" : "refused");
-    lcd.printf("write %s: %s\n", when, wrote ? "ok" : "no");
+    const auto wrote = uhf.writeBank(m5::uhf::Bank::User, 0, pattern.data(), static_cast<uint16_t>(pattern.size()));
+    // A tag that says no has not been written to; one that says nothing may have been, which is
+    // a different thing to be told and the reason is what tells them apart
+    M5_LOGI("Writing one word %s: %s", when, wrote ? "allowed" : m5::uhf::reasonAsString(wrote.error()));
+    lcd.printf("write %s: %s\n", when, wrote ? "ok" : m5::uhf::tagUnchanged(wrote.error()) ? "no" : "?");
     if (!wrote) {
         return;
     }
     const std::vector<uint8_t> zero{0x00, 0x00};
+    m5::uhf::Result restored{m5::stl::unexpected<m5::uhf::Reason>{m5::uhf::Reason::NoAnswer}};
     for (uint8_t i = 0; i < RESTORE_ATTEMPTS; ++i) {
-        if (uhf.writeBank(m5::uhf::Bank::User, 0, zero.data(), static_cast<uint16_t>(zero.size()))) {
+        restored = uhf.writeBank(m5::uhf::Bank::User, 0, zero.data(), static_cast<uint16_t>(zero.size()));
+        if (restored) {
             return;
         }
         m5::utility::delay(RESTORE_INTERVAL_MS);
     }
-    M5_LOGE("FAILED TO RESTORE the word; the tag still holds 5AA5");
+    M5_LOGE("FAILED TO RESTORE the word (%s); the tag still holds 5AA5", m5::uhf::reasonAsString(restored.error()));
 }
 
 //! @brief Address the tag again with a password, since that is what decides the state it is in
@@ -183,9 +187,10 @@ bool set_access_password(const m5::uhf::Tag& tag, const uint32_t password)
 {
     const std::vector<uint8_t> data{static_cast<uint8_t>(password >> 24), static_cast<uint8_t>(password >> 16),
                                     static_cast<uint8_t>(password >> 8), static_cast<uint8_t>(password)};
-    if (!uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data.data(),
-                       static_cast<uint16_t>(data.size()))) {
-        M5_LOGE("Failed to store the access password %08X", password);
+    const auto stored =
+        uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data.data(), static_cast<uint16_t>(data.size()));
+    if (!stored) {
+        M5_LOGE("Failed to store the access password %08X: %s", password, m5::uhf::reasonAsString(stored.error()));
         lcd.println("password: failed");
         return false;
     }
@@ -215,10 +220,11 @@ bool set_access_password(const m5::uhf::Tag& tag, const uint32_t password)
 bool set_lock(const m5::uhf::LockTarget target, const m5::uhf::LockAction action, const char* what)
 {
     const std::vector<m5::uhf::LockSetting> settings{m5::uhf::LockSetting(target, action)};
-    const bool ok = uhf.lock(settings);
-    M5_LOGI("%s: %s", what, ok ? "the tag carried it out" : "failed");
-    lcd.printf("%s: %s\n", what, ok ? "ok" : "NG");
-    return ok;
+    const auto result = uhf.lock(settings);
+    // EPC Gen2 gives no way to read a tag's lock bits, so what the reader says is all there is
+    M5_LOGI("%s: %s", what, result ? "the tag carried it out" : m5::uhf::reasonAsString(result.error()));
+    lcd.printf("%s: %s\n", what, result ? "ok" : "NG");
+    return static_cast<bool>(result);
 }
 
 void lock_and_open(m5::uhf::Tag& tag)

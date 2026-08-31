@@ -158,8 +158,16 @@ bool look(m5::uhf::Tag& tag, uint16_t& word)
         lcd.println("select: failed");
         return false;
     }
-    if (!uhf.readNxpConfigWord(word)) {
-        M5_LOGE("The Config-Word could not be read");
+    // Which chip this is comes from the TID, and what a chip is decides whether it can have
+    // the command at all. Asking a chip that cannot costs a round trip and comes back saying
+    // nothing answered, which is not the same as being told it was never there to answer
+    if (uhf.identify(tag)) {
+        M5_LOGI("Chip: %s", tag.chipAsString().c_str());
+    }
+    const auto read = uhf.readNxpConfigWord(word);
+    if (!read) {
+        // A chip that never had the command is a different answer from one that did not reply
+        M5_LOGE("The Config-Word could not be read: %s", m5::uhf::reasonAsString(read.error()));
         lcd.println("no Config-Word");
         uhf.deselect();
         return false;
@@ -189,8 +197,9 @@ bool set_access_password(const m5::uhf::Tag& tag, const uint32_t password)
 {
     const uint8_t data[]{static_cast<uint8_t>(password >> 24), static_cast<uint8_t>(password >> 16),
                          static_cast<uint8_t>(password >> 8), static_cast<uint8_t>(password)};
-    if (!uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data, sizeof(data))) {
-        M5_LOGE("Failed to store the access password %08X", password);
+    const auto stored = uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data, sizeof(data));
+    if (!stored) {
+        M5_LOGE("Failed to store the access password %08X: %s", password, m5::uhf::reasonAsString(stored.error()));
         return false;
     }
     // The write changed the very password the selection carries, so the tag is addressed again
@@ -247,8 +256,10 @@ void restore_tag()
             undo |= m5::uhf::NXP_CONFIG_PROTECT_TID;
         }
         if (undo != 0) {
-            if (!uhf.toggleNxpConfigWord(word, undo)) {
-                M5_LOGE("THE TAG IS STILL PROTECTED; hold the button again");
+            const auto undone = uhf.toggleNxpConfigWord(word, undo);
+            if (!undone) {
+                M5_LOGE("THE TAG IS STILL PROTECTED (%s); hold the button again",
+                        m5::uhf::reasonAsString(undone.error()));
                 lcd.println("still protected");
                 return;
             }
@@ -297,8 +308,9 @@ void protect_and_release()
     // Inverting both at once, which is what ReadProtect would have done to them
     constexpr uint16_t BOTH{m5::uhf::NXP_CONFIG_PROTECT_EPC | m5::uhf::NXP_CONFIG_PROTECT_TID};
     uint16_t now{};
-    if (!uhf.toggleNxpConfigWord(now, BOTH)) {
-        M5_LOGE("Failed to protect the tag");
+    const auto protect = uhf.toggleNxpConfigWord(now, BOTH);
+    if (!protect) {
+        M5_LOGE("Failed to protect the tag: %s", m5::uhf::reasonAsString(protect.error()));
         lcd.println("protect: failed");
         restore_tag();
         return;

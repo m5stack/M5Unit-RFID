@@ -86,21 +86,22 @@ public:
     virtual bool writeSelectParameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
                                       const size_t mask_len) override;
     virtual bool writeSelectEnabled(const bool enable) override;
-    virtual bool readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
-                               const uint16_t word_count, const uint32_t access_password) override;
-    virtual bool writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
-                                const size_t len, const uint32_t access_password) override;
-    virtual bool lockTagMemory(const uint32_t payload, const uint32_t access_password) override;
-    virtual bool killTag(const uint32_t kill_password) override;
-    virtual bool blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
-                                const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
-                                const uint32_t access_password, const bool allow_permanent) override;
-    virtual bool qtCommand(uint16_t& control, const bool write, const bool persistent,
-                           const uint32_t access_password) override;
-    virtual bool nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password) override;
-    virtual bool nxpChangeEAS(const bool enable, const uint32_t access_password) override;
+    virtual TagResult readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                    const uint16_t word_count, const uint32_t access_password) override;
+    virtual TagResult writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                     const size_t len, const uint32_t access_password) override;
+    virtual TagResult lockTagMemory(const uint32_t payload, const uint32_t access_password) override;
+    virtual TagResult killTag(const uint32_t kill_password) override;
+    virtual TagResult blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                     const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                     const uint32_t access_password, const bool allow_permanent) override;
+    virtual TagResult qtCommand(uint16_t& control, const bool write, const bool persistent,
+                                const uint32_t access_password) override;
+    virtual TagResult nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password) override;
+    virtual TagResult nxpChangeEAS(const bool enable, const uint32_t access_password) override;
     virtual bool nxpEASAlarm(std::vector<uint8_t>& alarm) override;
-    virtual bool nxpReadProtect(const bool protect, const uint32_t access_password) override;
+    virtual TagResult nxpReadProtect(const bool protect, const uint32_t access_password) override;
+    virtual m5::uhf::Reason classify(const uint8_t error_code) const override;
 
 protected:
     virtual bool pump(const uint32_t timeout_ms) override;
@@ -148,11 +149,18 @@ protected:
       @brief Did the tag report that it carried the operation out?
       @param response Response frame of a Write, Lock or Kill
       @param what Name of the operation, used in the warning
-      @return True when the tag answered with a success status
+      @return Nothing when the tag answered with a success status
       @details The module answering says the tag was reached; the status byte inside says the
-      tag actually did what it was told
+      tag actually did what it was told. That status is not one of the module's error codes, so
+      a failure here reports READER_BALKED rather than a code of its own
      */
-    bool tag_carried_it_out(const m100::Frame& response, const char* what) const;
+    TagResult tag_carried_it_out(const m100::Frame& response, const char* what) const;
+    /*!
+      @brief The error code a failure notification carries
+      @param response Response frame
+      @return The code, or READER_SILENT where the notification carries none
+     */
+    static uint8_t error_code_of(const m100::Frame& response);
     /*!
       @brief Send a tag operation, trying again when the tag simply did not answer
       @param[out] response Response frame
@@ -160,7 +168,7 @@ protected:
       @param param Parameter
       @param param_len Parameter length
       @param what Name of the operation, used in the warnings
-      @return True when the module answered with a result rather than a failure
+      @return Nothing when the module answered with a result rather than a failure
       @details Only a failure that says the tag did not answer is tried again. One where the tag
       answered with a reason of its own is reported at once, since asking again would produce
       the same reason more slowly
@@ -168,8 +176,8 @@ protected:
       every attempt after it, because a killed tag answers nothing. There is no way to tell that
       apart from a kill that never happened
      */
-    bool send_tag_operation(m100::Frame& response, const uint8_t command, const uint8_t* param,
-                            const uint16_t param_len, const char* what, const uint8_t answer_command = 0);
+    TagResult send_tag_operation(m100::Frame& response, const uint8_t command, const uint8_t* param,
+                                 const uint16_t param_len, const char* what, const uint8_t answer_command = 0);
 
     //! Frame header. A derived class for the R200 family sets this to m100::r200::FRAME_HEADER
     uint8_t _frame_header{m100::jrd::FRAME_HEADER};

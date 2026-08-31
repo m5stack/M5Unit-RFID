@@ -315,6 +315,19 @@ bool UnitJRD4035::begin()
         M5_LIB_LOGW("Failed to write the auto sleep time; the module keeps whatever it had");
     }
 
+    // The module is powered from the connector rather than by the host, so a reset of the host
+    // leaves it holding whatever the run before it left behind. Two of those cannot be asked
+    // for and go on acting: a mask still switched on answers a Select nobody made, so an
+    // inventory reports none of the tags that do not match it, and a carrier still switched on
+    // is a transmission nobody asked for. Both are written here so that what begin() leaves is
+    // the same whatever came before it
+    if (!writeSelectEnabled(false)) {
+        M5_LIB_LOGW("Failed to switch off the mask; the reader may still be filtering");
+    }
+    if (!writeContinuousCarrier(false)) {
+        M5_LIB_LOGW("Failed to switch off the carrier; the module may still be transmitting");
+    }
+
     return true;
 }
 
@@ -648,24 +661,27 @@ bool UnitJRD4035::writeQueryParameters(const m5::uhf::QueryParameters& qp)
     return true;
 }
 
-bool UnitJRD4035::blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
-                                 const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
-                                 const uint32_t access_password, const bool allow_permanent)
+TagResult UnitJRD4035::blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                      const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                      const uint32_t access_password, const bool allow_permanent)
 {
     out.clear();
-    if (reject_while_polling("blockPermalock") || reject_without_selection("blockPermalock")) {
-        return false;
+    if (reject_while_polling("blockPermalock")) {
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
+    }
+    if (reject_without_selection("blockPermalock")) {
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     const bool lock = mask != nullptr;
     // Locking blocks cannot be undone, so it is refused unless the caller says the word
     if (lock && !allow_permanent) {
         M5_LIB_LOGE("blockPermalock is permanent; pass allow_permanent to mean it");
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     // Each word of mask covers sixteen blocks, so the two have to agree
     if (lock && mask_len != static_cast<size_t>(block_range) * 2) {
         M5_LIB_LOGE("A range of %u wants %u bytes of mask, not %zu", block_range, block_range * 2, mask_len);
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     std::vector<uint8_t> param{static_cast<uint8_t>(access_password >> 24),
                                static_cast<uint8_t>(access_password >> 16),
@@ -683,30 +699,35 @@ bool UnitJRD4035::blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank 
     Frame res{};
     // A lock is answered under a code of its own, which is the one to wait for
     const uint8_t answer = lock ? CMD_BLOCK_PERMALOCK_LOCK_ANSWER : 0;
-    if (!send_tag_operation(res, CMD_BLOCK_PERMALOCK, param.data(), static_cast<uint16_t>(param.size()),
-                            "blockPermalock", answer)) {
-        return false;
+    const auto sent = send_tag_operation(res, CMD_BLOCK_PERMALOCK, param.data(), static_cast<uint16_t>(param.size()),
+                                         "blockPermalock", answer);
+    if (!sent) {
+        return sent;
     }
     // Both answers begin with the tag that replied: a length byte and that many bytes of PC and
     // EPC. A read puts the range and the mask after them, a lock a status byte
     if (lock) {
         if (!parse_block_permalock_lock(res.parameter.data(), res.parameter.size())) {
             M5_LIB_LOGE("BlockPermalock did not say it locked anything");
-            return false;
+            return m5::stl::unexpected<uint8_t>{READER_BALKED};
         }
-        return true;
+        return {};
     }
     if (!parse_block_permalock_read(out, res.parameter.data(), res.parameter.size())) {
         M5_LIB_LOGE("Malformed BlockPermalock read answer");
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
-    return true;
+    return {};
 }
 
-bool UnitJRD4035::qtCommand(uint16_t& control, const bool write, const bool persistent, const uint32_t access_password)
+TagResult UnitJRD4035::qtCommand(uint16_t& control, const bool write, const bool persistent,
+                                 const uint32_t access_password)
 {
-    if (reject_while_polling("qtCommand") || reject_without_selection("qtCommand")) {
-        return false;
+    if (reject_while_polling("qtCommand")) {
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
+    }
+    if (reject_without_selection("qtCommand")) {
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     const uint8_t param[]{static_cast<uint8_t>(access_password >> 24), static_cast<uint8_t>(access_password >> 16),
                           static_cast<uint8_t>(access_password >> 8),  static_cast<uint8_t>(access_password),
@@ -716,67 +737,75 @@ bool UnitJRD4035::qtCommand(uint16_t& control, const bool write, const bool pers
     // A write is answered under a code of its own, which is the one to wait for. Like any other
     // tag operation this is worth repeating: 0x2E covers a tag that said nothing at all
     const uint8_t answer = write ? CMD_MONZA_QT_WRITE_ANSWER : 0;
-    if (!send_tag_operation(res, CMD_MONZA_QT, param, sizeof(param), "qtCommand", answer)) {
-        return false;
+    const auto sent      = send_tag_operation(res, CMD_MONZA_QT, param, sizeof(param), "qtCommand", answer);
+    if (!sent) {
+        return sent;
     }
     // Both answers carry the tag that replied before anything else: a length byte, then that
     // many bytes of PC and EPC. A read puts the control word after them, a write a status byte
     if (res.parameter.empty()) {
         M5_LIB_LOGE("QT answered with nothing");
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
     const size_t tag_len = res.parameter[0];
     const size_t rest    = res.parameter.size() - 1;
     if (rest < tag_len) {
         M5_LIB_LOGE("QT answered with %u bytes of tag in %u", static_cast<unsigned>(tag_len),
                     static_cast<unsigned>(rest));
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
     if (!write) {
         if (rest < tag_len + 2) {
             M5_LIB_LOGE("QT read answered without a control word");
-            return false;
+            return m5::stl::unexpected<uint8_t>{READER_GARBLED};
         }
         control = static_cast<uint16_t>((res.parameter[1 + tag_len] << 8) | res.parameter[2 + tag_len]);
     }
-    return true;
+    return {};
 }
 
-bool UnitJRD4035::nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password)
+TagResult UnitJRD4035::nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password)
 {
     config = 0;
-    if (reject_while_polling("nxpChangeConfig") || reject_without_selection("nxpChangeConfig")) {
-        return false;
+    if (reject_while_polling("nxpChangeConfig")) {
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
+    }
+    if (reject_without_selection("nxpChangeConfig")) {
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     if (!build_nxp_change_config(param, access_password, toggle)) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
-    if (!send_tag_operation(res, CMD_NXP_CHANGE_CONFIG, param.data(), static_cast<uint16_t>(param.size()),
-                            "nxpChangeConfig")) {
-        return false;
+    const auto sent = send_tag_operation(res, CMD_NXP_CHANGE_CONFIG, param.data(), static_cast<uint16_t>(param.size()),
+                                         "nxpChangeConfig");
+    if (!sent) {
+        return sent;
     }
     if (!parse_nxp_change_config(config, res.parameter.data(), res.parameter.size())) {
         M5_LIB_LOGE("nxpChangeConfig answered without a Config-Word");
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
-    return true;
+    return {};
 }
 
-bool UnitJRD4035::nxpChangeEAS(const bool enable, const uint32_t access_password)
+TagResult UnitJRD4035::nxpChangeEAS(const bool enable, const uint32_t access_password)
 {
-    if (reject_while_polling("nxpChangeEAS") || reject_without_selection("nxpChangeEAS")) {
-        return false;
+    if (reject_while_polling("nxpChangeEAS")) {
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
+    }
+    if (reject_without_selection("nxpChangeEAS")) {
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     if (!build_nxp_password_and_flag(param, access_password, enable ? 0x01 : 0x00)) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
-    return send_tag_operation(res, CMD_NXP_CHANGE_EAS, param.data(), static_cast<uint16_t>(param.size()),
-                              "nxpChangeEAS") &&
-           tag_carried_it_out(res, "nxpChangeEAS");
+    const auto sent =
+        send_tag_operation(res, CMD_NXP_CHANGE_EAS, param.data(), static_cast<uint16_t>(param.size()), "nxpChangeEAS");
+    return sent ? tag_carried_it_out(res, "nxpChangeEAS") : sent;
 }
 
 bool UnitJRD4035::nxpEASAlarm(std::vector<uint8_t>& alarm)
@@ -793,8 +822,7 @@ bool UnitJRD4035::nxpEASAlarm(std::vector<uint8_t>& alarm)
     // Nothing answering is what the question was asked to find out, so it is an answer and not
     // a failure, and saying so in the log would be saying something went wrong
     if (is_error_frame(res.command)) {
-        const uint8_t code = res.parameter.empty() ? 0x00 : res.parameter[0];
-        if (static_cast<Error>(code) == Error::EASAlarmFail) {
+        if (static_cast<Error>(error_code_of(res)) == Error::EASAlarmFail) {
             M5_LIB_LOGD("nxpEASAlarm: nothing in the field is flagged");
             return true;
         }
@@ -807,19 +835,22 @@ bool UnitJRD4035::nxpEASAlarm(std::vector<uint8_t>& alarm)
     return true;
 }
 
-bool UnitJRD4035::nxpReadProtect(const bool protect, const uint32_t access_password)
+TagResult UnitJRD4035::nxpReadProtect(const bool protect, const uint32_t access_password)
 {
-    if (reject_while_polling("nxpReadProtect") || reject_without_selection("nxpReadProtect")) {
-        return false;
+    if (reject_while_polling("nxpReadProtect")) {
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
+    }
+    if (reject_without_selection("nxpReadProtect")) {
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     if (!build_nxp_password_and_flag(param, access_password, protect ? NXP_READ_PROTECT_ON : NXP_READ_PROTECT_OFF)) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
-    return send_tag_operation(res, CMD_NXP_READ_PROTECT, param.data(), static_cast<uint16_t>(param.size()),
-                              "nxpReadProtect") &&
-           tag_carried_it_out(res, "nxpReadProtect");
+    const auto sent = send_tag_operation(res, CMD_NXP_READ_PROTECT, param.data(), static_cast<uint16_t>(param.size()),
+                                         "nxpReadProtect");
+    return sent ? tag_carried_it_out(res, "nxpReadProtect") : sent;
 }
 
 bool UnitJRD4035::writeContinuousCarrier(const bool enable)
@@ -969,7 +1000,8 @@ bool UnitJRD4035::succeeded(const Frame& response, const char* what) const
     if (!is_error_frame(response.command)) {
         return true;
     }
-    const uint8_t code = response.parameter.empty() ? 0x00 : response.parameter[0];
+    // The same code the caller is handed, so what is logged and what is acted on agree
+    const uint8_t code = error_code_of(response);
     // The module appends the PC and EPC of the tag it was addressing when it had already got
     // that far, which is what says whether the tag was seen at all before the failure
     const std::string tail =
@@ -1025,29 +1057,32 @@ bool UnitJRD4035::writeDemodulatorParameters(const m100::DemodulatorParameters& 
            succeeded(res, "writeDemodulatorParameters");
 }
 
-bool UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, const uint8_t* param,
-                                     const uint16_t param_len, const char* what, const uint8_t answer_command)
+TagResult UnitJRD4035::send_tag_operation(Frame& response, const uint8_t command, const uint8_t* param,
+                                          const uint16_t param_len, const char* what, const uint8_t answer_command)
 {
     for (int attempt = 1; attempt <= TAG_OPERATION_ATTEMPTS; ++attempt) {
         // A module saying nothing at all is not failing for a reason a repeat would fix, and
         // each attempt would cost the whole timeout, so that case is left alone
         if (!send_and_wait(response, command, param, param_len, TAG_OPERATION_TIMEOUT_MS, answer_command)) {
-            return false;
+            return m5::stl::unexpected<uint8_t>{READER_SILENT};
         }
         if (!is_error_frame(response.command)) {
             if (attempt > 1) {
                 M5_LIB_LOGD("%s answered on attempt %d", what, attempt);
             }
-            return true;
+            return {};
         }
-        const uint8_t code = response.parameter.empty() ? 0x00 : response.parameter[0];
+        const uint8_t code = error_code_of(response);
         if (!is_worth_retrying(code)) {
             break;
         }
         M5_LIB_LOGD("%s: %02X %s (attempt %d of %d)", what, code, error_description(code), attempt,
                     TAG_OPERATION_ATTEMPTS);
     }
-    return succeeded(response, what);
+    if (!succeeded(response, what)) {
+        return m5::stl::unexpected<uint8_t>{error_code_of(response)};
+    }
+    return {};
 }
 
 bool UnitJRD4035::writeSelectParameter(const m5::uhf::Bank bank, const uint32_t pointer_bits, const uint8_t* mask,
@@ -1125,123 +1160,185 @@ bool UnitJRD4035::writeSelectEnabled(const bool enable)
     return true;
 }
 
-bool UnitJRD4035::readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
-                                const uint16_t word_count, const uint32_t access_password)
+TagResult UnitJRD4035::readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                     const uint16_t word_count, const uint32_t access_password)
 {
     out.clear();
     if (reject_while_polling("readTagMemory")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
     }
     if (reject_without_selection("readTagMemory")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     const uint8_t code = membank_of(bank);
     if (code == MEMBANK_NONE) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     if (!build_read_tag_memory(param, access_password, code, word_address, word_count)) {
         M5_LIB_LOGE("Failed to build the read parameter");
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
-    if (!send_tag_operation(res, CMD_READ_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                            "readTagMemory")) {
-        return false;
+    const auto sent = send_tag_operation(res, CMD_READ_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                                         "readTagMemory");
+    if (!sent) {
+        return sent;
     }
 
     TagOperationResult result{};
     if (!parse_tag_operation(result, res.parameter.data(), res.parameter.size())) {
         M5_LIB_LOGE("Malformed read response");
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
     // A short answer would leave the caller reading fewer words than it asked for without ever
     // being told, so it is refused rather than truncated
     if (result.data_len != static_cast<size_t>(word_count) * 2) {
         M5_LIB_LOGE("Asked for %u words but got %zu bytes", word_count, result.data_len);
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
     out.assign(result.data, result.data + result.data_len);
-    return true;
+    return {};
 }
 
-bool UnitJRD4035::writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
-                                 const size_t len, const uint32_t access_password)
+TagResult UnitJRD4035::writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                      const size_t len, const uint32_t access_password)
 {
     if (reject_while_polling("writeTagMemory")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
     }
     if (reject_without_selection("writeTagMemory")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     const uint8_t code = membank_of(bank);
     if (code == MEMBANK_NONE) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     if (!build_write_tag_memory(param, access_password, code, word_address, data, len)) {
         M5_LIB_LOGE("Failed to build the write parameter");
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
     // The protocol document says in prose that Write answers under the command code of Read,
     // but the byte table on the same page reads BB 01 49 ... A9 7E, and that checksum only adds
     // up with 0x49 in the command byte; 0x39 would make it 0x99. Same kind of slip as the one
     // Set Select Mode carries, and the same resolution: follow the bytes
-    return send_tag_operation(res, CMD_WRITE_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                              "writeTagMemory") &&
-           tag_carried_it_out(res, "writeTagMemory");
+    const auto sent = send_tag_operation(res, CMD_WRITE_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                                         "writeTagMemory");
+    return sent ? tag_carried_it_out(res, "writeTagMemory") : sent;
 }
 
-bool UnitJRD4035::lockTagMemory(const uint32_t payload, const uint32_t access_password)
+TagResult UnitJRD4035::lockTagMemory(const uint32_t payload, const uint32_t access_password)
 {
     if (reject_while_polling("lockTagMemory")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
     }
     if (reject_without_selection("lockTagMemory")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     if (!build_lock_tag(param, access_password, payload)) {
         M5_LIB_LOGE("Failed to build the lock parameter");
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
-    return send_tag_operation(res, CMD_LOCK_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
-                              "lockTagMemory") &&
-           tag_carried_it_out(res, "lockTagMemory");
+    const auto sent = send_tag_operation(res, CMD_LOCK_TAG_MEMORY, param.data(), static_cast<uint16_t>(param.size()),
+                                         "lockTagMemory");
+    return sent ? tag_carried_it_out(res, "lockTagMemory") : sent;
 }
 
-bool UnitJRD4035::killTag(const uint32_t kill_password)
+TagResult UnitJRD4035::killTag(const uint32_t kill_password)
 {
     if (reject_while_polling("killTag")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_BUSY};
     }
     if (reject_without_selection("killTag")) {
-        return false;
+        return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
     if (!build_kill_tag(param, kill_password)) {
         M5_LIB_LOGE("Failed to build the kill parameter");
-        return false;
+        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
     }
     Frame res{};
-    return send_tag_operation(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()), "killTag") &&
-           tag_carried_it_out(res, "killTag");
+    const auto sent =
+        send_tag_operation(res, CMD_KILL_TAG, param.data(), static_cast<uint16_t>(param.size()), "killTag");
+    return sent ? tag_carried_it_out(res, "killTag") : sent;
 }
 
-bool UnitJRD4035::tag_carried_it_out(const Frame& response, const char* what) const
+uint8_t UnitJRD4035::error_code_of(const Frame& response)
+{
+    return response.parameter.empty() ? READER_SILENT : response.parameter[0];
+}
+
+TagResult UnitJRD4035::tag_carried_it_out(const Frame& response, const char* what) const
 {
     TagOperationResult result{};
     if (!parse_tag_operation(result, response.parameter.data(), response.parameter.size())) {
         M5_LIB_LOGE("Malformed %s response", what);
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_GARBLED};
     }
     if (result.data_len != 1 || result.data[0] != TAG_OPERATION_SUCCESS) {
         M5_LIB_LOGE("%s reported status %02X", what, result.data_len ? result.data[0] : 0xFF);
-        return false;
+        return m5::stl::unexpected<uint8_t>{READER_BALKED};
     }
-    return true;
+    return {};
+}
+
+m5::uhf::Reason UnitJRD4035::classify(const uint8_t error_code) const
+{
+    // The codes this library puts in place of one the module did not give
+    switch (error_code) {
+        case READER_SILENT:
+            return m5::uhf::Reason::NoAnswer;
+        case READER_BALKED:
+            return m5::uhf::Reason::ReaderFault;
+        case READER_GARBLED:
+            return m5::uhf::Reason::Malformed;
+        case NOT_SELECTED:
+            return m5::uhf::Reason::NoSelection;
+        case BAD_ARGUMENT:
+            return m5::uhf::Reason::BadArgument;
+        case READER_BUSY:
+            return m5::uhf::Reason::Busy;
+        default:
+            break;
+    }
+    // A code the tag itself sent: the low nibble is the reason EPC Gen2 Annex I gives
+    if (is_tag_error(error_code)) {
+        switch (error_code & 0x0F) {
+            case 0x03:
+                return m5::uhf::Reason::MemoryOverrun;
+            case 0x04:
+                return m5::uhf::Reason::Locked;
+            case 0x0B:
+                return m5::uhf::Reason::InsufficientPower;
+            default:
+                return m5::uhf::Reason::Refused;
+        }
+    }
+    // Everything the module reports of its own is one of two things: it could not reach the
+    // tag, or the command never got as far as the air
+    switch (static_cast<Error>(error_code)) {
+        case Error::InvalidParameter:
+        case Error::CommandError:
+            return m5::uhf::Reason::BadArgument;
+        case Error::FHSSFail:
+            // The search for a channel to talk on timed out, so nothing went out over the air
+            return m5::uhf::Reason::Busy;
+        case Error::AccessFail:
+            // The Access exchange that has to come first did not go through. That exchange is
+            // what the access password is for, so a wrong one lands here
+            return m5::uhf::Reason::AccessFailed;
+        case Error::WatchDogReset:
+            // The module restarted, which it can do at any point in an exchange
+            return m5::uhf::Reason::ReaderFault;
+        default:
+            // ReadFail, WriteFail, LockFail, KillFail, BlockPermalockFail, InventoryFail and
+            // the rest all say the same thing: no tag answered, or its answer failed its CRC
+            return m5::uhf::Reason::NoAnswer;
+    }
 }
 
 }  // namespace unit

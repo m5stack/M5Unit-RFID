@@ -102,32 +102,57 @@ uint16_t first_word_of(const m5::uhf::Tag& tag, const int block)
 }
 
 //! @brief Write one word and say whether the bits actually changed
+/*!
+  @enum Takes
+  @brief What became of a write to one word
+  @details Three answers, not two. Saying a word refused a write when the word could not be read
+  is evidence of something that was never seen, and this is what a permanent lock is judged by
+ */
+enum class Takes : uint8_t {
+    Yes,      //!< The bits moved
+    No,       //!< The bits stayed as they were
+    Unknown,  //!< The word could not be read, so nothing can be said either way
+};
+
+//! @brief Spell out a Takes
+const char* takes_as_string(const Takes takes)
+{
+    switch (takes) {
+        case Takes::Yes:
+            return "takes a write";
+        case Takes::No:
+            return "REFUSES";
+        default:
+            return "could not be told";
+    }
+}
+
 //! @details A tag that will not write a word may say so with a memory-locked error, but a
 //! reader that reports the write as done either way would look the same. So the word is read,
 //! written with something it did not already hold, and read again: only the last of those says
 //! whether anything moved
-bool word_takes(const uint16_t word_address)
+Takes word_takes(const uint16_t word_address)
 {
     std::vector<uint8_t> before{};
     if (!uhf.readBank(before, m5::uhf::Bank::User, word_address, 1) || before.size() != 2) {
         M5_LOGW("Word %u could not be read, so there is nothing to compare against", word_address);
-        return false;
+        return Takes::Unknown;
     }
     // Anything the word does not already hold will do, and the complement is always that
     const uint8_t word[]{static_cast<uint8_t>(~before[0]), static_cast<uint8_t>(~before[1])};
-    const bool reader_says = uhf.writeBank(m5::uhf::Bank::User, word_address, word, sizeof(word));
+    const bool reader_says = static_cast<bool>(uhf.writeBank(m5::uhf::Bank::User, word_address, word, sizeof(word)));
 
     std::vector<uint8_t> after{};
     if (!uhf.readBank(after, m5::uhf::Bank::User, word_address, 1) || after.size() != 2) {
         M5_LOGW("Word %u could not be read back, so the write cannot be judged", word_address);
-        return false;
+        return Takes::Unknown;
     }
     const bool changed = (after[0] != before[0]) || (after[1] != before[1]);
     if (reader_says != changed) {
         M5_LOGW("Word %u: the reader said %s but the bits went %02X%02X -> %02X%02X", word_address,
                 reader_says ? "written" : "refused", before[0], before[1], after[0], after[1]);
     }
-    return changed;
+    return changed ? Takes::Yes : Takes::No;
 }
 
 //! @brief Mask naming one block, the first block being the most significant bit
@@ -175,10 +200,11 @@ bool look(m5::uhf::Tag& tag, uint16_t& locked)
     // as ignoring BlockPermalock outright while it does
     if (m5::uhf::tagQTSupport(tag) != m5::uhf::Support::No) {
         m5::uhf::QTParameters qt{};
-        if (uhf.readQTParameters(qt)) {
+        const auto read = uhf.readQTParameters(qt);
+        if (read) {
             M5_LOGI("QT memory map: %s", qt.public_memory ? "public" : "private");
         } else {
-            M5_LOGW("The tag did not say which memory map it is showing");
+            M5_LOGW("The tag did not say which memory map it is showing: %s", m5::uhf::reasonAsString(read.error()));
         }
     }
 
@@ -186,6 +212,13 @@ bool look(m5::uhf::Tag& tag, uint16_t& locked)
     // them, which covers 128 of its bits and not the whole bank. Only the chip can say
     const uint16_t blocks     = m5::uhf::chipPermalockBlockCount(tag.chip);
     const uint32_t block_bits = m5::uhf::chipPermalockBlockBits(tag.chip);
+    if (m5::uhf::tagBlockPermalockSupport(tag) == m5::uhf::Support::No) {
+        // Not the same as a chip that has the command and says nothing about its blocks
+        M5_LOGE("%s does not have BlockPermalock at all; nothing can be locked", tag.chipAsString().c_str());
+        lcd.println("no BlockPermalock");
+        uhf.deselect();
+        return false;
+    }
     if (blocks == 0 || block_bits == 0) {
         // Without both there is no saying which bits a lock would cover
         M5_LOGE("%s does not say how its blocks are laid out; nothing will be locked", tag.chipAsString().c_str());
@@ -235,8 +268,7 @@ void probe_blocks(const m5::uhf::Tag& tag)
         // multiple of the block size, and what is past its end is nobody's to lock
         const uint32_t bits_here = (block + 1 == blocks) ? m5::uhf::chipPermalockLastBlockBits(tag.chip) : block_bits;
         const uint16_t last      = static_cast<uint16_t>(first + bits_here / 16U - 1);
-        const bool takes         = word_takes(first);
-        M5_LOGI("Block %u (words %u to %u): %s", block, first, last, takes ? "takes a write" : "REFUSES");
+        M5_LOGI("Block %u (words %u to %u): %s", block, first, last, takes_as_string(word_takes(first)));
     }
 }
 
@@ -294,13 +326,17 @@ void lock_a_block()
     if (control < 0) {
         M5_LOGW("Every other block is locked already, so nothing can show that this one was the only one taken");
     }
-    M5_LOGI("Before locking, word %u takes a write: %s", inside, word_takes(inside) ? "yes" : "no");
+    M5_LOGI("Before locking, word %u: %s", inside, takes_as_string(word_takes(inside)));
 
     const uint16_t mask = mask_for(chosen_block);
     const uint8_t payload[]{static_cast<uint8_t>(mask >> 8), static_cast<uint8_t>(mask)};
     // The guard is what turns a request into an act; passing it is the whole point of this run
-    if (!uhf.blockPermalock(m5::uhf::Bank::User, payload, sizeof(payload), true)) {
-        M5_LOGE("Failed to lock block %d", chosen_block);
+    const auto locked_block = uhf.blockPermalock(m5::uhf::Bank::User, payload, sizeof(payload), true);
+    if (!locked_block) {
+        // Permalocking cannot be undone, and a tag that said nothing may have done it anyway
+        M5_LOGE("Failed to lock block %d: %s. The block is %s", chosen_block,
+                m5::uhf::reasonAsString(locked_block.error()),
+                m5::uhf::tagUnchanged(locked_block.error()) ? "not locked" : "in a state that cannot be told");
         lcd.println("lock: failed");
         uhf.deselect();
         return;
@@ -309,17 +345,29 @@ void lock_a_block()
     uint16_t after{};
     const bool says_locked = report_locked(after) && (after & mask) != 0;
     // A mask read the wrong way round would agree with itself and still have locked the wrong
-    // block, so what the tag says and what it does are checked separately
-    const bool refuses = !word_takes(inside);
-    const bool spared  = (control < 0) || word_takes(first_word_of(tag, control));
+    // block, so what the tag says and what it does are checked separately. A word that could
+    // not be read proves neither, and counting it as proof would be reporting something that
+    // was never seen
+    const Takes inside_now  = word_takes(inside);
+    const Takes control_now = (control < 0) ? Takes::Unknown : word_takes(first_word_of(tag, control));
     M5_LOGI("Block %d says locked: %s", chosen_block, says_locked ? "yes" : "no");
-    M5_LOGI("Word %u refuses a write: %s", inside, refuses ? "yes" : "NO");
+    M5_LOGI("Word %u: %s", inside, takes_as_string(inside_now));
     if (control >= 0) {
-        M5_LOGI("Block %d still takes a write: %s", control, spared ? "yes" : "NO");
+        M5_LOGI("Block %d: %s", control, takes_as_string(control_now));
     }
-    const bool took = says_locked && refuses && spared;
-    M5_LOGI("Block %d: %s", chosen_block, took ? "locked for good" : "NOT what was asked for");
-    lcd.println(took ? "locked for good" : "NOT as asked");
+
+    // Every block but this one being locked already leaves nothing to show the lock was not
+    // spread wider than asked, so that half is not held against it
+    const bool spared = (control < 0) || control_now == Takes::Yes;
+    if (inside_now == Takes::Unknown || (control >= 0 && control_now == Takes::Unknown)) {
+        M5_LOGW("Block %d: the tag says %s, and a write could not be judged, so this run does not say", chosen_block,
+                says_locked ? "it is locked" : "it is not locked");
+        lcd.println("not judged");
+    } else {
+        const bool took = says_locked && inside_now == Takes::No && spared;
+        M5_LOGI("Block %d: %s", chosen_block, took ? "locked for good" : "NOT what was asked for");
+        lcd.println(took ? "locked for good" : "NOT as asked");
+    }
 
     uhf.deselect();
 }

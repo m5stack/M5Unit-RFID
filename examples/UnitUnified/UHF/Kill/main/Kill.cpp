@@ -195,8 +195,9 @@ void dry_run(m5::uhf::Tag& detected)
     }
     M5_LOGI("Killing with the zero password it holds: %s",
             uhf.kill(detected, stored) ? "sent, which it should not be" : "refused before sending");
+    const auto probed = uhf.kill(detected, PROBE_PASSWORD);
     M5_LOGI("Killing with a password it does not hold: %s",
-            uhf.kill(detected, PROBE_PASSWORD) ? "the tag accepted it" : "the tag refused it");
+            probed ? "the tag accepted it" : m5::uhf::reasonAsString(probed.error()));
     uhf.deselect();
     lcd.println("refused, as it should");
 }
@@ -222,9 +223,14 @@ void kill_for_good(m5::uhf::Tag& detected)
     const std::vector<uint8_t> password{static_cast<uint8_t>(KILL_PASSWORD >> 24),
                                         static_cast<uint8_t>(KILL_PASSWORD >> 16),
                                         static_cast<uint8_t>(KILL_PASSWORD >> 8), static_cast<uint8_t>(KILL_PASSWORD)};
-    if (!uhf.writeBank(m5::uhf::Bank::Reserved, KILL_PASSWORD_WORD, password.data(),
-                       static_cast<uint16_t>(password.size()))) {
-        M5_LOGE("Could not write the kill password; the tag is untouched");
+    const auto stored_password = uhf.writeBank(m5::uhf::Bank::Reserved, KILL_PASSWORD_WORD, password.data(),
+                                               static_cast<uint16_t>(password.size()));
+    if (!stored_password) {
+        // A tag that answered has not been written to; one that said nothing may hold a
+        // password nobody knows, which is a tag nobody can kill
+        M5_LOGE("Could not write the kill password: %s. The tag is %s",
+                m5::uhf::reasonAsString(stored_password.error()),
+                m5::uhf::tagUnchanged(stored_password.error()) ? "untouched" : "in a state that cannot be told");
         lcd.println("password: not written");
         uhf.deselect();
         return;
@@ -240,9 +246,9 @@ void kill_for_good(m5::uhf::Tag& detected)
     }
     M5_LOGW("Kill password written and read back. The tag can now be killed");
 
-    const bool killed = uhf.kill(detected, KILL_PASSWORD);
+    const auto killed = uhf.kill(detected, KILL_PASSWORD);
     uhf.deselect();
-    M5_LOGW("Kill: %s", killed ? "the tag carried it out" : "failed");
+    M5_LOGW("Kill: %s", killed ? "the tag carried it out" : m5::uhf::reasonAsString(killed.error()));
 
     // The answer to a kill can go missing on the way back, and a tag that did die cannot say so.
     // Asking the field is the only way to tell those two apart

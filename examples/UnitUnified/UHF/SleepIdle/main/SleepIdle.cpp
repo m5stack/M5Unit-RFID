@@ -158,7 +158,7 @@ bool detect_one(m5::uhf::Tag& tag)
 bool epc_word_reads()
 {
     std::vector<uint8_t> word{};
-    return uhf.readBank(word, m5::uhf::Bank::Epc, EPC_FIRST_WORD, 1);
+    return static_cast<bool>(uhf.readBank(word, m5::uhf::Bank::Epc, EPC_FIRST_WORD, 1));
 }
 
 //! @brief Report the mask the module is holding, and hand back what it said

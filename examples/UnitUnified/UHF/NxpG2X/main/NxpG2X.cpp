@@ -148,8 +148,10 @@ bool look(m5::uhf::Tag& tag, uint16_t& word)
     if (uhf.identify(tag)) {
         M5_LOGI("Chip: %s", tag.chipAsString().c_str());
     }
-    if (!uhf.readNxpConfigWord(word)) {
-        M5_LOGE("The Config-Word could not be read");
+    const auto read = uhf.readNxpConfigWord(word);
+    if (!read) {
+        // A chip that never had the command is a different answer from one that did not reply
+        M5_LOGE("The Config-Word could not be read: %s", m5::uhf::reasonAsString(read.error()));
         lcd.println("no Config-Word");
         uhf.deselect();
         return false;
@@ -182,8 +184,9 @@ bool set_access_password(const m5::uhf::Tag& tag, const uint32_t password)
 {
     const uint8_t data[]{static_cast<uint8_t>(password >> 24), static_cast<uint8_t>(password >> 16),
                          static_cast<uint8_t>(password >> 8), static_cast<uint8_t>(password)};
-    if (!uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data, sizeof(data))) {
-        M5_LOGE("Failed to store the access password %08X", password);
+    const auto stored = uhf.writeBank(m5::uhf::Bank::Reserved, ACCESS_PASSWORD_WORD, data, sizeof(data));
+    if (!stored) {
+        M5_LOGE("Failed to store the access password %08X: %s", password, m5::uhf::reasonAsString(stored.error()));
         return false;
     }
     // The write changed the very password the selection carries, so the tag is addressed again
@@ -216,8 +219,10 @@ void restore_tag(const m5::uhf::Tag& tag, const bool was_raised)
     }
     uint16_t word{};
     if (uhf.readNxpConfigWord(word) && m5::uhf::decodeNxpConfigWord(word).psf_alarm != was_raised) {
-        if (!uhf.writeNxpEAS(was_raised)) {
-            M5_LOGE("THE FLAG IS STILL %s; hold the button again", was_raised ? "DOWN" : "UP");
+        const auto put_back = uhf.writeNxpEAS(was_raised);
+        if (!put_back) {
+            M5_LOGE("THE FLAG IS STILL %s (%s); hold the button again", was_raised ? "DOWN" : "UP",
+                    m5::uhf::reasonAsString(put_back.error()));
             lcd.println("flag left");
         }
     }
@@ -249,8 +254,9 @@ void flag_and_unflag()
         restore_tag(tag, was_raised);
         return;
     }
-    if (!uhf.writeNxpEAS(!was_raised)) {
-        M5_LOGE("Failed to change the flag");
+    const auto changed = uhf.writeNxpEAS(!was_raised);
+    if (!changed) {
+        M5_LOGE("Failed to change the flag: %s", m5::uhf::reasonAsString(changed.error()));
         lcd.println("EAS: failed");
         restore_tag(tag, was_raised);
         return;

@@ -17,6 +17,15 @@ namespace m5 {
 namespace uhf {
 
 /*!
+  @typedef Result
+  @brief What became of an operation that was meant to change a tag
+  @details Nothing on success, and on failure why it did not go through. Operations that leave
+  a tag as they found it whatever happens keep returning bool: knowing why a detect found
+  nothing does not change what to do next
+ */
+using Result = m5::stl::expected<void, Reason>;
+
+/*!
   @class UHFLayer
   @brief EPC Gen2 semantics layer for UHF-RFID reader units
   @details Holds semantics defined by the EPC Gen2 standard, which stay the same across
@@ -164,11 +173,11 @@ public:
       @param bank Memory bank
       @param word_address Start address in 16-bit words
       @param word_count Number of 16-bit words to read
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @note Addresses and lengths count words because EPC Gen2 lays tag memory out in 16-bit
       words; a byte address off a word boundary means nothing to a tag
      */
-    bool readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address, const uint16_t word_count);
+    Result readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address, const uint16_t word_count);
     /*!
       @brief Read a memory bank into a buffer of the caller's own
       @param[out] out Buffer, which has to hold word_count words
@@ -176,19 +185,19 @@ public:
       @param bank Memory bank
       @param word_address Start address in 16-bit words
       @param word_count Number of 16-bit words to read
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @note A tag can answer with less than was asked for, which is what out_len reports. A
       buffer too small for word_count words is refused rather than filled part way
      */
-    bool readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
-                  const uint16_t word_count);
+    Result readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
+                    const uint16_t word_count);
     /*!
       @brief Write a memory bank
       @param bank Memory bank
       @param word_address Start address in 16-bit words
       @param data Bytes to write
       @param data_len Their length, which has to be a whole number of 16-bit words
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @note A bank larger than one command can carry is written in several, so the caller does
       not have to know how much that is. A write that fails partway leaves everything before the
       failure already on the tag, and says in the log how far it got
@@ -199,43 +208,43 @@ public:
       reader that decides that and not the tag, which is why it stops happening where the reader
       cannot read the word back. Only a write carrying something else says anything
      */
-    bool writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len);
+    Result writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len);
     /*!
       @brief Change the lock state of memory banks and passwords
       @param settings What to change; anything left out keeps the state it has
       @param allow_permanent Permit PermanentOpen and PermanentLock, neither of which can be undone
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @warning PermanentLock leaves an area unwritable for the life of the tag and PermanentOpen
       leaves it impossible to ever lock. There is no way back from either
       @warning Impinj M700 and M800 series chips hold one 32-bit password that answers at both
       the access and the kill address, so locking one locks the other. They refuse a Lock that
       asks for anything else, and the two have to be given the same setting
      */
-    bool lock(const std::vector<LockSetting>& settings, const bool allow_permanent = false);
+    Result lock(const std::vector<LockSetting>& settings, const bool allow_permanent = false);
     /*!
       @brief Kill a tag permanently
       @param tag Tag to kill, which must be the one selected
       @param kill_password Kill password; a tag whose kill password is zero refuses to be killed
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @warning The tag stops answering for good. There is no way to revive it
       @warning Impinj M700 and M800 series chips hold one 32-bit password that answers at both
       the access and the kill address. Giving such a tag an access password gives it the same
       kill password, so a tag that was only meant to be protected becomes one that can be killed
      */
-    bool kill(const Tag& tag, const uint32_t kill_password);
+    Result kill(const Tag& tag, const uint32_t kill_password);
     /*!
       @brief Read which blocks of a bank the selected tag has permanently locked
       @param[out] mask One bit per block, the first block in the most significant bit
       @param bank Bank the blocks are in
       @param block_pointer First block the mask covers, in units of sixteen
       @param block_range Words of mask to ask for, each covering sixteen blocks
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @note How large a block is, is the chip's to decide: an Impinj Monza 4QT divides its user
       memory into four of 128 bits. chipPermalockBlockBits() is what says so where it is known
       @note Gen2 leaves BlockPermalock optional. A tag without it answers with a failure
      */
-    bool readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, const uint16_t block_pointer = 0,
-                            const uint8_t block_range = 1);
+    Result readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, const uint16_t block_pointer = 0,
+                              const uint8_t block_range = 1);
     /*!
       @brief Permanently lock blocks of a bank on the selected tag
       @param bank Bank the blocks are in
@@ -245,25 +254,25 @@ public:
       @param allow_permanent Permit the operation, which cannot be undone
       @param block_pointer First block the mask covers, in units of sixteen
       @param block_range Words of mask, each covering sixteen blocks
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @warning A locked block is unwritable for the life of the tag. There is no way back, which
       is why this does nothing unless allow_permanent says otherwise
      */
-    bool blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
-                        const uint16_t block_pointer = 0, const uint8_t block_range = 1);
+    Result blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
+                          const uint16_t block_pointer = 0, const uint8_t block_range = 1);
     /*!
       @brief Read the QT control word of the selected tag
       @param[out] qt What the tag answered
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @note Impinj Monza 4QT only. A chip the table names and that does not have the command is
       turned away before anything is sent; one it does not name is tried
      */
-    bool readQTParameters(QTParameters& qt);
+    Result readQTParameters(QTParameters& qt);
     /*!
       @brief Write the QT control word of the selected tag
       @param qt What to write
       @param persistent True to write it where a loss of power does not undo it
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @details Switching to the public map hides the tag's user memory, the longer half of its
       EPC, and all of its TID but the first two words. The tag answers with an EPC of its own
       kept for that purpose, so afterwards it looks like a different tag
@@ -272,20 +281,20 @@ public:
       meant to outlast that has to be persistent
       @note Either way the tag can be switched back, so neither is a one-way door
      */
-    bool writeQTParameters(const QTParameters& qt, const bool persistent = false);
+    Result writeQTParameters(const QTParameters& qt, const bool persistent = false);
     /*!
       @brief Read the Config-Word of an NXP UCODE G2X
       @param[out] config Word the tag holds
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @details The word carries the read protection, the Product Status Flag and the range
       reduction among other things. Which bit is which is in the chip's own datasheet
      */
-    bool readNxpConfigWord(uint16_t& config);
+    Result readNxpConfigWord(uint16_t& config);
     /*!
       @brief Invert bits of the Config-Word of an NXP UCODE G2X
       @param[out] config Word the tag holds afterwards
       @param toggle Bits to invert
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @details The word is toggled rather than assigned: a one inverts the bit it stands over
       and a zero leaves it alone, so sending the same bits twice puts the word back. That is
       the command the chip offers, and calling it a write would say something else
@@ -294,16 +303,16 @@ public:
       refused (UCODE G2iM SL3S1003_1013 Rev3.7 Table 12). Reading costs nothing either way
       @warning A bit inverted by mistake changes what the tag will answer at all
      */
-    bool toggleNxpConfigWord(uint16_t& config, const uint16_t toggle);
+    Result toggleNxpConfigWord(uint16_t& config, const uint16_t toggle);
     /*!
       @brief Set or clear the Product Status Flag of an NXP UCODE G2X
       @param enable True to assert the flag, false to clear it
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @details A tag whose flag is asserted answers nxpEASAlarm()
       @warning A tag whose access password is zero ignores this command outright. Give it one
       first
      */
-    bool writeNxpEAS(const bool enable);
+    Result writeNxpEAS(const bool enable);
     /*!
       @brief Ask the field whether any tag has its Product Status Flag asserted
       @param[out] alarm Code the tag backscattered, or empty when nothing answered
@@ -316,7 +325,7 @@ public:
     /*!
       @brief Turn the read protection of an NXP UCODE G2X on or off
       @param protect True to protect, false to put it back
-      @return True if successful
+      @return Nothing on success, or why it did not go through
       @details Protected memory reads back as zeroes rather than falling silent, so the tag
       goes on answering an inventory round and can be addressed again to undo this
       @warning The EPC and the TID are protected together, so every protected tag reads back
@@ -325,7 +334,7 @@ public:
       @warning A tag whose access password is zero ignores this command outright. Give it one
       first
      */
-    bool nxpReadProtect(const bool protect);
+    Result nxpReadProtect(const bool protect);
     ///@}
 
 private:
@@ -351,6 +360,12 @@ private:
       @return False when polling was running and would not stop. The module is still running
       rounds, and a tag operation attempted now would be answering into them
      */
+    /*!
+      @brief Pass on a reader's failure in terms the caller can act on
+      @param result What the reader answered
+      @return The same success, or what its error code means
+     */
+    Result relay(const m5::unit::TagResult& result) const;
     bool pause_polling();
     //! @brief Put polling back the way select() found it
     void resume_polling();

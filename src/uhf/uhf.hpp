@@ -77,6 +77,83 @@ enum class SelectFilter : uint8_t {
     Selected,     //!< Only tags whose SL flag is asserted
 };
 
+/*!
+  @enum Reason
+  @brief Why an operation meant to change a tag did not change it
+  @details The three at the end leave the tag's state unknown; every value before them means
+  the tag is as it was, either because nothing was sent or because the tag answered and
+  declined. A tag that answers has not carried the command out
+  @note This matters most where the answer cannot be looked up afterwards. A write can be read
+  back, but EPC Gen2 gives no way to read a tag's lock bits, and a killed tag is silent whether
+  it was killed or never heard the command
+ */
+enum class Reason : uint8_t {
+    // Nothing went out over the air
+    NoSelection,  //!< No tag had been selected
+    BadArgument,  //!< The request cannot succeed as it was asked
+    Busy,         //!< The reader could not make room to send it
+    Unsupported,  //!< This chip is said not to have the command at all
+
+    // The tag answered and declined, in the terms EPC Gen2 Annex I sets out
+    Locked,             //!< The memory is locked against this
+    InsufficientPower,  //!< The tag has not the power to carry it out
+    MemoryOverrun,      //!< The address or length reaches past what the tag holds
+    Refused,            //!< Declined without saying which of these it was
+
+    // What became of it is not known
+    NoAnswer,      //!< Nobody answered. Whether the tag acted on it cannot be told from here
+    AccessFailed,  //!< The reader could not get the tag into the state the command needs
+    ReaderFault,   //!< The reader answered, and said it had not done it
+    Malformed      //!< The answer could not be read
+};
+
+/*!
+  @brief Is the tag known to be as it was before the operation?
+  @param reason Why the operation did not go through
+  @return True when nothing can have changed
+  @details False does not mean the tag changed, only that this cannot say. A write that goes
+  unanswered may have erased a word without programming it, and reading it back is the only
+  way to find out
+  @note This reads the order Reason is written in: NoAnswer is where the values that leave the
+  tag's state unknown begin. A value added before it is one this says nothing changed for, so
+  where a new one belongs is which side of NoAnswer it goes
+ */
+inline bool tagUnchanged(const Reason reason)
+{
+    return reason < Reason::NoAnswer;
+}
+
+//! @brief Spell out a Reason
+inline const char* reasonAsString(const Reason reason)
+{
+    switch (reason) {
+        case Reason::NoSelection:
+            return "no tag selected";
+        case Reason::BadArgument:
+            return "the request cannot succeed as asked";
+        case Reason::Busy:
+            return "the reader could not make room to send it";
+        case Reason::Unsupported:
+            return "this chip does not have the command";
+        case Reason::Locked:
+            return "the memory is locked";
+        case Reason::InsufficientPower:
+            return "the tag has not the power";
+        case Reason::MemoryOverrun:
+            return "past the end of the memory";
+        case Reason::Refused:
+            return "the tag declined";
+        case Reason::NoAnswer:
+            return "nobody answered";
+        case Reason::AccessFailed:
+            return "the tag would not be accessed; the password may be wrong";
+        case Reason::ReaderFault:
+            return "the reader did not carry it out";
+        default:
+            return "the answer could not be read";
+    }
+}
+
 //! @brief Longest EPC the standard allows: the PC length field is 5 bits, so 31 words
 constexpr size_t EPC_MAX_BYTES{62};
 /*!

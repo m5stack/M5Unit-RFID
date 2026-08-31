@@ -123,8 +123,9 @@ bool look(m5::uhf::Tag& tag, m5::uhf::QTParameters& qt)
                     (base[1] & 0x80) ? 1 : 0);
         }
     }
-    if (!uhf.readQTParameters(qt)) {
-        M5_LOGE("The tag did not answer the QT command; is it a Monza 4QT?");
+    const auto read = uhf.readQTParameters(qt);
+    if (!read) {
+        M5_LOGE("The QT command did not go through (%s); is it a Monza 4QT?", m5::uhf::reasonAsString(read.error()));
         lcd.println("QT: no answer");
         uhf.deselect();
         return false;
@@ -153,8 +154,9 @@ void switch_map(const bool keep)
     M5_LOGI("Switching to the %s map", wanted.public_memory ? "public" : "private");
     lcd.printf("-> %s\n", wanted.public_memory ? "public" : "private");
     // Written to stay: a volatile switch would be gone before the tag is looked for again
-    if (!uhf.writeQTParameters(wanted, true)) {
-        M5_LOGE("Failed to switch the map");
+    const auto switched = uhf.writeQTParameters(wanted, true);
+    if (!switched) {
+        M5_LOGE("Failed to switch the map: %s", m5::uhf::reasonAsString(switched.error()));
         lcd.println("switch: failed");
         uhf.deselect();
         return;
@@ -180,8 +182,10 @@ void switch_map(const bool keep)
     }
     // Whichever way it went, the tag is put back the way it was found
     M5_LOGI("Switching back to the %s map", qt.public_memory ? "public" : "private");
-    if (!uhf.writeQTParameters(qt, true)) {
-        M5_LOGE("Failed to switch it back; it is showing its %s map", qt_after.public_memory ? "public" : "private");
+    const auto back = uhf.writeQTParameters(qt, true);
+    if (!back) {
+        M5_LOGE("Failed to switch it back (%s); it is showing its %s map", m5::uhf::reasonAsString(back.error()),
+                qt_after.public_memory ? "public" : "private");
         lcd.println("NOT switched back");
         uhf.deselect();
         return;

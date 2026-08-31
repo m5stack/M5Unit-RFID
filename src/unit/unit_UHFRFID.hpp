@@ -15,6 +15,7 @@
 
 #include <M5UnitComponent.hpp>
 #include <m5_utility/container/circular_buffer.hpp>
+#include <m5_utility/stl/expected.hpp>
 
 #include "uhf/uhf.hpp"
 
@@ -24,6 +25,30 @@ class UHFLayer;
 }  // namespace uhf
 
 namespace unit {
+
+/*!
+  @typedef TagResult
+  @brief What became of an operation on a tag
+  @details Nothing on success. On failure the error code the reader reported, whose meaning is
+  the reader's own; classify() is what turns it into something a caller can act on
+ */
+using TagResult = m5::stl::expected<void, uint8_t>;
+
+/*!
+  @name Codes this library puts in place of one the reader did not give
+  @details A reader reports a code only when something came back over the air. Where a request
+  never went out, or the answer could not be read, there is no code to report and one of these
+  stands in its place. EPC Gen2 leaves 0xF0 to 0xFF outside the tag error codes and the M100
+  uses none of them, so they are free to say what no reader would
+ */
+///@{
+constexpr uint8_t READER_SILENT{0xFF};   //!< Nothing came back at all
+constexpr uint8_t READER_BALKED{0xFE};   //!< The reader answered, and said it had not done it
+constexpr uint8_t READER_GARBLED{0xFD};  //!< The answer came back and could not be read
+constexpr uint8_t NOT_SELECTED{0xFC};    //!< No tag had been selected, so nothing was sent
+constexpr uint8_t BAD_ARGUMENT{0xFB};    //!< The request could not succeed, so nothing was sent
+constexpr uint8_t READER_BUSY{0xFA};     //!< Polling held the reader, so nothing was sent
+///@}
 
 /*!
   @class UHFRFIDComponent
@@ -315,11 +340,11 @@ public:
       @param word_address Start address in 16-bit words
       @param word_count Number of 16-bit words
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
      */
-    virtual bool readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
-                               const uint16_t word_count, const uint32_t access_password) = 0;
+    virtual TagResult readTagMemory(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t word_address,
+                                    const uint16_t word_count, const uint32_t access_password) = 0;
     /*!
       @brief Write len bytes to bank, starting at word_address
       @param bank Memory bank
@@ -327,27 +352,27 @@ public:
       @param data Bytes to write
       @param len Their length, which has to be even
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @warning Writing the EPC bank changes the very bytes an EPC mask matches on, so the mask
       in force stops picking this tag out. Store it again from what the tag now holds
      */
-    virtual bool writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
-                                const size_t len, const uint32_t access_password) = 0;
+    virtual TagResult writeTagMemory(const m5::uhf::Bank bank, const uint16_t word_address, const uint8_t* data,
+                                     const size_t len, const uint32_t access_password) = 0;
     /*!
       @brief Apply a 20-bit Gen2 lock payload
       @param payload Lock payload, see m5::uhf::buildLockPayload
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @warning A payload asking for a permanent lock cannot be undone. m5::uhf::LockAction
       names which of them those are
      */
-    virtual bool lockTagMemory(const uint32_t payload, const uint32_t access_password) = 0;
+    virtual TagResult lockTagMemory(const uint32_t payload, const uint32_t access_password) = 0;
     /*!
       @brief Kill the addressed tag permanently
       @param kill_password Kill password the tag holds, which may not be zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @warning A killed tag never answers again. Nothing here can say whether the mask in force
       picks out the tag that was meant rather than another one in the field, so what is about
@@ -359,7 +384,7 @@ public:
       }
       @endcode
      */
-    virtual bool killTag(const uint32_t kill_password) = 0;
+    virtual TagResult killTag(const uint32_t kill_password) = 0;
     /*!
       @brief Read or set which blocks of a bank are permanently locked
       @param[out] out Mask read, one bit per block with the first block in the most significant
@@ -371,33 +396,33 @@ public:
       @param mask_len Its length in bytes, which is twice block_range
       @param access_password Access password the tag holds, or zero
       @param allow_permanent Say so to mean a lock, which is refused without it
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @warning A block locked this way is unwritable for the life of the tag. Reading it is
       unaffected, and so is every other block
      */
-    virtual bool blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
-                                const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
-                                const uint32_t access_password, const bool allow_permanent) = 0;
+    virtual TagResult blockPermalock(std::vector<uint8_t>& out, const m5::uhf::Bank bank, const uint16_t block_pointer,
+                                     const uint8_t block_range, const uint8_t* mask, const size_t mask_len,
+                                     const uint32_t access_password, const bool allow_permanent) = 0;
     /*!
       @brief Read or write the QT control word of the addressed tag
       @param[in,out] control Word read, or word to write
       @param write True to write, false to read
       @param persistent True to write where a loss of power does not undo it
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @warning Switching an Impinj Monza 4QT to its public map changes the EPC it answers
       under, so the mask in force stops picking it out
      */
-    virtual bool qtCommand(uint16_t& control, const bool write, const bool persistent,
-                           const uint32_t access_password) = 0;
+    virtual TagResult qtCommand(uint16_t& control, const bool write, const bool persistent,
+                                const uint32_t access_password) = 0;
     /*!
       @brief Read the Config-Word of an NXP UCODE G2X, or invert bits of it
       @param[out] config Word the tag holds once the command has been carried out
       @param toggle Bits to invert. Zero reads the word without changing anything
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @details The word is toggled rather than assigned: a one inverts the bit it stands over
       and a zero leaves it alone. Sending the same bits twice puts the word back
@@ -407,19 +432,19 @@ public:
       @warning The Config-Word carries the read protection and the range reduction among other
       things, so a bit inverted by mistake changes what the tag will answer at all
      */
-    virtual bool nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password) = 0;
+    virtual TagResult nxpChangeConfig(uint16_t& config, const uint16_t toggle, const uint32_t access_password) = 0;
     /*!
       @brief Set or clear the Product Status Flag of an NXP UCODE G2X
       @param enable True to assert the flag, false to clear it
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @details A tag whose flag is asserted answers nxpEASAlarm(), which is what an article
       surveillance gate listens for
       @warning A tag whose access password is zero ignores this command outright. Give it one
       first
      */
-    virtual bool nxpChangeEAS(const bool enable, const uint32_t access_password) = 0;
+    virtual TagResult nxpChangeEAS(const bool enable, const uint32_t access_password) = 0;
     /*!
       @brief Ask the field whether any tag has its Product Status Flag asserted
       @param[out] alarm Code the tag backscattered, or empty when nothing answered
@@ -435,7 +460,7 @@ public:
       @brief Turn the read protection of an NXP UCODE G2X on or off
       @param protect True to protect, false to put it back
       @param access_password Access password the tag holds, or zero
-      @return True if successful
+      @return Nothing on success, or the error code the reader reported
       @pre A mask has to have been stored and applied, or this is refused
       @details Protected memory reads back as zeroes rather than falling silent, so the tag
       still answers an inventory round and can be addressed again to undo this
@@ -445,7 +470,15 @@ public:
       @warning A tag whose access password is zero ignores this command outright. Give it one
       first
      */
-    virtual bool nxpReadProtect(const bool protect, const uint32_t access_password) = 0;
+    virtual TagResult nxpReadProtect(const bool protect, const uint32_t access_password) = 0;
+    /*!
+      @brief Say what one of this reader's error codes means in EPC Gen2 terms
+      @param error_code Code from the error of a TagResult
+      @return What became of the operation
+      @details Which codes a reader uses is its own affair, so each reader says what its own
+      mean. That keeps the layer above able to act on a failure without knowing the reader
+     */
+    virtual m5::uhf::Reason classify(const uint8_t error_code) const = 0;
     ///@}
 
     virtual bool begin() override;

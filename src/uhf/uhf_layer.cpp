@@ -32,6 +32,12 @@ constexpr uint16_t QT_SHORT_RANGE{0x8000};
 //! @brief QT control word, bit 14: the tag shows its public memory map
 constexpr uint16_t QT_PUBLIC_MEMORY{0x4000};
 //! @brief Words of the TID that sit at a fixed address whatever the tag is
+
+//! @brief A failure of this layer's own, raised before anything went out over the air
+inline Result refused(const Reason reason)
+{
+    return m5::stl::unexpected<Reason>{reason};
+}
 }  // namespace
 
 bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
@@ -60,6 +66,14 @@ bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
         _u.stopPolling();
     }
     return !tags.empty();
+}
+
+Result UHFLayer::relay(const m5::unit::TagResult& result) const
+{
+    if (result) {
+        return {};
+    }
+    return refused(_u.classify(result.error()));
 }
 
 bool UHFLayer::pause_polling()
@@ -127,28 +141,42 @@ bool UHFLayer::apply_selection(const Bank bank, const uint32_t pointer_bits, con
         return false;
     }
 
-    if (!_u.writeSelectParameter(bank, pointer_bits, mask, mask_len)) {
-        resume_polling();
-        return false;
-    }
-    // Storing the parameter is documented to switch the module over on its own, but saying so
-    // explicitly is what makes the state the same whether or not a deselect() came before
-    if (!_u.writeSelectEnabled(true)) {
-        resume_polling();
-        return false;
+    // What a verification loses may be the singulation rather than the tag: a Read is answered
+    // only by a tag still in a round, and a tag that dropped out of one is not brought back by
+    // sending the Read again. The mask goes back before each further try, which is what puts it
+    // in a round. lock() carries the same loop for the same reason
+    constexpr uint8_t ATTEMPTS{3};
+    constexpr uint32_t RETRY_INTERVAL_MS{20};
+    for (uint8_t attempt = 0; attempt < ATTEMPTS; ++attempt) {
+        if (!_u.writeSelectParameter(bank, pointer_bits, mask, mask_len)) {
+            resume_polling();
+            return false;
+        }
+        // Storing the parameter is documented to switch the module over on its own, but saying
+        // so explicitly is what makes the state the same whether or not a deselect() came before
+        if (!_u.writeSelectEnabled(true)) {
+            resume_polling();
+            return false;
+        }
+
+        _access_password = access_password;
+        _mask_bank       = bank;
+        _has_selection   = true;
+
+        if (!verify || verify_selection()) {
+            return true;
+        }
+        m5::utility::delay(RETRY_INTERVAL_MS);
     }
 
-    _access_password = access_password;
-    _mask_bank       = bank;
-    _has_selection   = true;
-
-    if (verify && !verify_selection()) {
-        _has_selection = false;
-        _u.writeSelectEnabled(false);
-        resume_polling();
-        return false;
+    _has_selection = false;
+    // Saying nothing here is what leaves a reader filtering for a tag nobody can reach: the
+    // mask stays switched on in the module, and an inventory after it reports no tags at all
+    if (!_u.writeSelectEnabled(false)) {
+        M5_LIB_LOGW("The mask could not be switched off; the reader may still be filtering");
     }
-    return true;
+    resume_polling();
+    return false;
 }
 
 bool UHFLayer::verify_selection()
@@ -156,8 +184,11 @@ bool UHFLayer::verify_selection()
     // One word of the EPC bank, which every tag has. Reading it goes down the same path as the
     // Read and Write that follow, so it proves the selection the way the caller will use it
     std::vector<uint8_t> word{};
-    if (!_u.readTagMemory(word, Bank::Epc, EPC_FIRST_WORD, 1, _access_password)) {
-        M5_LIB_LOGW("The selected tag did not answer");
+    const auto read = _u.readTagMemory(word, Bank::Epc, EPC_FIRST_WORD, 1, _access_password);
+    if (!read) {
+        // Which way it failed is worth saying: a tag that will not be accessed answered and
+        // turned the password down, which is not the same as one that was never there
+        M5_LIB_LOGW("The selection did not hold: %s", reasonAsString(_u.classify(read.error())));
         return false;
     }
     return true;
@@ -380,53 +411,54 @@ bool UHFLayer::dump()
     return ok;
 }
 
-bool UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address,
-                        const uint16_t word_count)
+Result UHFLayer::readBank(std::vector<uint8_t>& out, const Bank bank, const uint16_t word_address,
+                          const uint16_t word_count)
 {
     out.clear();
     if (!_has_selection) {
         M5_LIB_LOGE("readBank needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
-    return _u.readTagMemory(out, bank, word_address, word_count, _access_password);
+    return relay(_u.readTagMemory(out, bank, word_address, word_count, _access_password));
 }
 
-bool UHFLayer::readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
-                        const uint16_t word_count)
+Result UHFLayer::readBank(uint8_t* out, uint16_t& out_len, const Bank bank, const uint16_t word_address,
+                          const uint16_t word_count)
 {
     const uint16_t capacity = out_len;
     out_len                 = 0;
     if (out == nullptr || capacity < word_count * 2) {
         M5_LIB_LOGE("A buffer of %u bytes cannot hold %u words", capacity, word_count);
-        return false;
+        return refused(Reason::BadArgument);
     }
     std::vector<uint8_t> read{};
-    if (!readBank(read, bank, word_address, word_count)) {
-        return false;
+    const auto got = readBank(read, bank, word_address, word_count);
+    if (!got) {
+        return got;
     }
     // A tag answering with more than was asked for is not something to write past the end of
     // the caller's buffer for
     if (read.size() > capacity) {
         M5_LIB_LOGE("The tag answered with %u bytes, more than the %u asked for", (unsigned)read.size(), capacity);
-        return false;
+        return refused(Reason::Malformed);
     }
     std::memcpy(out, read.data(), read.size());
     out_len = static_cast<uint16_t>(read.size());
-    return true;
+    return {};
 }
 
-bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len)
+Result UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uint8_t* data, const uint16_t data_len)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("writeBank needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     if (data == nullptr || data_len == 0 || (data_len % 2) != 0) {
         M5_LIB_LOGE("A write of %u bytes is not a whole number of words", data_len);
-        return false;
+        return refused(Reason::BadArgument);
     }
     // The first word of the EPC bank holds the CRC the tag works out for itself, and a tag told
     // to write there does not write and reports the parameters as unsupported instead (Gen2
@@ -434,10 +466,10 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uin
     // where its failure would look like any other
     if (bank == Bank::Epc && word_address == 0) {
         M5_LIB_LOGE("The first word of the EPC bank is the tag's own CRC and cannot be written");
-        return false;
+        return refused(Reason::BadArgument);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
 
     // How many words one command may carry is left to the chip. Gen2 makes Write, which carries
@@ -459,19 +491,20 @@ bool UHFLayer::writeBank(const Bank bank, const uint16_t word_address, const uin
         // An odd start costs one single-word write to reach the even address the pair needs
         const uint16_t words = (at % 2) ? 1 : chunk_words;
         const uint16_t chunk = std::min(static_cast<uint16_t>(data_len - written), static_cast<uint16_t>(words * 2));
-        if (!_u.writeTagMemory(bank, at, data + written, chunk, _access_password)) {
+        const auto wrote     = _u.writeTagMemory(bank, at, data + written, chunk, _access_password);
+        if (!wrote) {
             M5_LIB_LOGE("Wrote %u of %u words, then failed in the %u from word %u", written / 2, data_len / 2,
                         chunk / 2, at);
             // Part of what the mask matches on may have been replaced, which leaves a selection
             // that no longer picks this tag out. That is as true of a failure as of a success
             drop_selection_if_mask_rewritten(bank);
-            return false;
+            return relay(wrote);
         }
         written = static_cast<uint16_t>(written + chunk);
     }
 
     drop_selection_if_mask_rewritten(bank);
-    return true;
+    return {};
 }
 
 void UHFLayer::drop_selection_if_mask_rewritten(const Bank bank)
@@ -484,26 +517,26 @@ void UHFLayer::drop_selection_if_mask_rewritten(const Bank bank)
     }
 }
 
-bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_permanent)
+Result UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_permanent)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("lock needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     if (settings.empty()) {
         M5_LIB_LOGE("lock was given nothing to change");
-        return false;
+        return refused(Reason::BadArgument);
     }
     if (!allow_permanent) {
         for (auto&& setting : settings) {
             if (isPermanent(setting.action)) {
                 M5_LIB_LOGE("A permanent lock cannot be undone; pass allow_permanent to mean it");
-                return false;
+                return refused(Reason::BadArgument);
             }
         }
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
 
     // A lock needs the tag in a state the reader has to put it in first, and getting there is
@@ -513,99 +546,105 @@ bool UHFLayer::lock(const std::vector<LockSetting>& settings, const bool allow_p
     constexpr uint8_t ATTEMPTS{3};
     constexpr uint32_t RETRY_INTERVAL_MS{20};
     const uint32_t payload = buildLockPayload(settings.data(), settings.size());
+    m5::unit::TagResult locked{m5::stl::unexpected<uint8_t>{m5::unit::READER_SILENT}};
     for (uint8_t attempt = 0; attempt < ATTEMPTS; ++attempt) {
         if (attempt && !reapply_selection()) {
             break;
         }
-        if (_u.lockTagMemory(payload, _access_password)) {
-            return true;
+        locked = _u.lockTagMemory(payload, _access_password);
+        if (locked) {
+            return {};
         }
         m5::utility::delay(RETRY_INTERVAL_MS);
     }
-    return false;
+    // EPC Gen2 gives no way to read a tag's lock bits, so what this says is all there is: a tag
+    // that answered has not been locked, and one that did not may have been
+    return relay(locked);
 }
 
-bool UHFLayer::readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, const uint16_t block_pointer,
-                                  const uint8_t block_range)
+Result UHFLayer::readBlockPermalock(std::vector<uint8_t>& mask, const Bank bank, const uint16_t block_pointer,
+                                    const uint8_t block_range)
 {
     mask.clear();
     if (!_has_selection) {
         M5_LIB_LOGE("readBlockPermalock needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
-    return _u.blockPermalock(mask, bank, block_pointer, block_range, nullptr, 0, _access_password, false);
+    return relay(_u.blockPermalock(mask, bank, block_pointer, block_range, nullptr, 0, _access_password, false));
 }
 
-bool UHFLayer::blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
-                              const uint16_t block_pointer, const uint8_t block_range)
+Result UHFLayer::blockPermalock(const Bank bank, const uint8_t* mask, const size_t mask_len, const bool allow_permanent,
+                                const uint16_t block_pointer, const uint8_t block_range)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("blockPermalock needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     if (!allow_permanent) {
         M5_LIB_LOGE("blockPermalock is permanent; pass allow_permanent to mean it");
-        return false;
+        return refused(Reason::BadArgument);
     }
     if (mask == nullptr || mask_len == 0) {
         M5_LIB_LOGE("blockPermalock needs a mask saying which blocks to lock");
-        return false;
+        return refused(Reason::BadArgument);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
     std::vector<uint8_t> ignored{};
-    return _u.blockPermalock(ignored, bank, block_pointer, block_range, mask, mask_len, _access_password,
-                             allow_permanent);
+    return relay(_u.blockPermalock(ignored, bank, block_pointer, block_range, mask, mask_len, _access_password,
+                                   allow_permanent));
 }
 
-bool UHFLayer::readQTParameters(QTParameters& qt)
+Result UHFLayer::readQTParameters(QTParameters& qt)
 {
     qt = QTParameters{};
     if (!_has_selection) {
         M5_LIB_LOGE("readQTParameters needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     // Only a tag that can be said not to have the command is turned away. One nothing has
     // said either way about is tried: not knowing is not the same as knowing it cannot
     if (tagQTSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s has no QT command", _selected.chipAsString().c_str());
-        return false;
+        return refused(Reason::Unsupported);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
     uint16_t control{};
-    if (!_u.qtCommand(control, false, false, _access_password)) {
-        return false;
+    const auto read = _u.qtCommand(control, false, false, _access_password);
+    if (!read) {
+        return relay(read);
     }
     qt.short_range   = (control & QT_SHORT_RANGE) != 0;
     qt.public_memory = (control & QT_PUBLIC_MEMORY) != 0;
-    return true;
+    return {};
 }
 
-bool UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
+Result UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("writeQTParameters needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     // Only a tag that can be said not to have the command is turned away. One nothing has
     // said either way about is tried: not knowing is not the same as knowing it cannot
     if (tagQTSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s has no QT command", _selected.chipAsString().c_str());
-        return false;
+        return refused(Reason::Unsupported);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
     uint16_t control =
         static_cast<uint16_t>((qt.short_range ? QT_SHORT_RANGE : 0) | (qt.public_memory ? QT_PUBLIC_MEMORY : 0));
-    if (!_u.qtCommand(control, true, persistent, _access_password)) {
-        return false;
+    const auto wrote = _u.qtCommand(control, true, persistent, _access_password);
+    if (!wrote) {
+        return relay(wrote);
     }
     // The public map answers with an EPC of its own, so a mask built from the private one stops
     // matching. Whichever way it went, the mask that is stored may no longer name this tag
@@ -613,7 +652,7 @@ bool UHFLayer::writeQTParameters(const QTParameters& qt, const bool persistent)
         M5_LIB_LOGW("The tag answers under a different EPC now; select it again");
         _has_selection = false;
     }
-    return true;
+    return {};
 }
 
 bool UHFLayer::reapply_selection()
@@ -630,18 +669,18 @@ bool UHFLayer::reapply_selection()
     return false;
 }
 
-bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
+Result UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("kill needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     if (kill_password == 0) {
         // A tag whose kill password is zero refuses to be killed (Gen2 v2.1 6.3.2.12.3.4), so
         // sending zero can only fail. Refusing it here keeps a forgotten password from reading
         // as a tag that cannot be killed
         M5_LIB_LOGE("A kill password of zero is refused by every tag");
-        return false;
+        return refused(Reason::BadArgument);
     }
     // Killing the wrong tag cannot be undone, so the caller has to name the tag it means and it
     // has to be the one the mask picks out
@@ -649,63 +688,66 @@ bool UHFLayer::kill(const Tag& tag, const uint32_t kill_password)
     const bool same_tid = !tag.tid.empty() && !_selected.tid.empty() && tag.tid == _selected.tid;
     if (!same_epc && !same_tid) {
         M5_LIB_LOGE("kill was given a tag that is not the selected one");
-        return false;
+        return refused(Reason::BadArgument);
     }
 
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
-    if (!_u.killTag(kill_password)) {
-        return false;
+    // A kill that is carried out but whose answer is lost cannot be told from one that never
+    // reached the tag, since a killed tag answers nothing either way
+    const auto killed = _u.killTag(kill_password);
+    if (!killed) {
+        return relay(killed);
     }
     // Nothing answers to the mask any more
     _has_selection = false;
     _selected      = Tag{};
     _u.writeSelectEnabled(false);
     resume_polling();
-    return true;
+    return {};
 }
 
-bool UHFLayer::readNxpConfigWord(uint16_t& config)
+Result UHFLayer::readNxpConfigWord(uint16_t& config)
 {
     return toggleNxpConfigWord(config, 0);
 }
 
-bool UHFLayer::toggleNxpConfigWord(uint16_t& config, const uint16_t toggle)
+Result UHFLayer::toggleNxpConfigWord(uint16_t& config, const uint16_t toggle)
 {
     config = 0;
     if (!_has_selection) {
         M5_LIB_LOGE("The Config-Word needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     // Only a tag that can be said not to have these is turned away. One nothing has said
     // either way about is tried: not knowing is not the same as knowing it cannot
     if (tagNxpCustomCommandSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s does not implement the commands NXP added of its own", _selected.chipAsString().c_str());
-        return false;
+        return refused(Reason::Unsupported);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
-    return _u.nxpChangeConfig(config, toggle, _access_password);
+    return relay(_u.nxpChangeConfig(config, toggle, _access_password));
 }
 
-bool UHFLayer::writeNxpEAS(const bool enable)
+Result UHFLayer::writeNxpEAS(const bool enable)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("writeNxpEAS needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     // Only a tag that can be said not to have these is turned away. One nothing has said
     // either way about is tried: not knowing is not the same as knowing it cannot
     if (tagNxpCustomCommandSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s does not implement the commands NXP added of its own", _selected.chipAsString().c_str());
-        return false;
+        return refused(Reason::Unsupported);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
-    return _u.nxpChangeEAS(enable, _access_password);
+    return relay(_u.nxpChangeEAS(enable, _access_password));
 }
 
 bool UHFLayer::nxpEASAlarm(std::vector<uint8_t>& alarm)
@@ -718,29 +760,29 @@ bool UHFLayer::nxpEASAlarm(std::vector<uint8_t>& alarm)
     return _u.nxpEASAlarm(alarm);
 }
 
-bool UHFLayer::nxpReadProtect(const bool protect)
+Result UHFLayer::nxpReadProtect(const bool protect)
 {
     if (!_has_selection) {
         M5_LIB_LOGE("nxpReadProtect needs a tag to have been selected");
-        return false;
+        return refused(Reason::NoSelection);
     }
     // Only a tag that can be said not to have these is turned away. One nothing has said
     // either way about is tried: not knowing is not the same as knowing it cannot
     if (tagNxpCustomCommandSupport(_selected) == Support::No) {
         M5_LIB_LOGE("%s does not implement the commands NXP added of its own", _selected.chipAsString().c_str());
-        return false;
+        return refused(Reason::Unsupported);
     }
     if (!pause_polling()) {
-        return false;
+        return refused(Reason::Busy);
     }
     // Protecting hides the very bytes an EPC mask matches on, so the mask stops picking this
     // tag out. The same is true of putting it back, which reveals them again
-    const bool ok = _u.nxpReadProtect(protect, _access_password);
-    if (ok && _mask_bank == Bank::Epc) {
+    const auto done = _u.nxpReadProtect(protect, _access_password);
+    if (done && _mask_bank == Bank::Epc) {
         M5_LIB_LOGW("The EPC this tag was selected by has changed; select it again");
         deselect();
     }
-    return ok;
+    return relay(done);
 }
 
 }  // namespace uhf

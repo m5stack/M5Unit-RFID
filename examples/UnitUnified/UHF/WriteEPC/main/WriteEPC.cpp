@@ -199,11 +199,11 @@ void write_own_epc(const m5::uhf::Tag& detected, const bool dry_run)
         return;
     }
 
-    const bool wrote = uhf.writeBank(m5::uhf::Bank::Epc, EPC_FIRST_WORD, tid, static_cast<uint16_t>(tid_len));
+    const auto wrote = uhf.writeBank(m5::uhf::Bank::Epc, EPC_FIRST_WORD, tid, static_cast<uint16_t>(tid_len));
     if (!wrote) {
         // A failure part way through leaves the tag holding the front of the new EPC and the
         // back of the old one. Saying it kept the old one would be a guess
-        M5_LOGE("Failed to write the EPC");
+        M5_LOGE("Failed to write the EPC: %s", m5::uhf::reasonAsString(wrote.error()));
         lcd.println("write: failed");
     }
 
@@ -231,8 +231,8 @@ void setup()
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
     lcd.setCursor(0, 0);
-    lcd.println("A: write an EPC");
-    lcd.println("A hold: show it only");
+    lcd.println("A: what it would write");
+    lcd.println("A hold: write it");
     lcd.println("(taken from the TID)");
 }
 
@@ -242,9 +242,10 @@ void loop()
     Units.update();
 
     if (M5.BtnA.wasClicked() || M5.BtnA.wasHold()) {
-        // Holding shows what a click would do. An EPC cannot be put back once it is replaced,
-        // so being able to look first is worth a button of its own
-        const bool dry_run = M5.BtnA.wasHold();
+        // A click shows what a hold would do. An EPC cannot be put back once it is replaced, so
+        // the button that does it is the one that has to be held, which is how the other
+        // examples here that cannot be undone are worked as well
+        const bool dry_run = M5.BtnA.wasClicked();
         lcd.fillScreen(TFT_DARKGREEN);
         lcd.setCursor(0, 0);
         m5::uhf::Tag detected{};
