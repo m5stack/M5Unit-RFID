@@ -91,6 +91,9 @@ const Preset PRESETS[] = {
     {"as the unit shipped", 2600, m5::unit::m100::MixerGain::dB6, m5::unit::m100::IFGain::dB36, 0x00B0},
     // Measured to read a tag resting on the antenna, where the other two miss most rounds
     {"for a tag at contact", 2600, m5::unit::m100::MixerGain::dB3, m5::unit::m100::IFGain::dB36, 0x01B0},
+    // The gains this product shipped with, at the threshold the documentation asks for. Between
+    // this and the shipped set only the threshold moves, which is what makes the two comparable
+    {"shipped gains, documented threshold", 2600, m5::unit::m100::MixerGain::dB6, m5::unit::m100::IFGain::dB36, 0x01B0},
 };
 size_t preset_index{};
 
