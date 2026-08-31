@@ -37,6 +37,7 @@
 #include <M5UnitUnified.h>
 #include <M5UnitUnifiedRFID.h>
 #include <M5Utility.h>
+#include <esp_random.h>
 #include <wiring/m5_unit_unified_wiring.hpp>
 #include <vector>
 
@@ -392,8 +393,7 @@ void setup()
 
     // Drawn once, so that the report and the act name the same block. A chip with fewer blocks
     // than this brings it into range once the tag has been identified
-    randomSeed(micros());
-    draw = static_cast<int>(random(16));
+    draw = static_cast<int>(esp_random() % 16);
 
     lcd.fillScreen(TFT_DARKGREEN);
     lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
