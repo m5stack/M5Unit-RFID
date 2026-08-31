@@ -328,6 +328,27 @@ bool UnitJRD4035::begin()
         M5_LIB_LOGW("Failed to switch off the carrier; the module may still be transmitting");
     }
 
+    // How faint an answer still counts, which the module also keeps across a power cycle. What
+    // it holds is reported before being overwritten, because that is the only sight anyone gets
+    // of how the unit was set before this ran
+    m100::DemodulatorParameters had{};
+    if (readDemodulatorParameters(had)) {
+        M5_LIB_LOGI("Demodulator was mixer=%udB if=%udB threshold=0x%04X", m100::mixerGainDb(had.mixer_gain),
+                    m100::ifGainDb(had.if_gain), had.threshold);
+    }
+    // A reader set below the floor detects tags at a distance and then fails to read them,
+    // which looks like a broken tag rather than a setting
+    if (_cfg.demodulator.threshold < m100::DEMODULATOR_THRESHOLD_DEFAULT) {
+        M5_LIB_LOGW(
+            "The demodulation threshold asked for is 0x%04X, below the 0x%04X its documentation "
+            "gives as the lowest worth using; reading a tag may fail even where it is detected",
+            _cfg.demodulator.threshold, m100::DEMODULATOR_THRESHOLD_DEFAULT);
+    }
+    if (!writeDemodulatorParameters(_cfg.demodulator)) {
+        M5_LIB_LOGE("Failed to write the demodulator parameters");
+        return false;
+    }
+
     return true;
 }
 

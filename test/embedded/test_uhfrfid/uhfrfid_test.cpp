@@ -219,3 +219,29 @@ TEST_F(TestUnitJRD4035, RejectSettingsWhilePolling)
 
     EXPECT_TRUE(unit->stopPolling());
 }
+
+TEST_F(TestUnitJRD4035, ConfigurationCarriesTheDemodulator)
+{
+    // A local instance: this is about what config_t holds, and setting it on the unit the other
+    // tests share would leave them running with whatever this one asked for
+    UnitJRD4035 fresh{};
+
+    auto cfg = fresh.config();
+    // What begin() writes unless it is told otherwise: the value the documentation gives
+    EXPECT_EQ(cfg.demodulator.threshold, m5::unit::m100::DEMODULATOR_THRESHOLD_DEFAULT);
+
+    cfg.demodulator.threshold  = 0x02B0;
+    cfg.demodulator.mixer_gain = m5::unit::m100::MixerGain::dB6;
+    // A setting the base reads, changed here to show it survives the trip
+    cfg.polling_count = 64;
+    fresh.config(cfg);
+
+    const auto back = fresh.config();
+    EXPECT_EQ(back.demodulator.threshold, 0x02B0);
+    EXPECT_EQ(back.demodulator.mixer_gain, m5::unit::m100::MixerGain::dB6);
+    EXPECT_EQ(back.polling_count, 64);
+
+    // The part the two share has to reach the base, because that is what reads it
+    const UHFRFIDComponent& base = fresh;
+    EXPECT_EQ(base.config().polling_count, 64);
+}

@@ -27,12 +27,44 @@ class UnitJRD4035 : public UHFRFIDComponent {
     M5_UNIT_COMPONENT_HPP_BUILDER(UnitJRD4035, 0x00);
 
 public:
+    /*!
+      @struct config_t
+      @brief Settings for begin
+      @details Adds the receiver demodulator settings on top of UHFRFIDComponent::config_t.
+      They belong here rather than there because only this chip has them
+     */
+    struct config_t : public UHFRFIDComponent::config_t {
+        /*!
+          Receiver demodulator settings, written at begin() whatever they are set to
+          @note The module keeps these across a power cycle, so what it holds when begin() runs
+          is whatever was last written to it rather than a default. A unit can arrive set below
+          the threshold its own documentation gives as the lowest worth using, which reaches
+          tags at a distance but drops the exchanges that reading a tag's memory is made of
+         */
+        m100::DemodulatorParameters demodulator{};
+    };
+
     UnitJRD4035() : UHFRFIDComponent(DEFAULT_ADDRESS)
     {
     }
     virtual ~UnitJRD4035() = default;
 
     virtual bool begin() override;
+
+    ///@name Settings for begin
+    ///@{
+    //! @brief Gets the configuration
+    inline config_t config() const
+    {
+        return _cfg;
+    }
+    //! @brief Sets the configuration
+    inline void config(const config_t& cfg)
+    {
+        _cfg = cfg;
+        UHFRFIDComponent::config(static_cast<const UHFRFIDComponent::config_t&>(cfg));
+    }
+    ///@}
 
     ///@name Reader settings
     ///@{
@@ -191,6 +223,10 @@ protected:
     m100::Frame _response{};
     bool _response_pending{};
     uint8_t _awaiting_command{};
+
+    //! Hides UHFRFIDComponent::_cfg so that this class reads its own settings. The setter
+    //! passes the part they share down, which is what the base reads
+    config_t _cfg{};
 };
 
 }  // namespace unit
