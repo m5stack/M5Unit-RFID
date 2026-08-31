@@ -140,19 +140,32 @@ Takes word_takes(const uint16_t word_address)
     }
     // Anything the word does not already hold will do, and the complement is always that
     const uint8_t word[]{static_cast<uint8_t>(~before[0]), static_cast<uint8_t>(~before[1])};
-    const bool reader_says = static_cast<bool>(uhf.writeBank(m5::uhf::Bank::User, word_address, word, sizeof(word)));
+    const auto wrote = uhf.writeBank(m5::uhf::Bank::User, word_address, word, sizeof(word));
+    if (!wrote) {
+        // A write that never reached the tag leaves the bits where they were, which looks from
+        // the outside exactly like a tag refusing one. Only the tag saying so settles it
+        if (wrote.error() != m5::uhf::Reason::Locked) {
+            M5_LOGW("Word %u was not written: %s. Whether it would take one is not settled by that", word_address,
+                    m5::uhf::reasonAsString(wrote.error()));
+            return Takes::Unknown;
+        }
+        return Takes::No;
+    }
 
     std::vector<uint8_t> after{};
     if (!uhf.readBank(after, m5::uhf::Bank::User, word_address, 1) || after.size() != 2) {
         M5_LOGW("Word %u could not be read back, so the write cannot be judged", word_address);
         return Takes::Unknown;
     }
-    const bool changed = (after[0] != before[0]) || (after[1] != before[1]);
-    if (reader_says != changed) {
-        M5_LOGW("Word %u: the reader said %s but the bits went %02X%02X -> %02X%02X", word_address,
-                reader_says ? "written" : "refused", before[0], before[1], after[0], after[1]);
+    if ((after[0] == before[0]) && (after[1] == before[1])) {
+        // A tag that will not take a write says so, and that was answered for above. Bits that
+        // stayed put after the reader called the write done is the two disagreeing, which
+        // settles nothing either way
+        M5_LOGW("Word %u: the reader called the write done but the bits stayed at %02X%02X", word_address, before[0],
+                before[1]);
+        return Takes::Unknown;
     }
-    return changed ? Takes::Yes : Takes::No;
+    return Takes::Yes;
 }
 
 //! @brief Mask naming one block, the first block being the most significant bit
