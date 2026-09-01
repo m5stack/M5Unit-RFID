@@ -795,9 +795,7 @@ TagResult UnitJRD4035::nxpChangeConfig(uint16_t& config, const uint16_t toggle, 
         return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
-    if (!build_nxp_change_config(param, access_password, toggle)) {
-        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
-    }
+    build_nxp_change_config(param, access_password, toggle);
     Frame res{};
     const auto sent = send_tag_operation(res, CMD_NXP_CHANGE_CONFIG, param.data(), static_cast<uint16_t>(param.size()),
                                          "nxpChangeConfig");
@@ -820,9 +818,7 @@ TagResult UnitJRD4035::nxpChangeEAS(const bool enable, const uint32_t access_pas
         return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
-    if (!build_nxp_password_and_flag(param, access_password, enable ? 0x01 : 0x00)) {
-        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
-    }
+    build_nxp_password_and_flag(param, access_password, enable ? 0x01 : 0x00);
     Frame res{};
     const auto sent =
         send_tag_operation(res, CMD_NXP_CHANGE_EAS, param.data(), static_cast<uint16_t>(param.size()), "nxpChangeEAS");
@@ -865,9 +861,7 @@ TagResult UnitJRD4035::nxpReadProtect(const bool protect, const uint32_t access_
         return m5::stl::unexpected<uint8_t>{NOT_SELECTED};
     }
     std::vector<uint8_t> param{};
-    if (!build_nxp_password_and_flag(param, access_password, protect ? NXP_READ_PROTECT_ON : NXP_READ_PROTECT_OFF)) {
-        return m5::stl::unexpected<uint8_t>{BAD_ARGUMENT};
-    }
+    build_nxp_password_and_flag(param, access_password, protect ? NXP_READ_PROTECT_ON : NXP_READ_PROTECT_OFF);
     Frame res{};
     const auto sent = send_tag_operation(res, CMD_NXP_READ_PROTECT, param.data(), static_cast<uint16_t>(param.size()),
                                          "nxpReadProtect");

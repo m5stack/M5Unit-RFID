@@ -529,11 +529,12 @@ inline bool parse_tag_operation(TagOperationResult& out, const uint8_t* param, c
   @param[out] out Parameter
   @param access_password Access password of the tag
   @param toggle Bits to invert in the Config-Word. Zero reads it without changing anything
-  @return True if successful
   @details The word is not assigned but toggled: a one inverts the bit it stands over and a
   zero leaves it alone (M100 protocol 2.35), which is why nothing here is called a write
+  @note Every argument is a fixed-width integer laid out byte by byte, so there is nothing here
+  that can be out of range and nothing to report
  */
-inline bool build_nxp_change_config(std::vector<uint8_t>& out, const uint32_t access_password, const uint16_t toggle)
+inline void build_nxp_change_config(std::vector<uint8_t>& out, const uint32_t access_password, const uint16_t toggle)
 {
     out.clear();
     out.reserve(6);
@@ -543,7 +544,6 @@ inline bool build_nxp_change_config(std::vector<uint8_t>& out, const uint32_t ac
     out.push_back(static_cast<uint8_t>(access_password));
     out.push_back(static_cast<uint8_t>(toggle >> 8));
     out.push_back(static_cast<uint8_t>(toggle));
-    return true;
 }
 
 /*!
@@ -551,11 +551,12 @@ inline bool build_nxp_change_config(std::vector<uint8_t>& out, const uint32_t ac
   @param[out] out Parameter
   @param access_password Access password of the tag
   @param flag Value of the single byte the command carries
-  @return True if successful
   @details Both commands are an access password and one byte saying which way to go, so they
   are built the same way and only the command code tells them apart
+  @note Every argument is a fixed-width integer laid out byte by byte, so there is nothing here
+  that can be out of range and nothing to report
  */
-inline bool build_nxp_password_and_flag(std::vector<uint8_t>& out, const uint32_t access_password, const uint8_t flag)
+inline void build_nxp_password_and_flag(std::vector<uint8_t>& out, const uint32_t access_password, const uint8_t flag)
 {
     out.clear();
     out.reserve(5);
@@ -564,7 +565,6 @@ inline bool build_nxp_password_and_flag(std::vector<uint8_t>& out, const uint32_
     out.push_back(static_cast<uint8_t>(access_password >> 8));
     out.push_back(static_cast<uint8_t>(access_password));
     out.push_back(flag);
-    return true;
 }
 
 /*!

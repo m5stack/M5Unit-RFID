@@ -1109,15 +1109,15 @@ TEST(UHF, NxpCommands)
     std::vector<uint8_t> param{};
 
     // ChangeConfig carries the password and the bits to invert. All zeroes reads the word
-    EXPECT_TRUE(build_nxp_change_config(param, 0x0000FFFF, 0x0000));
+    build_nxp_change_config(param, 0x0000FFFF, 0x0000);
     EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00}));
-    EXPECT_TRUE(build_nxp_change_config(param, 0x0000FFFF, 0x0041));
+    build_nxp_change_config(param, 0x0000FFFF, 0x0041);
     EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0xFF, 0xFF, 0x00, 0x41}));
 
     // Change EAS and ReadProtect are a password and one byte, and only the command differs
-    EXPECT_TRUE(build_nxp_password_and_flag(param, 0x0000FFFF, 0x01));
+    build_nxp_password_and_flag(param, 0x0000FFFF, 0x01);
     EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0xFF, 0xFF, 0x01}));
-    EXPECT_TRUE(build_nxp_password_and_flag(param, 0, 0x00));
+    build_nxp_password_and_flag(param, 0, 0x00);
     EXPECT_EQ(param, (std::vector<uint8_t>{0x00, 0x00, 0x00, 0x00, 0x00}));
 
     // The ChangeConfig answer carries the tag, then the word it ended up with
