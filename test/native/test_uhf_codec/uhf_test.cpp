@@ -69,6 +69,36 @@ TEST(UHF, BuildFrame)
     EXPECT_EQ(0, memcmp(buf.data(), expect2, sizeof(expect2)));
 }
 
+TEST(UHF, BuildFrameGuards)
+{
+    std::vector<uint8_t> buf{};
+    const std::vector<uint8_t> param(MAX_PARAMETER_LENGTH + 1, 0xA5);
+
+    // A parameter longer than the frame format can carry is refused
+    EXPECT_FALSE(build_frame(buf, 0x00, 0x03, param.data(), MAX_PARAMETER_LENGTH + 1));
+
+    // A length without the bytes to back it is refused
+    EXPECT_FALSE(build_frame(buf, 0x00, 0x03, nullptr, 1));
+
+    // Both refusals leave the caller's buffer as it was, so a rejected call
+    // cannot be mistaken for one that produced an empty frame
+    buf.assign({0xDE, 0xAD});
+    EXPECT_FALSE(build_frame(buf, 0x00, 0x03, nullptr, 1));
+    EXPECT_EQ(buf.size(), 2U);
+
+    // The longest parameter the format can carry is accepted, and the length
+    // travels in the two bytes as 0x0200
+    if (!build_frame(buf, 0x00, 0x03, param.data(), MAX_PARAMETER_LENGTH)) {
+        EXPECT_TRUE(false);
+        return;
+    }
+    EXPECT_EQ(buf.size(), static_cast<size_t>(MAX_PARAMETER_LENGTH) + FRAME_OVERHEAD);
+    EXPECT_EQ(buf[3], 0x02);
+    EXPECT_EQ(buf[4], 0x00);
+    EXPECT_EQ(buf.front(), jrd::FRAME_HEADER);
+    EXPECT_EQ(buf.back(), jrd::FRAME_END);
+}
+
 TEST(UHF, ParseFrame)
 {
     Frame f{};
