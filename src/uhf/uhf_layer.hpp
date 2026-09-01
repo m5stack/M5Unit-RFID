@@ -352,6 +352,12 @@ private:
     //! @brief Print a stretch of one bank, sixteen bytes to a line
     bool dump_words(const char* what, const Bank bank, const uint16_t word_address, const uint16_t words);
     /*!
+      @brief Pass on a reader's failure in terms the caller can act on
+      @param result What the reader answered
+      @return The same success, or what its error code means
+     */
+    Result relay(const m5::unit::TagResult& result) const;
+    /*!
       @brief Stop polling for as long as a tag is being addressed
       @details An inventory round leaves every tag it saw flagged as already counted, and a tag
       in that state answers nothing until the flag decays. Letting polling run between two tag
@@ -360,12 +366,6 @@ private:
       @return False when polling was running and would not stop. The module is still running
       rounds, and a tag operation attempted now would be answering into them
      */
-    /*!
-      @brief Pass on a reader's failure in terms the caller can act on
-      @param result What the reader answered
-      @return The same success, or what its error code means
-     */
-    Result relay(const m5::unit::TagResult& result) const;
     bool pause_polling();
     //! @brief Put polling back the way select() found it
     void resume_polling();
