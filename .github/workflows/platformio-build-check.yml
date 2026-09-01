@@ -116,6 +116,10 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: NFCA_PolicyOverride
+            board: Core
+            framework: Arduino
+            espressif32: latest
           # NFCA Detect on M5Dial with builtin WS1850S
           - example: NFCA_Detect
             board: Dial_Builtin
