@@ -1304,9 +1304,9 @@ struct QueryParameters {
     Session session{Session::S0};  //!< Session whose inventoried flag qualifies the round
     Target target{Target::A};      //!< Inventoried flag value that is invited to answer
     /*!
-      Which tags the round invites in terms of SL. Reported so that a select mask can be aimed
-      at something the round actually looks at: aiming one at SL while this reads All stores a
-      mask that filters nothing
+      @brief Which tags the round invites, in terms of SL
+      @details Reported so that a select mask can be aimed at something the round actually looks
+      at: aiming one at SL while this reads All stores a mask that filters nothing
      */
     SelectFilter filter{SelectFilter::All};
 };

@@ -89,7 +89,11 @@ public:
 
     ///@name Receiver tuning, specific to this chip
     ///@{
-    //! @brief Read the receiver demodulator settings
+    /*!
+      @brief Read the receiver demodulator settings
+      @param[out] dp Demodulator parameters
+      @return True if successful
+     */
     bool readDemodulatorParameters(m100::DemodulatorParameters& dp);
     /*!
       @brief Write the receiver demodulator settings
