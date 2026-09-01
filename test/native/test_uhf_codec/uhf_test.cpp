@@ -1454,6 +1454,20 @@ TEST(UHF, ParseSelectParameter)
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, nullptr, 19));
     std::vector<uint8_t> too_long(7 + m5::uhf::SELECT_MASK_MAX_BYTES + 1, 0);
     EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, too_long.data(), too_long.size()));
+
+    // A frame that says one length and carries another is refused too: taking it would hand the
+    // caller a mask_length_bits that its own mask_size cannot back up
+    const uint8_t says_64_carries_2[] = {0x01, 0x00, 0x00, 0x00, 0x20, 0x40, 0x00, 0xAB, 0xCD};
+    EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, says_64_carries_2, sizeof(says_64_carries_2)));
+    const uint8_t says_8_carries_12[] = {0x01, 0x00, 0x00, 0x00, 0x20, 0x08, 0x00, 0x30, 0x75, 0x1F,
+                                         0xEB, 0x70, 0x5C, 0x59, 0x04, 0xE3, 0xD5, 0x0D, 0x70};
+    EXPECT_FALSE(m5::unit::m100::parse_select_parameter(sp, says_8_carries_12, sizeof(says_8_carries_12)));
+
+    // A length that is not a whole number of bytes still has to fit the bytes that arrived
+    const uint8_t says_12_carries_2[] = {0x01, 0x00, 0x00, 0x00, 0x20, 0x0C, 0x00, 0xAB, 0xCD};
+    EXPECT_TRUE(m5::unit::m100::parse_select_parameter(sp, says_12_carries_2, sizeof(says_12_carries_2)));
+    EXPECT_EQ(sp.mask_length_bits, 12);
+    EXPECT_EQ(sp.mask_size, 2);
 }
 
 TEST(UHF, ResolveChip)

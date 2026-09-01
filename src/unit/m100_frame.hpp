@@ -364,6 +364,12 @@ inline bool parse_select_parameter(m5::uhf::SelectParameter& out, const uint8_t*
     if (mask_len > m5::uhf::SELECT_MASK_MAX_BYTES) {
         return false;
     }
+    // The mask travels as whole bytes, so the length in bits has to account for exactly the
+    // bytes that arrived (protocol 2.6.2: a mask of 96 bits comes with twelve of them). Taking
+    // a frame where the two disagree would hand the caller a length its own mask cannot back up
+    if ((static_cast<size_t>(param[5]) + 7U) / 8U != mask_len) {
+        return false;
+    }
     out.target       = static_cast<uint8_t>((param[0] >> 5) & 0x07);
     out.action       = static_cast<uint8_t>((param[0] >> 2) & 0x07);
     out.bank         = static_cast<m5::uhf::Bank>(param[0] & 0x03);
