@@ -60,6 +60,12 @@ for KC in examples/UnitUnified/common/Kconfig.variant.*; do
     perl -0pi -e 's{menu "M5Unit-NFC example"}{menu "M5Unit-RFID example"}g' "$KC"
     echo "  rewrote menu label: $KC"
 done
+# The header comment names the upstream repo. Rewrite it so the shared file reads as this
+# repository's own; without this the Kconfig keeps saying "M5Unit-NFC" here.
+for KC in examples/UnitUnified/common/Kconfig.variant.*; do
+    perl -0pi -e 's{for the M5Unit-NFC UnitUnified examples}{for the M5Unit-RFID UnitUnified examples}g' "$KC"
+    echo "  rewrote header comment: $KC"
+done
 # Default to UnitRFID2 where it is offered (full / no_dial; basic has no RFID2 option).
 for KC in examples/UnitUnified/common/Kconfig.variant.full examples/UnitUnified/common/Kconfig.variant.no_dial; do
     perl -0pi -e 's{default EXAMPLE_USING_UNIT_NFC}{default EXAMPLE_USING_UNIT_RFID2}g' "$KC"
