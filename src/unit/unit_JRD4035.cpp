@@ -183,7 +183,7 @@ inline uint8_t membank_of(const m5::uhf::Bank bank)
         case m5::uhf::Bank::User:
             return MEMBANK_USER;
     }
-    M5_LIB_LOGE("Illegal bank %u", (unsigned)static_cast<uint8_t>(bank));
+    M5_LIB_LOGE("Illegal bank %u", static_cast<unsigned>(bank));
     return MEMBANK_NONE;
 }
 

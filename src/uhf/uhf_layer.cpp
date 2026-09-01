@@ -238,7 +238,8 @@ bool UHFLayer::select(const Tid& tid, const uint32_t access_password, const bool
     // The first three words name the chip, and every tag of that model carries the same bytes
     // there. A mask that reaches no further would address all of them at once
     if (!tidTellsTagsApart(tid.begin(), tid.size)) {
-        M5_LIB_LOGE("A TID mask of %u bytes cannot tell one tag of this chip from another", (unsigned)tid.size);
+        M5_LIB_LOGE("A TID mask of %u bytes cannot tell one tag of this chip from another",
+                    static_cast<unsigned>(tid.size));
         return false;
     }
     if (!apply_selection(Bank::Tid, TID_MASK_POINTER_BITS, tid.begin(), tid.size, access_password, verify)) {
@@ -442,7 +443,8 @@ Result UHFLayer::readBank(uint8_t* out, uint16_t& out_len, const Bank bank, cons
     // A tag answering with more than was asked for is not something to write past the end of
     // the caller's buffer for
     if (read.size() > capacity) {
-        M5_LIB_LOGE("The tag answered with %u bytes, more than the %u asked for", (unsigned)read.size(), capacity);
+        M5_LIB_LOGE("The tag answered with %u bytes, more than the %u asked for", static_cast<unsigned>(read.size()),
+                    capacity);
         return refused(Reason::Malformed);
     }
     std::memcpy(out, read.data(), read.size());
