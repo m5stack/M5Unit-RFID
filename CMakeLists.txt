@@ -6,6 +6,5 @@ file(GLOB_RECURSE SRCS "src/*.cpp")
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS "src"
-    REQUIRES M5UnitUnified M5Unit-NFC
-    PRIV_REQUIRES M5Utility
+    REQUIRES M5UnitUnified M5Unit-NFC M5Utility
 )
