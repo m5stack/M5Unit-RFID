@@ -73,6 +73,7 @@ jobs:
           - m5stack_core        # m5stack:esp32 x ESP32 (xtensa-esp32)
           - m5stack_cores3      # m5stack:esp32 x ESP32-S3 (separate GCC target)
           - m5stack_nano_c6     # m5stack:esp32 x ESP32-C6 (rv32)
+          - m5stack_nano_h2     # m5stack:esp32 x ESP32-H2 (rv32, H2 image target)
           - m5stack_tab5        # m5stack:esp32 x ESP32-P4 (rv32 single-float)
           # - arduino_nesso_n1  # ESP32-C6: represented by m5stack_nano_c6
           # - m5stack_atom      # ESP32: represented by m5stack_core
@@ -94,7 +95,7 @@ jobs:
           # - m5stack_sticks3   # ESP32-S3: represented by m5stack_cores3
 
         platform-version:
-          - 3.2.5
+          - 3.3.7
 
         platform:
           - m5stack
@@ -109,7 +110,7 @@ jobs:
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
-            platform-version: 3.2.5
+            platform-version: 3.3.7
             board: m5stack_core
             build-properties: "-DUSING_UNIT_RFID2"
           - sketch: ValueBlock
@@ -117,7 +118,7 @@ jobs:
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
-            platform-version: 3.2.5
+            platform-version: 3.3.7
             board: m5stack_core
             build-properties: "-DUSING_UNIT_RFID2"
           - sketch: ReadWrite
@@ -125,7 +126,7 @@ jobs:
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
-            platform-version: 3.2.5
+            platform-version: 3.3.7
             board: m5stack_core
             build-properties: "-DUSING_UNIT_RFID2"
           - sketch: NDEF
@@ -133,7 +134,15 @@ jobs:
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
-            platform-version: 3.2.5
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: "-DUSING_UNIT_RFID2"
+          - sketch: PolicyOverride
+            nfctype: NFCA
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
             board: m5stack_core
             build-properties: "-DUSING_UNIT_RFID2"
           # Detect on M5Dial with builtin WS1850S (NFCA, USING_M5DIAL_BUILTIN_WS1850S)
@@ -142,7 +151,7 @@ jobs:
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
-            platform-version: 3.2.5
+            platform-version: 3.3.7
             board: m5stack_dial
             build-properties: "-DUSING_M5DIAL_BUILTIN_WS1850S"
           # JapanIDCard (NFCB, USING_UNIT_RFID2, Core only)
@@ -151,9 +160,140 @@ jobs:
             platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
             platform: m5stack
             archi: esp32
-            platform-version: 3.2.5
+            platform-version: 3.3.7
             board: m5stack_core
             build-properties: "-DUSING_UNIT_RFID2"
+          # UHF-RFID (UART, single unit, no USING_* define).
+          # Detect covers the board axis; the rest go on Core for the API axis,
+          # the same shape the NFC-A / NFC-B families use above.
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_cores3
+            build-properties: ""
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_nano_c6
+            build-properties: ""
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_nano_h2
+            build-properties: ""
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_tab5
+            build-properties: ""
+          - sketch: Dump
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: ReadWrite
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: ReaderSettings
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: Lock
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: Kill
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: WriteEPC
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: SleepIdle
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: MonzaQT
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: PermanentLock
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: NxpG2X
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
+          - sketch: NxpReadProtect
+            nfctype: UHF
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: ""
 
     steps:
       - name: Checkout

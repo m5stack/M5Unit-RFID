@@ -121,6 +121,14 @@ jobs:
             platform-version: 2.0.17
             board: m5stack-core-esp32
             build-properties: "-DUSING_UNIT_RFID2"
+          - sketch: PolicyOverride
+            nfctype: NFCA
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: "-DUSING_UNIT_RFID2"
           # JapanIDCard (NFCB, USING_UNIT_RFID2, Core only)
           - sketch: JapanIDCard
             nfctype: NFCB
@@ -130,6 +138,113 @@ jobs:
             platform-version: 2.0.17
             board: m5stack-core-esp32
             build-properties: "-DUSING_UNIT_RFID2"
+          # UHF-RFID (UART, single unit, no USING_* define).
+          # Detect covers the board axis; the rest go on Core for the API axis,
+          # the same shape the NFC-A / NFC-B families use above.
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: Detect
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-cores3
+            build-properties: ""
+          - sketch: Dump
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: ReadWrite
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: ReaderSettings
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: Lock
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: Kill
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: WriteEPC
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: SleepIdle
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: MonzaQT
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: PermanentLock
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: NxpG2X
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
+          - sketch: NxpReadProtect
+            nfctype: UHF
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: ""
 
     steps:
       - name: Checkout
