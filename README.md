@@ -124,8 +124,9 @@ Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
 ## Related Link
 
 - [Unit RFID2 & Datasheet](https://docs.m5stack.com/en/unit/rfid2)
+- [Unit UHF-RFID & Datasheet](https://docs.m5stack.com/en/unit/uhf_rfid)
 
-## Required Libraries:
+## Required Libraries
 
 - [M5UnitUnified](https://github.com/m5stack/M5UnitUnified)
 - [M5Utility](https://github.com/m5stack/M5Utility)
@@ -143,17 +144,17 @@ See also [examples/UnitUnified](examples/UnitUnified)
 > **Note:** The examples in this library are imported from [M5Unit-NFC](https://github.com/m5stack/M5Unit-NFC) and shared between both libraries.
 > The same source file supports multiple units via `#define` switches.
 
-### For ArduinoIDE
-Each example contains the following block to select the unit:
+### For Arduino IDE settings
+Each NFC-A / NFC-B example contains the following block to select the unit:
 
 ```cpp
-// For UnitNFC
+// For UnitNFC (U216)
 // #define USING_UNIT_NFC
-// For CapCC1101
+// For CapCC1101 (U219)
 // #define USING_CAP_CC1101
-// For UnitRFID2 (external WS1850S)
+// For UnitRFID2 (U031-B)
 // #define USING_UNIT_RFID2
-// For M5Dial built-in WS1850S
+// For M5Dial Builtin WS1850S (K130)
 // #define USING_M5DIAL_BUILTIN_WS1850S
 ```
 
@@ -178,6 +179,9 @@ On ESP-IDF native builds (`idf.py`), the unit/board is selected via Kconfig inst
 |---|---|---|
 | `Kconfig.variant.full` | UnitRFID2 / M5Dial built-in WS1850S | NFC-A Detect / Dump / NDEF / PolicyOverride / ReadWrite / ValueBlock |
 | `Kconfig.variant.no_dial` | UnitRFID2 | NFC-B Detect / JapanIDCard (M5Dial built-in cannot do NFC-B) |
+
+The UHF examples have no such choice, since the unit is the only one they run on. For those,
+`idf.py set-target <chip>` followed by `idf.py build flash monitor` is all that is needed.
 
 For this library, choose **UnitRFID2** (external WS1850S) or **M5Dial built-in WS1850S**.
 `examples/UnitUnified/common/variant.cmake` then maps the chosen `CONFIG_EXAMPLE_USING_*` to the source-level `USING_*` macro shared with the Arduino build.
