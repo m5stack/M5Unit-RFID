@@ -48,7 +48,7 @@ void begin_unit()
         M5_LOGE("Failed to begin");
         m5::unit::wiring::failStop();
     }
-    M5_LOGI("M5UnitUnified has been begun");
+    M5_LOGI("M5UnitUnified initialized");
     M5_LOGI("%s", Units.debugInfo().c_str());
 
     // The module keeps these across a power cycle, so what it holds now is whatever was last
