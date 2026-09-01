@@ -53,9 +53,14 @@ jobs:
       max-parallel: 20
 
       matrix:
+        # Cross design (skill m5-build-ci-matrix §3): the board axis is carried by one
+        # representative per distinct code path. NFCA (WS1850S over I2C, addI2C) and UHF
+        # (JRD4035 over UART, addUART) are different units on different transports, so both
+        # stay on the board axis. NFCB is the same unit, bus and wiring helper as NFCA, so
+        # one build on the representative board is enough to prove its stack compiles.
         example:
           - NFCA_Detect
-          - NFCB_Detect
+#          - NFCB_Detect   # via include (Core only): same unit/bus/wiring as NFCA
           - UHF_Detect
 
         # Build CI board axis = distinct compile config only (skill m5-build-ci-matrix).
@@ -89,6 +94,11 @@ jobs:
           - latest
 
         include:
+          # Detect (NFCB, Core only) - moved off the board axis above
+          - example: NFCB_Detect
+            board: Core
+            framework: Arduino
+            espressif32: latest
           # NFCA Specific sketches (Core only)
           - example: NFCA_Dump
             board: Core

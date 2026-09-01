@@ -57,9 +57,14 @@ jobs:
         platform-url:
           - https://espressif.github.io/arduino-esp32/package_esp32_index.json
 
+        # Cross design (skill m5-build-ci-matrix §3): the board axis is carried by one
+        # representative per distinct code path. NFCA (WS1850S over I2C, addI2C) and UHF
+        # (JRD4035 over UART, addUART) are different units on different transports, so both
+        # stay on the board axis. NFCB is the same unit, bus and wiring helper as NFCA, so
+        # one build on the representative board is enough to prove its stack compiles.
         nfctype:
           - NFCA
-          - NFCB
+#          - NFCB    # via include (m5stack-core-esp32 only): same unit/bus/wiring as NFCA
 
         sketch:
           - Detect
@@ -123,6 +128,15 @@ jobs:
             build-properties: "-DUSING_UNIT_RFID2"
           - sketch: PolicyOverride
             nfctype: NFCA
+            platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            platform: esp32
+            archi: esp32
+            platform-version: 2.0.17
+            board: m5stack-core-esp32
+            build-properties: "-DUSING_UNIT_RFID2"
+          # Detect (NFCB, USING_UNIT_RFID2, Core only) - moved off the board axis above
+          - sketch: Detect
+            nfctype: NFCB
             platform-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
             platform: esp32
             archi: esp32

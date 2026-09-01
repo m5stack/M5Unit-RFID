@@ -57,9 +57,14 @@ jobs:
         platform-url:
           - https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
 
+        # Cross design (skill m5-build-ci-matrix §3): the board axis is carried by one
+        # representative per distinct code path. NFCA (WS1850S over I2C, addI2C) and UHF
+        # (JRD4035 over UART, addUART) are different units on different transports, so both
+        # stay on the board axis. NFCB is the same unit, bus and wiring helper as NFCA, so
+        # one build on the representative board is enough to prove its stack compiles.
         nfctype:
           - NFCA
-          - NFCB
+#          - NFCB    # via include (m5stack_core only): same unit/bus/wiring as NFCA
 
         sketch:
           - Detect
@@ -154,6 +159,15 @@ jobs:
             platform-version: 3.3.7
             board: m5stack_dial
             build-properties: "-DUSING_M5DIAL_BUILTIN_WS1850S"
+          # Detect (NFCB, USING_UNIT_RFID2, Core only) - moved off the board axis above
+          - sketch: Detect
+            nfctype: NFCB
+            platform-url: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+            platform: m5stack
+            archi: esp32
+            platform-version: 3.3.7
+            board: m5stack_core
+            build-properties: "-DUSING_UNIT_RFID2"
           # JapanIDCard (NFCB, USING_UNIT_RFID2, Core only)
           - sketch: JapanIDCard
             nfctype: NFCB
