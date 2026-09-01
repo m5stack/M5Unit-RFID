@@ -63,7 +63,7 @@ public:
      */
     inline config_t config() const
     {
-        return _cfg;
+        return _cfg_ws1850s;
     }
     /*!
       @brief Set the configuration
@@ -71,7 +71,7 @@ public:
      */
     inline void config(const config_t& cfg)
     {
-        _cfg = cfg;
+        _cfg_ws1850s = cfg;
         UnitMFRC522::config(static_cast<const UnitMFRC522::config_t&>(cfg));
     }
     ///@}
@@ -136,7 +136,7 @@ protected:
     bool configure_nfcb();
 
 protected:
-    config_t _cfg{};
+    config_t _cfg_ws1850s{};
     m5::nfc::NFC _mode{m5::nfc::NFC::A};
 };
 

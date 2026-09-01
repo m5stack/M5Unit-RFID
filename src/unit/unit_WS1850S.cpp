@@ -72,9 +72,9 @@ bool UnitWS1850S::configure_nfca()
 {
     if (!turnOffAntenna()) return false;
 
-    // ModeReg: full write of _cfg.mode_reg (default 0x3D includes CRCPreset[1:0]=01 for CRC_A).
+    // ModeReg: full write of _cfg_ws1850s.mode_reg (default 0x3D includes CRCPreset[1:0]=01 for CRC_A).
     // Full write ensures NFC-A state regardless of any prior register modifications.
-    if (!writeRegister8(MODE_REG, _cfg.mode_reg)) return false;
+    if (!writeRegister8(MODE_REG, _cfg_ws1850s.mode_reg)) return false;
 
     // NFC-A framing: TxCRCEn=0, RxCRCEn=0 (M5Unit-NFC appends/validates CRC_A in software).
     // TxFraming/RxFraming=00 (Type A). Hardware CRC enabled would double-CRC the frame.
@@ -105,9 +105,9 @@ bool UnitWS1850S::configure_nfcb()
     // Antenna OFF before reconfiguring
     if (!turnOffAntenna()) return false;
 
-    // ModeReg: full write of _cfg.mode_reg with CRCPreset[1:0] forced to 0b11 (CRC_B 0xFFFF
+    // ModeReg: full write of _cfg_ws1850s.mode_reg with CRCPreset[1:0] forced to 0b11 (CRC_B 0xFFFF
     // preset). Full write ensures NFC-B state regardless of any prior register modifications.
-    if (!writeRegister8(MODE_REG, static_cast<uint8_t>((_cfg.mode_reg & 0xFC) | 0x03))) return false;
+    if (!writeRegister8(MODE_REG, static_cast<uint8_t>((_cfg_ws1850s.mode_reg & 0xFC) | 0x03))) return false;
 
     // TxModeReg: TxCRCEn=0 (software CRC), TxSpeed=000 (106 kbit), TxFraming=0b11 (Type B)
     if (!writeRegister8(TX_MODE_REG, static_cast<uint8_t>(0x03))) return false;
@@ -125,7 +125,7 @@ bool UnitWS1850S::configure_nfcb()
     constexpr uint8_t MOD_GSP_TABLE[16] = {
         0x3F, 0x3A, 0x35, 0x30, 0x2C, 0x28, 0x24, 0x20, 0x1E, 0x1C, 0x1B, 0x1A, 0x18, 0x16, 0x14, 0x10,
     };
-    const uint8_t depth   = std::min<uint8_t>(_cfg.nfcb_ask_depth, 15);
+    const uint8_t depth   = std::min<uint8_t>(_cfg_ws1850s.nfcb_ask_depth, 15);
     const uint8_t mod_gsp = MOD_GSP_TABLE[depth];
 
     // PN512 TypeBReg (address 0x1E): RxSOFReq/RxEOFReq/EOFSOFWidth/NoTxSOF/NoTxEOF/TxEGT.

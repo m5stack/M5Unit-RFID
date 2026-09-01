@@ -56,12 +56,12 @@ public:
     //! @brief Gets the configuration
     inline config_t config() const
     {
-        return _cfg;
+        return _cfg_jrd4035;
     }
     //! @brief Sets the configuration
     inline void config(const config_t& cfg)
     {
-        _cfg = cfg;
+        _cfg_jrd4035 = cfg;
         UHFRFIDComponent::config(static_cast<const UHFRFIDComponent::config_t&>(cfg));
     }
     ///@}
@@ -224,9 +224,9 @@ protected:
     bool _response_pending{};
     uint8_t _awaiting_command{};
 
-    //! Hides UHFRFIDComponent::_cfg so that this class reads its own settings. The setter
-    //! passes the part they share down, which is what the base reads
-    config_t _cfg{};
+    //! Settings this class reads. The setter passes the part it shares with
+    //! UHFRFIDComponent::_cfg down, which is what the base reads
+    config_t _cfg_jrd4035{};
 };
 
 }  // namespace unit

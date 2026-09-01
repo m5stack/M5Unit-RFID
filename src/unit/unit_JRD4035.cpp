@@ -304,14 +304,14 @@ bool UnitJRD4035::begin()
 
     // The region is only written when the caller specified one, so the module's
     // factory setting is preserved by default
-    if (_cfg.region != m5::uhf::Region::Unspecified && !writeRegion(_cfg.region)) {
+    if (_cfg_jrd4035.region != m5::uhf::Region::Unspecified && !writeRegion(_cfg_jrd4035.region)) {
         M5_LIB_LOGE("Failed to writeRegion");
         return false;
     }
 
     // Unlike the region, this one is written whatever it is set to: the module has no command
     // to say what its idle timer holds, and it keeps it across a power cycle
-    if (!writeAutoSleepTime(_cfg.auto_sleep_minutes)) {
+    if (!writeAutoSleepTime(_cfg_jrd4035.auto_sleep_minutes)) {
         M5_LIB_LOGW("Failed to write the auto sleep time; the module keeps whatever it had");
     }
 
@@ -338,13 +338,13 @@ bool UnitJRD4035::begin()
     }
     // A reader set below the floor detects tags at a distance and then fails to read them,
     // which looks like a broken tag rather than a setting
-    if (_cfg.demodulator.threshold < m100::DEMODULATOR_THRESHOLD_DEFAULT) {
+    if (_cfg_jrd4035.demodulator.threshold < m100::DEMODULATOR_THRESHOLD_DEFAULT) {
         M5_LIB_LOGW(
             "The demodulation threshold asked for is 0x%04X, below the 0x%04X its documentation "
             "gives as the lowest worth using; reading a tag may fail even where it is detected",
-            _cfg.demodulator.threshold, m100::DEMODULATOR_THRESHOLD_DEFAULT);
+            _cfg_jrd4035.demodulator.threshold, m100::DEMODULATOR_THRESHOLD_DEFAULT);
     }
-    if (!writeDemodulatorParameters(_cfg.demodulator)) {
+    if (!writeDemodulatorParameters(_cfg_jrd4035.demodulator)) {
         M5_LIB_LOGE("Failed to write the demodulator parameters");
         return false;
     }
@@ -493,7 +493,7 @@ bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const ui
     }
 
     // Keep pumping so that tag notifications arriving while we wait are queued, not dropped
-    const uint32_t wait_ms        = timeout_ms != 0 ? timeout_ms : _cfg.command_timeout_ms;
+    const uint32_t wait_ms        = timeout_ms != 0 ? timeout_ms : _cfg_jrd4035.command_timeout_ms;
     const unsigned long expire_at = m5::utility::millis() + wait_ms;
     while (m5::utility::millis() < expire_at) {
         Frame f{};
