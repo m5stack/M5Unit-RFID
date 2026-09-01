@@ -144,10 +144,10 @@ protected:
     virtual bool start_polling_command(const uint16_t count) override;
     virtual bool stop_polling_command() override;
 
-    //! @brief Send a command frame
+    // Send a command frame
     bool send_command(const uint8_t command, const uint8_t* param, const uint16_t param_len);
-    /*!
-      @brief Send a command and wait for its response, routing notifications to the tag queue
+    /*
+      Send a command and wait for its response, routing notifications to the tag queue
       @param[out] response Response frame
       @param command Command to send
       @param param Parameter
@@ -160,20 +160,20 @@ protected:
      */
     bool send_and_wait(m100::Frame& response, const uint8_t command, const uint8_t* param, const uint16_t param_len,
                        const uint32_t timeout_ms = 0, const uint8_t answer_command = 0);
-    //! @brief Read one frame from the stream. Returns false when nothing is pending
+    // Read one frame from the stream. Returns false when nothing is pending
     bool read_frame(m100::Frame& out, const uint32_t timeout_ms);
-    //! @brief Throw away everything received, in the driver and in the staging buffer alike
+    // Throw away everything received, in the driver and in the staging buffer alike
     void flush_rx();
-    //! @brief Route a received frame
+    // Route a received frame
     void route_frame(const m100::Frame& f);
-    //! @brief Wait out an answer that may still be on its way, so that it cannot answer the next command
+    // Wait out an answer that may still be on its way, so that it cannot answer the next command
     void resynchronize();
-    //! @brief Read the module information for one kind (0x00 hardware / 0x01 software / 0x02 manufacturer)
+    // Read the module information for one kind (0x00 hardware / 0x01 software / 0x02 manufacturer)
     bool read_module_information_kind(std::string& out, const uint8_t kind);
-    //! @brief Run one of the channel scans and decode its contiguous range of levels
+    // Run one of the channel scans and decode its contiguous range of levels
     bool read_channel_levels(m5::uhf::ChannelLevels& levels, const uint8_t command);
-    /*!
-      @brief Did the module answer with a result rather than a failure?
+    /*
+      Did the module answer with a result rather than a failure?
       @param response Response frame
       @param what Name of the operation, used in the warning
       @return True when the response carries a result
@@ -181,8 +181,8 @@ protected:
       answering at all is what it waits for. Every tag operation has to tell the two apart
      */
     bool succeeded(const m100::Frame& response, const char* what) const;
-    /*!
-      @brief Did the tag report that it carried the operation out?
+    /*
+      Did the tag report that it carried the operation out?
       @param response Response frame of a Write, Lock or Kill
       @param what Name of the operation, used in the warning
       @return Nothing when the tag answered with a success status
@@ -191,14 +191,14 @@ protected:
       a failure here reports READER_BALKED rather than a code of its own
      */
     TagResult tag_carried_it_out(const m100::Frame& response, const char* what) const;
-    /*!
-      @brief The error code a failure notification carries
+    /*
+      The error code a failure notification carries
       @param response Response frame
       @return The code, or READER_SILENT where the notification carries none
      */
     static uint8_t error_code_of(const m100::Frame& response);
-    /*!
-      @brief Send a tag operation, trying again when the tag simply did not answer
+    /*
+      Send a tag operation, trying again when the tag simply did not answer
       @param[out] response Response frame
       @param command Command to send
       @param param Parameter
@@ -215,21 +215,21 @@ protected:
     TagResult send_tag_operation(m100::Frame& response, const uint8_t command, const uint8_t* param,
                                  const uint16_t param_len, const char* what, const uint8_t answer_command = 0);
 
-    //! Frame header. A derived class for the R200 family sets this to m100::r200::FRAME_HEADER
+    // Frame header. A derived class for the R200 family sets this to m100::r200::FRAME_HEADER
     uint8_t _frame_header{m100::jrd::FRAME_HEADER};
-    //! Frame end. A derived class for the R200 family sets this to m100::r200::FRAME_END
+    // Frame end. A derived class for the R200 family sets this to m100::r200::FRAME_END
     uint8_t _frame_end{m100::jrd::FRAME_END};
 
-    //! Response slot filled by route_frame while send_and_wait is pumping
-    //! @brief Bytes taken from the UART that have not been made into a frame yet. Keeping them
-    //! is what lets a frame that arrived in pieces be finished off by the next read
+    // Bytes taken from the UART that have not been made into a frame yet. Keeping them
+    // is what lets a frame that arrived in pieces be finished off by the next read
     std::vector<uint8_t> _rx{};
+    // Response slot filled by route_frame while send_and_wait is pumping
     m100::Frame _response{};
     bool _response_pending{};
     uint8_t _awaiting_command{};
 
-    //! Settings this class reads. The setter passes the part it shares with
-    //! UHFRFIDComponent::_cfg down, which is what the base reads
+    // Settings this class reads. The setter passes the part it shares with
+    // UHFRFIDComponent::_cfg down, which is what the base reads
     config_t _cfg_jrd4035{};
 };
 

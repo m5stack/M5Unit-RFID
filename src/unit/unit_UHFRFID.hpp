@@ -489,15 +489,15 @@ protected:
     {
     }
 
-    //! @brief Pump the UART stream and route frames. Returns true if any frame was handled
+    // Pump the UART stream and route frames. Returns true if any frame was handled
     virtual bool pump(const uint32_t timeout_ms) = 0;
-    //! @brief Issue the multiple polling command
+    // Issue the multiple polling command
     virtual bool start_polling_command(const uint16_t count) = 0;
-    //! @brief Issue the stop polling command
+    // Issue the stop polling command
     virtual bool stop_polling_command() = 0;
 
-    /*!
-      @brief Refuse a reader setting while polling is running
+    /*
+      Refuse a reader setting while polling is running
       @param what Name of the operation, used in the warning
       @return True when the caller must give up
       @details The module answers unreliably while it is running inventory rounds, so reader
@@ -505,8 +505,8 @@ protected:
      */
     bool reject_while_polling(const char* what) const;
 
-    /*!
-      @brief Refuse a tag operation while no mask is picking a tag out
+    /*
+      Refuse a tag operation while no mask is picking a tag out
       @param what Name of the operation, used in the warning
       @return True when the caller must give up
       @details A mask of zero length matches every tag rather than none, so an operation sent
@@ -515,23 +515,23 @@ protected:
      */
     bool reject_without_selection(const char* what) const;
 
-    //! @brief Push a tag into the queue, counting a drop when it overflows
+    // Push a tag into the queue, counting a drop when it overflows
     void push_tag(const m5::uhf::Tag& tag);
-    //! @brief Note that a frame arrived (exposed through lastFrameAt)
+    // Note that a frame arrived (exposed through lastFrameAt)
     void note_frame_arrival();
-    //! @brief Reissue the polling command before its round count runs out
+    // Reissue the polling command before its round count runs out
     void reissue_polling_if_needed();
 
     config_t _cfg{};
     std::unique_ptr<m5::container::CircularBuffer<m5::uhf::Tag>> _tags{};
     uint32_t _dropped{};
-    //! Whether polling should be renewed. Cleared as soon as a stop is asked for
+    // Whether polling should be renewed. Cleared as soon as a stop is asked for
     bool _polling{};
-    //! Whether the module is believed to still be running rounds. Only a confirmed stop clears it
+    // Whether the module is believed to still be running rounds. Only a confirmed stop clears it
     bool _rounds_running{};
-    //! Whether a mask of some length has been stored in the module
+    // Whether a mask of some length has been stored in the module
     bool _select_mask_stored{};
-    //! Whether the stored mask is being applied to tag operations
+    // Whether the stored mask is being applied to tag operations
     bool _select_enabled{};
     uint16_t _polling_count{};
     unsigned long _last_frame_at{};

@@ -338,27 +338,27 @@ public:
     ///@}
 
 private:
-    //! @brief Store a mask, switch the module over to it, and optionally prove a tag answers
+    // Store a mask, switch the module over to it, and optionally prove a tag answers
     bool apply_selection(const Bank bank, const uint32_t pointer_bits, const uint8_t* mask, const size_t mask_len,
                          const uint32_t access_password, const bool verify);
-    //! @brief Read one word of the EPC bank to prove the selected tag is there and answering
+    // Read one word of the EPC bank to prove the selected tag is there and answering
     bool verify_selection();
-    //! @brief Drop the selection when a write has replaced the bytes its mask matches on
+    // Drop the selection when a write has replaced the bytes its mask matches on
     void drop_selection_if_mask_rewritten(const Bank bank);
-    //! @brief Store the mask of the selected tag again, so a lost singulation can be regained
+    // Store the mask of the selected tag again, so a lost singulation can be regained
     bool reapply_selection();
-    //! @brief How many words of a bank there are to read, 0 when that is not known
+    // How many words of a bank there are to read, 0 when that is not known
     uint16_t bank_words(const Bank bank);
-    //! @brief Print a stretch of one bank, sixteen bytes to a line
+    // Print a stretch of one bank, sixteen bytes to a line
     bool dump_words(const char* what, const Bank bank, const uint16_t word_address, const uint16_t words);
-    /*!
-      @brief Pass on a reader's failure in terms the caller can act on
+    /*
+      Pass on a reader's failure in terms the caller can act on
       @param result What the reader answered
       @return The same success, or what its error code means
      */
     Result relay(const m5::unit::TagResult& result) const;
-    /*!
-      @brief Stop polling for as long as a tag is being addressed
+    /*
+      Stop polling for as long as a tag is being addressed
       @details An inventory round leaves every tag it saw flagged as already counted, and a tag
       in that state answers nothing until the flag decays. Letting polling run between two tag
       operations therefore breaks the second one, so it stays stopped from select() until
@@ -367,16 +367,16 @@ private:
       rounds, and a tag operation attempted now would be answering into them
      */
     bool pause_polling();
-    //! @brief Put polling back the way select() found it
+    // Put polling back the way select() found it
     void resume_polling();
 
     m5::unit::UHFRFIDComponent& _u;
     Tag _selected{};
     uint32_t _access_password{};
-    //! Bank the stored mask matches against, which decides whether an EPC rewrite invalidates it
+    // Bank the stored mask matches against, which decides whether an EPC rewrite invalidates it
     Bank _mask_bank{Bank::Epc};
     bool _has_selection{};
-    //! Was polling running when the tag currently being addressed was selected?
+    // Was polling running when the tag currently being addressed was selected?
     bool _resume_polling{};
 };
 
