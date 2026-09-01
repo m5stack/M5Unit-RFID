@@ -151,8 +151,14 @@ constexpr uint32_t RESYNC_LIMIT_MS{250};
 constexpr uint8_t WAKE_BYTE{0x55};
 //! @brief How long to wait after the wake byte before asking the module anything
 constexpr uint32_t WAKE_DELAY_MS{20};
-//! @brief How many questions waking costs. The first is thrown away and the second is answered
-constexpr int WAKE_QUESTIONS{2};
+/*!
+  @brief How many questions to ask before giving up on a module that was woken
+  @details The first is always thrown away: the byte that wakes the module takes the first byte
+  of the command that follows with it. Which one answers after that has been measured as both
+  the second and the third, so the count carries a margin. Answering ends the loop, so a module
+  that comes back on the second pays nothing for the two that are never asked
+ */
+constexpr int WAKE_QUESTIONS{4};
 
 //! @brief A bank code that is not one of the four, used to reject a bank cast in from outside
 constexpr uint8_t MEMBANK_NONE{0xFF};
@@ -943,6 +949,9 @@ bool UnitJRD4035::wake()
     for (int i = 0; i < WAKE_QUESTIONS; ++i) {
         Frame res{};
         if (send_and_wait(res, CMD_GET_TX_POWER, nullptr, 0)) {
+            // Which one landed is worth saying: the module has been measured answering the
+            // second and the third, and a caller seeing this climb has a reason to look
+            M5_LIB_LOGI("The module answered question %d of %d after being woken", i + 1, WAKE_QUESTIONS);
             return true;
         }
     }
