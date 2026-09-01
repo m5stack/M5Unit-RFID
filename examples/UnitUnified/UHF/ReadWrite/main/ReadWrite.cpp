@@ -1,0 +1,378 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+/*
+  Example using M5UnitUnified for M5Unit-RFID
+  Write to the User memory of a UHF-RFID tag and put it back
+*/
+#include <M5Unified.h>
+#include <M5UnitUnified.h>
+#include <M5UnitUnifiedRFID.h>
+#include <M5Utility.h>
+#include <wiring/m5_unit_unified_wiring.hpp>
+#include <algorithm>
+#include <string>
+#include <vector>
+
+namespace {
+auto& lcd = M5.Display;
+m5::unit::UnitUnified Units;
+m5::unit::UnitUHFRFID unit{};
+m5::uhf::UHFLayer uhf{unit};
+
+//! @brief Bring the display and the unit up, or stop
+void begin_unit()
+{
+    M5.begin();
+    M5.setTouchButtonHeightByRatio(100);
+    if (lcd.height() > lcd.width()) {
+        lcd.setRotation(1);
+    }
+    // Notifications keep coming while the module is polling, and the driver's default 256-byte
+    // receive buffer holds only about 22ms of them at this baud rate. Anything that keeps the
+    // sketch busy for longer than that, printing included, costs bytes out of the middle of a
+    // frame. The port has to be closed for a new size to be accepted
+#if defined(ARDUINO)
+    constexpr size_t RX_BUFFER_BYTES{2048};
+    auto& serial = m5::unit::wiring::defaultUartSerial();
+    serial.end();
+    // The call answers with the size it settled on, and with zero when it would not take. There
+    // is no way to ask afterwards, so this is the only chance to find out
+    if (serial.setRxBufferSize(RX_BUFFER_BYTES) != RX_BUFFER_BYTES) {
+        M5_LOGW("The receive buffer kept its default size; frames may arrive in pieces");
+    }
+#endif
+    // Unit UHF-RFID is a UART unit; PortC is preferred and PortA is the fallback
+    if (!(m5::unit::wiring::addUART(Units, unit, 115200) && Units.begin())) {
+        M5_LOGE("Failed to begin");
+        m5::unit::wiring::failStop();
+    }
+    M5_LOGI("M5UnitUnified has been begun");
+    M5_LOGI("%s", Units.debugInfo().c_str());
+
+    // The module keeps these across a power cycle, so what it holds now is whatever was last
+    // written to it rather than a default. They decide how far a tag can be and how faint an
+    // answer still counts, which is the difference between a tag that reads and one that does
+    // not. What is there is reported, not changed: how much power may be radiated is a question
+    // of where the unit is being used
+    int16_t dbm100{};
+    if (unit.readTransmitPower(dbm100)) {
+        M5_LOGI("Transmit power: %d.%02d dBm", dbm100 / 100, dbm100 % 100);
+    }
+    m5::unit::m100::DemodulatorParameters dp{};
+    if (unit.readDemodulatorParameters(dp)) {
+        M5_LOGI("Demodulator: mixer=%udB if=%udB threshold=0x%04X", m5::unit::m100::mixerGainDb(dp.mixer_gain),
+                m5::unit::m100::ifGainDb(dp.if_gain), dp.threshold);
+    }
+    // A mask is stored against the session and the flag the round names, so these decide which
+    // tag a selection ends up addressing
+    m5::uhf::QueryParameters qp{};
+    if (unit.readQueryParameters(qp)) {
+        M5_LOGI("Query: Q=%u session=S%u target=%c filter=%u", qp.q, static_cast<uint8_t>(qp.session),
+                qp.target == m5::uhf::Target::A ? 'A' : 'B', static_cast<uint8_t>(qp.filter));
+    }
+
+    m5::uhf::ModuleInformation info{};
+    if (unit.readModuleInformation(info)) {
+        M5_LOGI("HW:%s SW:%s MFR:%s", info.hardware_version.c_str(), info.software_version.c_str(),
+                info.manufacturer.c_str());
+    }
+}
+
+/*!
+  @brief Detect and hand back the one tag in the field
+  @param[out] tag The tag that was found
+  @return True when exactly one tag answered
+  @details Writing to a tag has to know which tag, so this asks for the whole field rather than
+  the first answer and refuses when there is more than one in it. UHFLayer::detect also has a
+  form that hands back whichever tag answers first, which suits reading but not writing
+ */
+bool detect_one(m5::uhf::Tag& tag)
+{
+    std::vector<m5::uhf::Tag> tags{};
+    if (!uhf.detect(tags)) {
+        M5_LOGI("No tag in the field");
+        lcd.println("no tag");
+        return false;
+    }
+    if (tags.size() != 1) {
+        M5_LOGI("%u tags in the field; leave one of them", (unsigned)tags.size());
+        lcd.printf("%u tags: leave one\n", (unsigned)tags.size());
+        return false;
+    }
+    tag = tags[0];
+    return true;
+}
+
+std::string to_hex(const std::vector<uint8_t>& data)
+{
+    std::string s{};
+    for (auto&& b : data) {
+        s += m5::utility::formatString("%02X", b);
+    }
+    return s;
+}
+
+//! @brief Words the short write test replaces and then puts back
+constexpr uint16_t WRITE_TEST_WORDS{2};
+/*!
+  @brief The most a single Write command carries
+  @details The module programs the words into the tag one at a time and waits out the tag's
+  write time for each, so a write of this many words is the longest a single command
+  legitimately takes. Anything longer is split by writeBank into several
+ */
+constexpr uint16_t WRITE_TEST_MAX_WORDS{32};
+
+/*!
+  Write a stretch of User memory, read it back and put the original contents back.
+
+  User memory is the only bank this touches. Rewriting EPC would change what the tag answers to
+  in inventory, and writing Reserved would set the access and kill passwords, which is how a
+  development tag stops being usable for development. Neither is worth it to prove a write works.
+ */
+void write_roundtrip(const m5::uhf::Tag& detected, const uint16_t words)
+{
+    if (!uhf.select(detected)) {
+        M5_LOGE("write: failed to select the tag");
+        return;
+    }
+
+    // A tag whose passwords have been set can refuse the write halfway, which would leave the
+    // original contents already gone. Checking first keeps that from happening quietly
+    std::vector<uint8_t> reserved{};
+    if (!uhf.readBank(reserved, m5::uhf::Bank::Reserved, 0, 4)) {
+        M5_LOGE("write: Reserved could not be read, so the passwords are unknown");
+        uhf.deselect();
+        return;
+    }
+    for (auto&& b : reserved) {
+        if (b != 0x00) {
+            M5_LOGW("write: this tag has a password set (%s); leaving it alone", to_hex(reserved).c_str());
+            uhf.deselect();
+            return;
+        }
+    }
+
+    const unsigned long read_began = m5::utility::millis();
+    std::vector<uint8_t> original{};
+    if (!uhf.readBank(original, m5::uhf::Bank::User, 0, words)) {
+        // The caller sized this from what the tag holds, so a refusal here is not the bank being
+        // too small; it is the read itself failing
+        M5_LOGE("write %u words: could not read what is there now, so nothing is written", words);
+        uhf.deselect();
+        return;
+    }
+    const unsigned long read_took = m5::utility::millis() - read_began;
+
+    // A pattern that says where in the bank each byte came from, so a mismatch points at the
+    // word it happened in rather than just failing
+    std::vector<uint8_t> pattern(static_cast<size_t>(words) * 2);
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        pattern[i] = static_cast<uint8_t>(0xA0 + (i & 0x0F));
+    }
+
+    const unsigned long began = m5::utility::millis();
+    const auto wrote = uhf.writeBank(m5::uhf::Bank::User, 0, pattern.data(), static_cast<uint16_t>(pattern.size()));
+    if (!wrote) {
+        M5_LOGE("write %u words: %s", words, m5::uhf::reasonAsString(wrote.error()));
+        uhf.deselect();
+        return;
+    }
+    const unsigned long took = m5::utility::millis() - began;
+
+    std::vector<uint8_t> readback{};
+    const auto reread = uhf.readBank(readback, m5::uhf::Bank::User, 0, words);
+    if (!reread) {
+        M5_LOGE("write %u words: wrote but could not read back (%s), so the tag now holds the pattern", words,
+                m5::uhf::reasonAsString(reread.error()));
+        uhf.deselect();
+        return;
+    }
+    M5_LOGI("write %2u words: read %lums, write %lums, read back %s", words, read_took, took,
+            readback == pattern ? "matches" : "MISMATCH");
+    lcd.printf("%2u words %lums %s\n", words, took, readback == pattern ? "ok" : "NG");
+    uhf.dump(m5::uhf::Bank::User, 0, words);
+
+    // Put it back the way it was, and say so loudly if that does not work: the tag is left
+    // holding the pattern in that case
+    const auto restore = uhf.writeBank(m5::uhf::Bank::User, 0, original.data(), static_cast<uint16_t>(original.size()));
+    if (!restore) {
+        M5_LOGE("write %u words: FAILED TO RESTORE (%s); the tag still holds the pattern", words,
+                m5::uhf::reasonAsString(restore.error()));
+        uhf.deselect();
+        return;
+    }
+    std::vector<uint8_t> restored{};
+    if (uhf.readBank(restored, m5::uhf::Bank::User, 0, words)) {
+        M5_LOGI("write %2u words: restored %s", words, restored == original ? "matches" : "MISMATCH");
+    }
+    uhf.dump(m5::uhf::Bank::User, 0, words);
+    uhf.deselect();
+}
+
+/*!
+  @brief Find one tag, name it, and say how much User memory it holds
+  @param[out] tag The tag that was found, as its TID describes it
+  @param[out] words Words of User memory, zero when there are none or the size is not known
+  @return True when a tag was found and identified
+  @details Only the TID says which chip this is, and which chip it is says how large the bank
+  is, so both go together
+ */
+bool find_and_size(m5::uhf::Tag& tag, uint16_t& words)
+{
+    words = 0;
+    m5::uhf::Tag detected{};
+    if (!detect_one(detected)) {
+        return false;
+    }
+    if (!uhf.select(detected)) {
+        M5_LOGE("Failed to select the tag");
+        lcd.println("select: failed");
+        return false;
+    }
+    const bool identified = uhf.identify(tag);
+    uhf.deselect();
+    if (!identified) {
+        M5_LOGE("Failed to identify the tag");
+        lcd.println("identify: failed");
+        return false;
+    }
+
+    words = static_cast<uint16_t>(tag.user_memory_bits / 16);
+    M5_LOGI("%s: user memory %s", tag.chipAsString().c_str(),
+            words ? m5::utility::formatString("%u words", words).c_str()
+                  : (m5::uhf::chipHasNoUserMemory(tag.chip) ? "none" : "size not known"));
+    lcd.printf("%s\n", tag.chipAsString().c_str());
+    return true;
+}
+
+/*!
+  @brief Write zeros over the whole User bank
+  @param tag Tag to write to
+  @param words Words of User memory to cover
+  @details A write test puts a pattern in and takes it out again, but one that fails part way
+  leaves what it managed in place, and the run after it reads that as the original. Zeros are
+  what gets the bank back to a state that is known
+  @note Writing zeros comes to the same thing however many times it is done, so a try that
+  stops part way is simply made again from the start
+ */
+void wipe_user(const m5::uhf::Tag& tag, const uint16_t words)
+{
+    constexpr uint8_t ATTEMPTS{3};
+
+    const std::vector<uint8_t> zeros(static_cast<size_t>(words) * 2, 0x00);
+    for (uint8_t attempt = 1; attempt <= ATTEMPTS; ++attempt) {
+        if (!uhf.select(tag)) {
+            continue;
+        }
+        const auto wiped = uhf.writeBank(m5::uhf::Bank::User, 0, zeros.data(), static_cast<uint16_t>(zeros.size()));
+        if (wiped) {
+            M5_LOGI("User memory: %u words cleared", words);
+            lcd.printf("cleared %u words\n", words);
+            uhf.dump(m5::uhf::Bank::User, 0, words);
+            uhf.deselect();
+            return;
+        }
+        M5_LOGW("Clearing stopped: %s (attempt %u of %u)", m5::uhf::reasonAsString(wiped.error()), attempt, ATTEMPTS);
+        uhf.deselect();
+    }
+    M5_LOGE("The bank could not be cleared; hold again with the tag closer");
+    lcd.println("clear: failed");
+}
+}  // namespace
+
+void setup()
+{
+    begin_unit();
+
+    lcd.fillScreen(TFT_DARKGREEN);
+    lcd.setTextSize(lcd.width() > 320 ? 2 : 1);
+    lcd.setCursor(0, 0);
+    lcd.println("A: write User memory");
+    lcd.println("(restores it afterwards)");
+    lcd.println("A hold: fill it with zeros");
+}
+
+void loop()
+{
+    M5.update();
+    Units.update();
+
+    if (M5.BtnA.wasClicked()) {
+        lcd.fillScreen(TFT_DARKGREEN);
+        lcd.setCursor(0, 0);
+        m5::uhf::Tag tag{};
+        uint16_t bank{};
+        if (!find_and_size(tag, bank)) {
+            return;
+        }
+        if (bank == 0 && m5::uhf::chipHasNoUserMemory(tag.chip)) {
+            M5_LOGI("Nothing to write to on this tag");
+            lcd.println("no user memory");
+            return;
+        }
+
+        // Two words to see it work at all
+        write_roundtrip(tag, WRITE_TEST_WORDS);
+        // Then the most a single command carries, or the whole bank if that is smaller
+        write_roundtrip(tag, bank ? std::min<uint16_t>(WRITE_TEST_MAX_WORDS, bank) : WRITE_TEST_MAX_WORDS);
+        // Then the whole bank, which only tells us anything when it takes more than one command
+        if (bank > WRITE_TEST_MAX_WORDS) {
+            write_roundtrip(tag, bank);
+        } else if (bank) {
+            M5_LOGI("The whole bank fits in one command, so there is no split to exercise");
+        }
+    }
+
+    // A write test that stopped part way leaves what it managed behind, and the run after it
+    // takes that for the original. This is what puts the bank back to zero
+    if (M5.BtnA.wasHold()) {
+        lcd.fillScreen(TFT_DARKGREEN);
+        lcd.setCursor(0, 0);
+        m5::uhf::Tag tag{};
+        uint16_t bank{};
+        if (!find_and_size(tag, bank)) {
+            return;
+        }
+        if (bank == 0) {
+            M5_LOGI("Nothing to clear on this tag");
+            lcd.println("no user memory");
+            return;
+        }
+        M5_LOGW("Filling %u words of User memory with zeros", bank);
+        wipe_user(tag, bank);
+    }
+}
+
+#if !defined(ARDUINO)
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <esp_timer.h>
+
+#if CONFIG_FREERTOS_UNICORE
+static inline void feedIdleTaskPeriodically(void)
+{
+    constexpr uint32_t FEED_INTERVAL_MS   = 2000;
+    constexpr TickType_t FEED_SLEEP_TICKS = pdMS_TO_TICKS(5);
+    static uint32_t s_next_feed_ms        = 0;
+    const uint32_t now_ms                 = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    if (now_ms >= s_next_feed_ms) {
+        s_next_feed_ms = now_ms + FEED_INTERVAL_MS;
+        vTaskDelay(FEED_SLEEP_TICKS);
+    }
+}
+#endif
+
+extern "C" void app_main(void)
+{
+    setup();
+    for (;;) {
+#if CONFIG_FREERTOS_UNICORE
+        feedIdleTaskPeriodically();
+#endif
+        loop();
+    }
+}
+#endif

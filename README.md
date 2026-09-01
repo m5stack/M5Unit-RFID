@@ -9,6 +9,12 @@ M5UnitUnified has a unified API and can control multiple units via PaHub, etc.
 
 Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A/B standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
 
+### SKU:U107
+
+Unit UHF-RFID is an ultra high frequency (840-960MHz) RFID read/write unit based on the JRD-4035 module.
+It complies with EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C and communicates over UART at 115200 bps.
+The read distance is 1.5-2 m.
+
 
 ## PICC Support
 
@@ -60,6 +66,47 @@ Support may be expanded in future updates to cover PICCs not listed here.
 > **Note:** NFC-B is **not supported on the M5Dial builtin WS1850S**. The builtin small loop antenna cannot generate sufficient RF field for Type B PICC activation (Type B uses 10% ASK + BPSK subcarrier which is more sensitive to field strength and SNR than Type A). NFC-B requires the external **UnitRFID2** (with larger antenna).
 
 
+## UHF Tag Support
+
+| Standard | Detect | Read/Write | Notes |
+|---|---|---|---|
+| EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C | Yes | Yes | Select, identify, read, write, lock and kill |
+
+Chip-specific commands: the Impinj Monza 4QT keeps two memory maps and can be switched between
+them. Two ways of drawing less current are offered: IDLE keeps everything the module was holding,
+while sleep resets the chip and loses the mask naming the tag being addressed.
+
+Chips seen on the bench: NXP UCODE 8, NXP UCODE G2iM, Alien Higgs-9 and Impinj Monza 4QT. More are
+recognised from their datasheets, and a chip in neither still reports its mask designer and model
+number, so it can be recognised by hand.
+
+### A Tag Resting On The Antenna
+
+A reader left as it ships reaches about a metre and a half, and a tag pressed against the antenna is
+far closer than that. At contact the reply overwhelms the receiver: most inventory rounds then find
+nothing at all, and roughly half of every read fails, even though the tag is as close as it can get
+and its RSSI is the strongest the reader ever reports.
+
+Bringing the working distance in fixes it. Either lower the transmit power, or lower the receiver
+gain, both of which the module's own tuning guide describes:
+
+```cpp
+unit.writeTransmitPower(2000);  // 20.00dBm, from a range of 17.00 to 26.00
+
+m5::unit::m100::DemodulatorParameters dp{};
+unit.readDemodulatorParameters(dp);
+dp.mixer_gain = m5::unit::m100::MixerGain::dB3;  // a step down from what the unit ships with
+dp.threshold  = 0x01B0;                          // the lowest value the chip documents
+unit.writeDemodulatorParameters(dp);
+```
+
+Lowering the receiver gain is the better of the two, since the transmit power is what energises the
+tag in the first place. Either way the reader stops reaching as far, which is the point.
+
+> **Note:** The module keeps these settings when it loses power. Writing them changes the unit until
+> something writes them back, so an application that wants the shipped behaviour has to restore it.
+
+
 ## Emulation
 
 Emulation is **NOT** supported on UnitRFID and UnitRFID2.
@@ -73,7 +120,6 @@ GROVE port (port_b) on NessoN1 uses SoftwareI2C (M5HAL Bus), which causes I2C re
 Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
 
 > **Note:** GROVE port support may be added in a future update if SoftwareI2C performance improves.
-
 
 ## Related Link
 

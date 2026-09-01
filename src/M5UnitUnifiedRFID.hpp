@@ -16,6 +16,8 @@
 #include <M5UnitUnifiedNFC.hpp>  // depends on M5Unit-NFC
 #include "unit/unit_MFRC522.hpp"
 #include "unit/unit_WS1850S.hpp"
+#include "unit/unit_JRD4035.hpp"
+#include "uhf/uhf_layer.hpp"
 
 /*!
   @namespace m5
@@ -33,6 +35,8 @@ namespace unit {
 using UnitRFID = m5::unit::UnitMFRC522;
 //! @brief Alias for UnitWS1850S
 using UnitRFID2 = m5::unit::UnitWS1850S;
+//! @brief Alias for UnitJRD4035
+using UnitUHFRFID = m5::unit::UnitJRD4035;
 
 }  // namespace unit
 }  // namespace m5
