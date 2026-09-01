@@ -245,3 +245,32 @@ TEST_F(TestUnitJRD4035, ConfigurationCarriesTheDemodulator)
     const UHFRFIDComponent& base = fresh;
     EXPECT_EQ(base.config().polling_count, 64);
 }
+
+TEST_F(TestUnitJRD4035, BeginAppliesConfig)
+{
+    SCOPED_TRACE(ustr);
+
+    // The companion test above only shows that config_t carries the settings. This one reads
+    // them back off the module, which is the half that matters: a unit arrives set to 0x00B0,
+    // below the lowest threshold its own documentation gives, and stays there until begin()
+    // writes over it
+    const auto cfg = unit->config();
+
+    // Every test here runs begin(), so by now the module already holds what config asks for and
+    // reading it back would prove nothing. It is set to the shipped value first, giving begin()
+    // something to write over. Calling it again is safe: the base only resets its buffer and flags
+    auto shipped      = cfg.demodulator;
+    shipped.threshold = 0x00B0;
+    EXPECT_TRUE(unit->writeDemodulatorParameters(shipped));
+    m5::unit::m100::DemodulatorParameters before{};
+    EXPECT_TRUE(unit->readDemodulatorParameters(before));
+    EXPECT_EQ(before.threshold, 0x00B0);
+
+    EXPECT_TRUE(unit->begin());
+
+    m5::unit::m100::DemodulatorParameters applied{};
+    EXPECT_TRUE(unit->readDemodulatorParameters(applied));
+    EXPECT_EQ(applied.threshold, cfg.demodulator.threshold);
+    EXPECT_EQ(applied.mixer_gain, cfg.demodulator.mixer_gain);
+    EXPECT_EQ(applied.if_gain, cfg.demodulator.if_gain);
+}
