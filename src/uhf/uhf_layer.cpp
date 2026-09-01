@@ -202,8 +202,8 @@ bool UHFLayer::select(const Tag& tag, const uint32_t access_password, const bool
     }
     // A tag that sends an XPC sends it ahead of the EPC, so what detection reported as the EPC
     // begins with a word or two that lives at 210h rather than at 20h (EPC Gen2 v2.1
-    // 6.3.2.1.2.2). A mask laid over the EPC from those bytes matches nothing, and none of the
-    // tags this was tried on carry one, so it is refused rather than guessed at
+    // 6.3.2.1.2.2). A mask laid over the EPC from those bytes matches nothing, so a tag that
+    // sets XI is refused
     if (pcXPCIndicator(tag.pc)) {
         M5_LIB_LOGE("This tag sends an XPC, and what was reported as its EPC begins with it");
         return false;

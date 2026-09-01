@@ -725,7 +725,7 @@ inline uint32_t chipPermalockBlockBits(const Chip chip)
         case Chip::NxpUcode7xm2k:
         case Chip::NxpUcode7xmPlus:
             // SL3S10X4: "BlockPermalock (block size of 256-bit)". The UCODE G2iM has the command
-            // as well and says nothing about how large its blocks are, so it is left out
+            // as well, but its datasheet does not give a block size
             return 256;
         case Chip::ImpinjMonza4i:
             // Monza 4 V10.0 Table 2-16: three blocks of 128 bits and a fourth of 96, which is

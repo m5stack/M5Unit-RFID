@@ -17,9 +17,8 @@
   having to be counted or remembered, and running this twice over the same tag writes the same
   value, so the second run finds nothing to do.
 
-  @note The tags this was written for carry a 96-bit TID, the same length as the EPC it
-  replaces. A tag whose TID is a different length is reported and left alone, since writing one
-  would mean changing the PC as well
+  @note This example expects a 96-bit TID, the same length as the EPC it replaces. A tag whose TID is a different length
+  is reported and left alone, since writing one would mean changing the PC as well
 
   @warning This is not a GS1 EPC scheme. It is an identifier for a bench full of blank tags, not
   something to put on goods

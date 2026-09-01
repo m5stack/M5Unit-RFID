@@ -82,7 +82,7 @@ bool UnitWS1850S::configure_nfca()
     if (!writeRegister8(RX_MODE_REG, static_cast<uint8_t>(0x00))) return false;
 
     // TxASKReg: Force100ASK=1 (0x40) — required for ISO/IEC 14443-3 Type A 100% ASK modulation.
-    // Matches MFRC522::begin() default and the previously-working state.
+    // Matches the MFRC522::begin() default.
     if (!writeRegister8(TX_ASK_REG, static_cast<uint8_t>(0x40))) return false;
 
     // Antenna driver conductance (reset defaults)
