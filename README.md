@@ -180,6 +180,10 @@ On ESP-IDF native builds (`idf.py`), the unit/board is selected via Kconfig inst
 | `Kconfig.variant.full` | UnitRFID2 / M5Dial built-in WS1850S | NFC-A Detect / Dump / NDEF / PolicyOverride / ReadWrite / ValueBlock |
 | `Kconfig.variant.no_dial` | UnitRFID2 | NFC-B Detect / JapanIDCard (M5Dial built-in cannot do NFC-B) |
 
+`common/` also holds `Kconfig.variant.basic`, which is left out of the table on purpose: it offers
+only ST25R3916-based units, and the one example that sources it (NFC-A Emulation) does not build
+against the units this library drives.
+
 The UHF examples have no such choice, since the unit is the only one they run on. For those,
 `idf.py set-target <chip>` followed by `idf.py build flash monitor` is all that is needed.
 
