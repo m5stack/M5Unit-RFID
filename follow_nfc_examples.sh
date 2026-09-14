@@ -47,6 +47,10 @@ done
 echo "--- 4. Rewrite example idf_component.yml self-reference for M5Unit-RFID ---"
 for YML in $(find examples/UnitUnified/NFCA examples/UnitUnified/NFCB -path '*/main/idf_component.yml'); do
     perl -0pi -e 's{  m5stack/M5Unit-NFC:\n    (override_path|path): "\.\./\.\./\.\./\.\./\.\."}{  m5stack/M5Unit-RFID:\n    $1: "../../../../.."}g' "$YML"
+    # The comment above the dependency names the upstream repo too. Without this the manifest
+    # says "self reference" about M5Unit-NFC while the entry below it points at M5Unit-RFID.
+    perl -0pi -e 's{## - M5Unit-NFC is taken from this repository itself}{## - M5Unit-RFID is taken from this repository itself}g' "$YML"
+    perl -0pi -e "s{dependency of M5Unit-NFC's root idf_component\\.yml}{dependency of M5Unit-RFID's root idf_component.yml}g" "$YML"
     echo "  rewrote $YML"
 done
 
