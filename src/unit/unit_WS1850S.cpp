@@ -17,6 +17,8 @@ namespace {
 // VERSION_REG value read from actual WS1850S hardware.
 // Not documented in the WS1850S datasheet (MFRC522 returns 0x91 or 0x92).
 constexpr uint8_t ws1850s_firmware_version{0x15};
+// How many times to ask for the version register before deciding the unit is not there
+constexpr uint_fast8_t DETECT_ATTEMPTS{3};
 }  // namespace
 
 using namespace m5::utility::mmh3;
@@ -35,12 +37,18 @@ const types::attr_t UnitWS1850S::attr{attribute::AccessI2C};
 
 bool UnitWS1850S::begin()
 {
+    // Reading the version register is this unit's first transaction, and a first read can come
+    // back unanswered on a bus that has just been brought up, even with the unit in place.
+    // UnitMFRC522::begin() opens with a write and does not need this
     uint8_t ver{};
-    if (!readRegister8(VERSION_REG, ver, 0) || ver != ws1850s_firmware_version) {
-        M5_LIB_LOGE("Cannot detect WS1850S %x", ver);
-        return false;
+    for (uint_fast8_t i = 0; i < DETECT_ATTEMPTS; ++i) {
+        if (readRegister8(VERSION_REG, ver, 0) && ver == ws1850s_firmware_version) {
+            return UnitMFRC522::begin();
+        }
+        m5::utility::delay(1);
     }
-    return UnitMFRC522::begin();
+    M5_LIB_LOGE("Cannot detect WS1850S %x", ver);
+    return false;
 }
 
 /*!
