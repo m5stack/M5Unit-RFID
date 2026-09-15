@@ -47,6 +47,10 @@ done
 echo "--- 4. Rewrite example idf_component.yml self-reference for M5Unit-RFID ---"
 for YML in $(find examples/UnitUnified/NFCA examples/UnitUnified/NFCB -path '*/main/idf_component.yml'); do
     perl -0pi -e 's{  m5stack/M5Unit-NFC:\n    (override_path|path): "\.\./\.\./\.\./\.\./\.\."}{  m5stack/M5Unit-RFID:\n    $1: "../../../../.."}g' "$YML"
+    # The comment above the dependency names the upstream repo too. Without this the manifest
+    # says "self reference" about M5Unit-NFC while the entry below it points at M5Unit-RFID.
+    perl -0pi -e 's{## - M5Unit-NFC is taken from this repository itself}{## - M5Unit-RFID is taken from this repository itself}g' "$YML"
+    perl -0pi -e "s{dependency of M5Unit-NFC's root idf_component\\.yml}{dependency of M5Unit-RFID's root idf_component.yml}g" "$YML"
     echo "  rewrote $YML"
 done
 
@@ -59,6 +63,12 @@ echo "--- 5. Rewrite Kconfig for M5Unit-RFID ---"
 for KC in examples/UnitUnified/common/Kconfig.variant.*; do
     perl -0pi -e 's{menu "M5Unit-NFC example"}{menu "M5Unit-RFID example"}g' "$KC"
     echo "  rewrote menu label: $KC"
+done
+# The header comment names the upstream repo. Rewrite it so the shared file reads as this
+# repository's own; without this the Kconfig keeps saying "M5Unit-NFC" here.
+for KC in examples/UnitUnified/common/Kconfig.variant.*; do
+    perl -0pi -e 's{for the M5Unit-NFC UnitUnified examples}{for the M5Unit-RFID UnitUnified examples}g' "$KC"
+    echo "  rewrote header comment: $KC"
 done
 # Default to UnitRFID2 where it is offered (full / no_dial; basic has no RFID2 option).
 for KC in examples/UnitUnified/common/Kconfig.variant.full examples/UnitUnified/common/Kconfig.variant.no_dial; do

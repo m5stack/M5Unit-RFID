@@ -454,10 +454,10 @@ protected:
     bool wait_div_irq(const uint8_t irq, const uint32_t duration);
 
     // transceive
-    bool transmit_command(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t txLast = 0,
-                          const uint8_t rxAlign = 0);
-    bool transceive(uint8_t* rbuf, uint16_t& rlen, const uint8_t* buf, const uint16_t len, const uint32_t timeout_ms,
-                    uint8_t& validBits, const uint8_t rxAlign = 0, const bool crc = false, uint8_t* err = nullptr);
+    bool transmit_command(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len, const uint8_t tx_last = 0,
+                          const uint8_t rx_align = 0);
+    bool transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf, const uint16_t len, const uint32_t timeout_ms,
+                    uint8_t& valid_bits, const uint8_t rx_align = 0, const bool crc = false, uint8_t* error = nullptr);
 
     bool picc_haltA();
 
@@ -468,14 +468,14 @@ protected:
 
     // NFC-A
     bool request_wakeup(uint16_t& atqa, const bool request);
-    bool anti_collision(const uint8_t cascadeLevel, uint8_t* buf);
+    bool anti_collision(const uint8_t lv, uint8_t* buf);
 
     // MIFARE classic
     bool mifare_classic_authenticate(const m5::nfc::a::Command cmd, const m5::nfc::a::PICC& picc, const uint8_t block,
                                      const m5::nfc::a::mifare::classic::Key& key);
     bool mifare_classic_transceive(const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t timeout_ms);
     bool mifare_classic_transceive(const uint8_t* buf, const uint8_t len, const uint32_t timeout_ms,
-                                   const bool usingtimeout = false);
+                                   const bool timeout_success = false);
 
     // crc
     inline bool calculate_crc(uint16_t& result, const uint8_t* buf, const uint8_t len)

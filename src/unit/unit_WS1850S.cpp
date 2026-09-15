@@ -17,6 +17,8 @@ namespace {
 // VERSION_REG value read from actual WS1850S hardware.
 // Not documented in the WS1850S datasheet (MFRC522 returns 0x91 or 0x92).
 constexpr uint8_t ws1850s_firmware_version{0x15};
+// How many times to ask for the version register before deciding the unit is not there
+constexpr uint_fast8_t DETECT_ATTEMPTS{3};
 }  // namespace
 
 using namespace m5::utility::mmh3;
@@ -35,12 +37,18 @@ const types::attr_t UnitWS1850S::attr{attribute::AccessI2C};
 
 bool UnitWS1850S::begin()
 {
+    // Reading the version register is this unit's first transaction, and a first read can come
+    // back unanswered on a bus that has just been brought up, even with the unit in place.
+    // UnitMFRC522::begin() opens with a write and does not need this
     uint8_t ver{};
-    if (!readRegister8(VERSION_REG, ver, 0) || ver != ws1850s_firmware_version) {
-        M5_LIB_LOGE("Cannot detect WS1850S %x", ver);
-        return false;
+    for (uint_fast8_t i = 0; i < DETECT_ATTEMPTS; ++i) {
+        if (readRegister8(VERSION_REG, ver, 0) && ver == ws1850s_firmware_version) {
+            return UnitMFRC522::begin();
+        }
+        m5::utility::delay(1);
     }
-    return UnitMFRC522::begin();
+    M5_LIB_LOGE("Cannot detect WS1850S %x", ver);
+    return false;
 }
 
 /*!
@@ -72,9 +80,9 @@ bool UnitWS1850S::configure_nfca()
 {
     if (!turnOffAntenna()) return false;
 
-    // ModeReg: full write of _cfg.mode_reg (default 0x3D includes CRCPreset[1:0]=01 for CRC_A).
+    // ModeReg: full write of _cfg_ws1850s.mode_reg (default 0x3D includes CRCPreset[1:0]=01 for CRC_A).
     // Full write ensures NFC-A state regardless of any prior register modifications.
-    if (!writeRegister8(MODE_REG, _cfg.mode_reg)) return false;
+    if (!writeRegister8(MODE_REG, _cfg_ws1850s.mode_reg)) return false;
 
     // NFC-A framing: TxCRCEn=0, RxCRCEn=0 (M5Unit-NFC appends/validates CRC_A in software).
     // TxFraming/RxFraming=00 (Type A). Hardware CRC enabled would double-CRC the frame.
@@ -82,7 +90,7 @@ bool UnitWS1850S::configure_nfca()
     if (!writeRegister8(RX_MODE_REG, static_cast<uint8_t>(0x00))) return false;
 
     // TxASKReg: Force100ASK=1 (0x40) — required for ISO/IEC 14443-3 Type A 100% ASK modulation.
-    // Matches MFRC522::begin() default and the previously-working state.
+    // Matches the MFRC522::begin() default.
     if (!writeRegister8(TX_ASK_REG, static_cast<uint8_t>(0x40))) return false;
 
     // Antenna driver conductance (reset defaults)
@@ -105,9 +113,9 @@ bool UnitWS1850S::configure_nfcb()
     // Antenna OFF before reconfiguring
     if (!turnOffAntenna()) return false;
 
-    // ModeReg: full write of _cfg.mode_reg with CRCPreset[1:0] forced to 0b11 (CRC_B 0xFFFF
+    // ModeReg: full write of _cfg_ws1850s.mode_reg with CRCPreset[1:0] forced to 0b11 (CRC_B 0xFFFF
     // preset). Full write ensures NFC-B state regardless of any prior register modifications.
-    if (!writeRegister8(MODE_REG, static_cast<uint8_t>((_cfg.mode_reg & 0xFC) | 0x03))) return false;
+    if (!writeRegister8(MODE_REG, static_cast<uint8_t>((_cfg_ws1850s.mode_reg & 0xFC) | 0x03))) return false;
 
     // TxModeReg: TxCRCEn=0 (software CRC), TxSpeed=000 (106 kbit), TxFraming=0b11 (Type B)
     if (!writeRegister8(TX_MODE_REG, static_cast<uint8_t>(0x03))) return false;
@@ -125,7 +133,7 @@ bool UnitWS1850S::configure_nfcb()
     constexpr uint8_t MOD_GSP_TABLE[16] = {
         0x3F, 0x3A, 0x35, 0x30, 0x2C, 0x28, 0x24, 0x20, 0x1E, 0x1C, 0x1B, 0x1A, 0x18, 0x16, 0x14, 0x10,
     };
-    const uint8_t depth   = std::min<uint8_t>(_cfg.nfcb_ask_depth, 15);
+    const uint8_t depth   = std::min<uint8_t>(_cfg_ws1850s.nfcb_ask_depth, 15);
     const uint8_t mod_gsp = MOD_GSP_TABLE[depth];
 
     // PN512 TypeBReg (address 0x1E): RxSOFReq/RxEOFReq/EOFSOFWidth/NoTxSOF/NoTxEOF/TxEGT.

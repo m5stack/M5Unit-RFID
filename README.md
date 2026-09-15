@@ -9,6 +9,12 @@ M5UnitUnified has a unified API and can control multiple units via PaHub, etc.
 
 Unit RFID2 is a radio frequency identification (RFID) read/write unit based on the 13.56MHz frequency band. It integrates the WS1850S chip and complies with the ISO/IEC 14443 Type A/B standard, supporting data read/write operations for RFID cards such as MIFARE and NTAG series. The unit communicates via the I2C interface and has a read/write distance of less than 20mm.
 
+### SKU:U107
+
+Unit UHF-RFID is an ultra high frequency (840-960MHz) RFID read/write unit based on the JRD-4035 module.
+It complies with EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C and communicates over UART at 115200 bps.
+The read distance is 1.5-2 m.
+
 
 ## PICC Support
 
@@ -60,6 +66,47 @@ Support may be expanded in future updates to cover PICCs not listed here.
 > **Note:** NFC-B is **not supported on the M5Dial builtin WS1850S**. The builtin small loop antenna cannot generate sufficient RF field for Type B PICC activation (Type B uses 10% ASK + BPSK subcarrier which is more sensitive to field strength and SNR than Type A). NFC-B requires the external **UnitRFID2** (with larger antenna).
 
 
+## UHF Tag Support
+
+| Standard | Detect | Read/Write | Notes |
+|---|---|---|---|
+| EPCglobal UHF Class 1 Gen 2 / ISO 18000-6C | Yes | Yes | Select, identify, read, write, lock and kill |
+
+Chip-specific commands: the Impinj Monza 4QT keeps two memory maps and can be switched between
+them. Two ways of drawing less current are offered: IDLE keeps everything the module was holding,
+while sleep resets the chip and loses the mask naming the tag being addressed.
+
+Chips seen on the bench: NXP UCODE 8, NXP UCODE G2iM, Alien Higgs-9 and Impinj Monza 4QT. More are
+recognised from their datasheets, and a chip in neither still reports its mask designer and model
+number, so it can be recognised by hand.
+
+### A Tag Resting On The Antenna
+
+A reader left as it ships reaches about a metre and a half, and a tag pressed against the antenna is
+far closer than that. At contact the reply overwhelms the receiver: most inventory rounds then find
+nothing at all, and roughly half of every read fails, even though the tag is as close as it can get
+and its RSSI is the strongest the reader ever reports.
+
+Bringing the working distance in fixes it. Either lower the transmit power, or lower the receiver
+gain, both of which the module's own tuning guide describes:
+
+```cpp
+unit.writeTransmitPower(2000);  // 20.00dBm, from a range of 17.00 to 26.00
+
+m5::unit::m100::DemodulatorParameters dp{};
+unit.readDemodulatorParameters(dp);
+dp.mixer_gain = m5::unit::m100::MixerGain::dB3;  // a step down from what the unit ships with
+dp.threshold  = 0x01B0;                          // the lowest value the chip documents
+unit.writeDemodulatorParameters(dp);
+```
+
+Lowering the receiver gain is the better of the two, since the transmit power is what energises the
+tag in the first place. Either way the reader stops reaching as far, which is the point.
+
+> **Note:** The module keeps these settings when it loses power. Writing them changes the unit until
+> something writes them back, so an application that wants the shipped behaviour has to restore it.
+
+
 ## Emulation
 
 Emulation is **NOT** supported on UnitRFID and UnitRFID2.
@@ -74,12 +121,12 @@ Use **QWIIC port (port_a)** with a QWIIC-GROVE conversion cable instead.
 
 > **Note:** GROVE port support may be added in a future update if SoftwareI2C performance improves.
 
-
 ## Related Link
 
 - [Unit RFID2 & Datasheet](https://docs.m5stack.com/en/unit/rfid2)
+- [Unit UHF-RFID & Datasheet](https://docs.m5stack.com/en/unit/uhf_rfid)
 
-## Required Libraries:
+## Required Libraries
 
 - [M5UnitUnified](https://github.com/m5stack/M5UnitUnified)
 - [M5Utility](https://github.com/m5stack/M5Utility)
@@ -97,17 +144,17 @@ See also [examples/UnitUnified](examples/UnitUnified)
 > **Note:** The examples in this library are imported from [M5Unit-NFC](https://github.com/m5stack/M5Unit-NFC) and shared between both libraries.
 > The same source file supports multiple units via `#define` switches.
 
-### For ArduinoIDE
-Each example contains the following block to select the unit:
+### For Arduino IDE settings
+Each NFC-A / NFC-B example contains the following block to select the unit:
 
 ```cpp
-// For UnitNFC
+// For UnitNFC (U216)
 // #define USING_UNIT_NFC
-// For CapCC1101
+// For CapCC1101 (U219)
 // #define USING_CAP_CC1101
-// For UnitRFID2 (external WS1850S)
+// For UnitRFID2 (U031-B)
 // #define USING_UNIT_RFID2
-// For M5Dial built-in WS1850S
+// For M5Dial Builtin WS1850S (K130)
 // #define USING_M5DIAL_BUILTIN_WS1850S
 ```
 
@@ -132,6 +179,13 @@ On ESP-IDF native builds (`idf.py`), the unit/board is selected via Kconfig inst
 |---|---|---|
 | `Kconfig.variant.full` | UnitRFID2 / M5Dial built-in WS1850S | NFC-A Detect / Dump / NDEF / PolicyOverride / ReadWrite / ValueBlock |
 | `Kconfig.variant.no_dial` | UnitRFID2 | NFC-B Detect / JapanIDCard (M5Dial built-in cannot do NFC-B) |
+
+`common/` also holds `Kconfig.variant.basic`, which is left out of the table on purpose: it offers
+only ST25R3916-based units, and the one example that sources it (NFC-A Emulation) does not build
+against the units this library drives.
+
+The UHF examples have no such choice, since the unit is the only one they run on. For those,
+`idf.py set-target <chip>` followed by `idf.py build flash monitor` is all that is needed.
 
 For this library, choose **UnitRFID2** (external WS1850S) or **M5Dial built-in WS1850S**.
 `examples/UnitUnified/common/variant.cmake` then maps the chosen `CONFIG_EXAMPLE_USING_*` to the source-level `USING_*` macro shared with the Arduino build.

@@ -632,7 +632,7 @@ bool UnitMFRC522::readBlock(uint8_t* rbuf, const uint8_t addr)
     }
 
     uint8_t cmd[4]{m5::stl::to_underlying(m5::nfc::a::Command::READ), addr};
-    uint8_t txLast{0};
+    uint8_t tx_last{0};
     uint16_t crc{};
     if (!calculate_crc(crc, cmd, 2)) {
         return false;
@@ -642,7 +642,7 @@ bool UnitMFRC522::readBlock(uint8_t* rbuf, const uint8_t addr)
 
     uint8_t tmp[16 + 2 /*CRC*/]{};
     uint16_t rlen = sizeof(tmp);
-    if (transceive(tmp, rlen, cmd, m5::stl::size(cmd), TIMEOUT_READ, txLast, 0, true /* return with CRC*/) &&
+    if (transceive(tmp, rlen, cmd, m5::stl::size(cmd), TIMEOUT_READ, tx_last, 0, true /* return with CRC*/) &&
         rlen == 18) {
         memcpy(rbuf, tmp, 16);
         return true;
@@ -661,7 +661,7 @@ bool UnitMFRC522::writeBlock(const uint8_t block, const uint8_t tx[16])
 
 bool UnitMFRC522::hlt()
 {
-    uint8_t buf[4]{}, txLast{};
+    uint8_t buf[4]{}, tx_last{};
     buf[0] = m5::stl::to_underlying(m5::nfc::a::Command::HLTA);
 
     uint16_t crc{};
@@ -671,7 +671,7 @@ bool UnitMFRC522::hlt()
     buf[2] = crc & 0xFF;
     buf[3] = (crc >> 8) & 0xFF;
 
-    return transmit_command(mfrc522::Command::Transceive, buf, sizeof(buf), txLast);  // No recv data
+    return transmit_command(mfrc522::Command::Transceive, buf, sizeof(buf), tx_last);  // No recv data
 }
 
 // MIFARE
@@ -747,7 +747,7 @@ bool UnitMFRC522::mifare_classic_transceive(const uint8_t* buf, const uint8_t le
     }
 
     uint8_t buf2[18]{};  // Add CRC 2 bytes to tail
-    uint8_t validBits{}, err{};
+    uint8_t valid_bits{}, err{};
     uint8_t rbuf[1]{};
     uint16_t rlen{1}, crc{};
 
@@ -758,7 +758,7 @@ bool UnitMFRC522::mifare_classic_transceive(const uint8_t* buf, const uint8_t le
     buf2[len]     = crc & 0xFF;
     buf2[len + 1] = (crc >> 8) & 0xFF;
 
-    auto result = transceive(rbuf, rlen, buf2, len + 2, timeout_ms, validBits, 0, false, &err);
+    auto result = transceive(rbuf, rlen, buf2, len + 2, timeout_ms, valid_bits, 0, false, &err);
     /*
       Remark: The MIFARE Increment, Decrement, and Restore command part 2 does not provide an acknowledgement, so the
       regular time out has to be used instead
@@ -767,8 +767,8 @@ bool UnitMFRC522::mifare_classic_transceive(const uint8_t* buf, const uint8_t le
         return timeout_success ? has_timeout(err) : false;
     }
 
-    if ((rlen != 1 || validBits != 4) || rbuf[0] != MIFARE_ACK) {
-        M5_LIB_LOGE("NACK %u:%u %02X", rlen, validBits, rbuf[0]);
+    if ((rlen != 1 || valid_bits != 4) || rbuf[0] != MIFARE_ACK) {
+        M5_LIB_LOGE("NACK %u:%u %02X", rlen, valid_bits, rbuf[0]);
         return false;
     }
     return true;
@@ -971,13 +971,13 @@ bool UnitMFRC522::wait_div_irq(const uint8_t irq, const uint32_t timeout_ms)
 }
 
 bool UnitMFRC522::transmit_command(const mfrc522::Command cmd, const uint8_t* buf, const uint8_t len,
-                                   const uint8_t txLast, const uint8_t rxAlign)
+                                   const uint8_t tx_last, const uint8_t rx_align)
 {
     if (!buf || !len) {
         return false;
     }
     // bit framing value RxAlign [6:4] TxLastBits [2:0]
-    uint8_t bfvalue = ((rxAlign & 0x07) << 4) | (txLast & 0x07);
+    uint8_t bfvalue = ((rx_align & 0x07) << 4) | (tx_last & 0x07);
 
     // Execute transceive command
     if (!write_pcd_command(mfrc522::Command::Idle) ||  // Force stop of running commands
@@ -995,7 +995,7 @@ bool UnitMFRC522::transmit_command(const mfrc522::Command cmd, const uint8_t* bu
 }
 
 bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf, const uint16_t len,
-                             const uint32_t timeout_ms, uint8_t& validBits, const uint8_t rxAlign, const bool crc,
+                             const uint32_t timeout_ms, uint8_t& valid_bits, const uint8_t rx_align, const bool crc,
                              uint8_t* error)
 {
     auto rx_len_org = rx_len;
@@ -1008,8 +1008,8 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf
         *error = 0;
     }
 
-    M5_LIB_LOGV("txLast:%u rxAlign:%u", validBits, rxAlign);
-    if (!transmit_command(mfrc522::Command::Transceive, buf, len, validBits, rxAlign)) {
+    M5_LIB_LOGV("tx_last:%u rx_align:%u", valid_bits, rx_align);
+    if (!transmit_command(mfrc522::Command::Transceive, buf, len, valid_bits, rx_align)) {
         return false;
     }
 
@@ -1048,14 +1048,14 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf
         M5_LIB_LOGD("Not enough %u/%u", fifo_len, rx_len_org);
         return false;
     }
-    if (!read_register_with_align(FIFO_DATA_REG, rbuf, fifo_len, rxAlign) ||
+    if (!read_register_with_align(FIFO_DATA_REG, rbuf, fifo_len, rx_align) ||
         // indicates the number of valid bits in the last received byte if this value is 000b, the whole byte is
         // valid
         !readRegister8(CONTROL_REG, valid, 0)) {
         return false;
     }
     valid &= 0x07;
-    validBits = valid;  // It's indicates the number of valid bits in the last received
+    valid_bits = valid;  // It's indicates the number of valid bits in the last received
 
     rx_len = fifo_len;
 
@@ -1084,7 +1084,7 @@ bool UnitMFRC522::transceive(uint8_t* rbuf, uint16_t& rx_len, const uint8_t* buf
         }
     }
 
-    M5_LIB_LOGV("OK:rxLast:%u", validBits);
+    M5_LIB_LOGV("OK:rxLast:%u", valid_bits);
     return true;
 }
 

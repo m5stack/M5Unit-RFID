@@ -1,4 +1,4 @@
-# Shared "Target unit / board" selection for the M5Unit-NFC UnitUnified examples (ESP-IDF).
+# Shared "Target unit / board" selection for the M5Unit-RFID UnitUnified examples (ESP-IDF).
 # Used by NFC-B examples (Detect/JapanIDCard) which do NOT support M5Dial built-in WS1850S.
 # rsource'd from each example's main/Kconfig.projbuild. The chosen CONFIG_EXAMPLE_USING_* is mapped
 # to the source-level USING_* macro in common/variant.cmake (shared with the Arduino build).

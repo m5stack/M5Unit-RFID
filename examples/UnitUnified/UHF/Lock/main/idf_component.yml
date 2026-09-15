@@ -1,0 +1,9 @@
+## Dependencies for the ESP-IDF build of the UHF-RFID Lock example.
+## - M5Unit-RFID is taken from this repository itself (self reference via path).
+## - M5UnitUnified is declared as a dependency of M5Unit-RFID's root idf_component.yml
+##   and pulled in transitively by the component manager.
+dependencies:
+  idf: ">=5.0"
+  m5stack/M5Unit-RFID:
+    path: "../../../../.."
+  m5stack/M5Unified: ">=0.2.17"

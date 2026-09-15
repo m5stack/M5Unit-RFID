@@ -50,6 +50,9 @@ dependencies.lock
 # clangd LSP (個人用、環境依存)
 .clangd
 
+# clangd index cache
+.cache/
+
 # macOS
 .DS_Store
 

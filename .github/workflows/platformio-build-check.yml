@@ -53,9 +53,15 @@ jobs:
       max-parallel: 20
 
       matrix:
+        # Cross design (skill m5-build-ci-matrix §3): the board axis is carried by one
+        # representative per distinct code path. NFCA (WS1850S over I2C, addI2C) and UHF
+        # (JRD4035 over UART, addUART) are different units on different transports, so both
+        # stay on the board axis. NFCB is the same unit, bus and wiring helper as NFCA, so
+        # one build on the representative board is enough to prove its stack compiles.
         example:
           - NFCA_Detect
-          - NFCB_Detect
+#          - NFCB_Detect   # via include (Core only): same unit/bus/wiring as NFCA
+          - UHF_Detect
 
         # Build CI board axis = distinct compile config only (skill m5-build-ci-matrix).
         # I2C path is a runtime M5.getBoard() branch (same compile for all boards), so
@@ -88,6 +94,11 @@ jobs:
           - latest
 
         include:
+          # Detect (NFCB, Core only) - moved off the board axis above
+          - example: NFCB_Detect
+            board: Core
+            framework: Arduino
+            espressif32: latest
           # NFCA Specific sketches (Core only)
           - example: NFCA_Dump
             board: Core
@@ -105,6 +116,10 @@ jobs:
             board: Core
             framework: Arduino
             espressif32: latest
+          - example: NFCA_PolicyOverride
+            board: Core
+            framework: Arduino
+            espressif32: latest
           # NFCA Detect on M5Dial with builtin WS1850S
           - example: NFCA_Detect
             board: Dial_Builtin
@@ -112,6 +127,52 @@ jobs:
             espressif32: latest
           # NFCB JapanIDCard (Core only)
           - example: NFCB_JapanIDCard
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          # UHF sketches other than Detect (Core only). Detect carries the board axis above,
+          # which is what covers the other compile configurations for this family
+          - example: UHF_Dump
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_ReadWrite
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_ReaderSettings
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_Lock
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_Kill
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_WriteEPC
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_SleepIdle
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_MonzaQT
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_PermanentLock
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_NxpG2X
+            board: Core
+            framework: Arduino
+            espressif32: latest
+          - example: UHF_NxpReadProtect
             board: Core
             framework: Arduino
             espressif32: latest
