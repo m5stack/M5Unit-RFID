@@ -1,7 +1,6 @@
 var searchData=
 [
-  ['calccrc_0',['CalcCRC',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0a3b8f7ce3dcfe31207ffafa7a9226411b',1,'m5::unit::mfrc522']]],
-  ['cannot_5fresolve_5fcollision_1',['CANNOT_RESOLVE_COLLISION',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a2bf5c9b813369954fde8de7100c06768',1,'m5::unit::mfrc522']]],
-  ['communication_2',['COMMUNICATION',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a3f27148a0073e6705ee8277dc392ab7d',1,'m5::unit::mfrc522']]],
-  ['crc_3',['CRC',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a1a4b5d84a0328c4a33bd669c608a34c3',1,'m5::unit::mfrc522']]]
+  ['badargument_0',['BadArgument',['../uhf_8hpp.html#accd27228ae076137a2852ab54479c421af6ed8680cdcc84dd73c333b9b4efa900',1,'m5::uhf']]],
+  ['blockpermalockfail_1',['BlockPermalockFail',['../m100__frame_8hpp.html#a049aa8f77e8b3a8474b3a40027e71cefa1906224df0857ec01730615d8cf7a69b',1,'m5::unit::m100']]],
+  ['busy_2',['Busy',['../uhf_8hpp.html#accd27228ae076137a2852ab54479c421ad8a942ef2b04672adfafef0ad817a407',1,'m5::uhf']]]
 ];

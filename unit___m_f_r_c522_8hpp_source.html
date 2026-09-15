@@ -27,7 +27,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">M5Unit-RFID<span id="projectnumber">&#160;0.1.0 git rev:06ade4b</span>
+   <div id="projectname">M5Unit-RFID<span id="projectnumber">&#160;0.2.0 git rev:79c1939</span>
    </div>
   </td>
  </tr>
@@ -140,7 +140,7 @@ $(function(){initNavTree('unit___m_f_r_c522_8hpp_source.html',''); initResizable
 <div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span> </div>
 <div class="foldopen" id="foldopen00051" data-start="{" data-end="};">
 <div class="line"><a id="l00051" name="l00051"></a><span class="lineno"><a class="line" href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882">   51</a></span><span class="keyword">enum class</span> <a class="code hl_enumeration" href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882">ReceiverGain</a> : uint8_t {</div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>    <a class="code hl_enumvalue" href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882ad92762048858f04ab5fb33d5a1669ab1">dB18</a>,  </div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>    dB18,  </div>
 <div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>    <a class="code hl_enumvalue" href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882a69a0b5f11f71eef728f68109dcaa9d41">dB23</a>,  </div>
 <div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>    <span class="comment">// 2 = dB18 (duplicated),</span></div>
 <div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>    <span class="comment">// 3 = dB23 (duplicated)</span></div>
@@ -331,10 +331,10 @@ $(function(){initNavTree('unit___m_f_r_c522_8hpp_source.html',''); initResizable
 <div class="line"><a id="l00454" name="l00454"></a><span class="lineno">  454</span>    <span class="keywordtype">bool</span> wait_div_irq(<span class="keyword">const</span> uint8_t irq, <span class="keyword">const</span> uint32_t duration);</div>
 <div class="line"><a id="l00455" name="l00455"></a><span class="lineno">  455</span> </div>
 <div class="line"><a id="l00456" name="l00456"></a><span class="lineno">  456</span>    <span class="comment">// transceive</span></div>
-<div class="line"><a id="l00457" name="l00457"></a><span class="lineno">  457</span>    <span class="keywordtype">bool</span> transmit_command(<span class="keyword">const</span> mfrc522::Command cmd, <span class="keyword">const</span> uint8_t* buf, <span class="keyword">const</span> uint8_t len, <span class="keyword">const</span> uint8_t txLast = 0,</div>
-<div class="line"><a id="l00458" name="l00458"></a><span class="lineno">  458</span>                          <span class="keyword">const</span> uint8_t rxAlign = 0);</div>
-<div class="line"><a id="l00459" name="l00459"></a><span class="lineno">  459</span>    <span class="keywordtype">bool</span> transceive(uint8_t* rbuf, uint16_t&amp; rlen, <span class="keyword">const</span> uint8_t* buf, <span class="keyword">const</span> uint16_t len, <span class="keyword">const</span> uint32_t timeout_ms,</div>
-<div class="line"><a id="l00460" name="l00460"></a><span class="lineno">  460</span>                    uint8_t&amp; validBits, <span class="keyword">const</span> uint8_t rxAlign = 0, <span class="keyword">const</span> <span class="keywordtype">bool</span> crc = <span class="keyword">false</span>, uint8_t* err = <span class="keyword">nullptr</span>);</div>
+<div class="line"><a id="l00457" name="l00457"></a><span class="lineno">  457</span>    <span class="keywordtype">bool</span> transmit_command(<span class="keyword">const</span> mfrc522::Command cmd, <span class="keyword">const</span> uint8_t* buf, <span class="keyword">const</span> uint8_t len, <span class="keyword">const</span> uint8_t tx_last = 0,</div>
+<div class="line"><a id="l00458" name="l00458"></a><span class="lineno">  458</span>                          <span class="keyword">const</span> uint8_t rx_align = 0);</div>
+<div class="line"><a id="l00459" name="l00459"></a><span class="lineno">  459</span>    <span class="keywordtype">bool</span> transceive(uint8_t* rbuf, uint16_t&amp; rx_len, <span class="keyword">const</span> uint8_t* buf, <span class="keyword">const</span> uint16_t len, <span class="keyword">const</span> uint32_t timeout_ms,</div>
+<div class="line"><a id="l00460" name="l00460"></a><span class="lineno">  460</span>                    uint8_t&amp; valid_bits, <span class="keyword">const</span> uint8_t rx_align = 0, <span class="keyword">const</span> <span class="keywordtype">bool</span> crc = <span class="keyword">false</span>, uint8_t* error = <span class="keyword">nullptr</span>);</div>
 <div class="line"><a id="l00461" name="l00461"></a><span class="lineno">  461</span> </div>
 <div class="line"><a id="l00462" name="l00462"></a><span class="lineno">  462</span>    <span class="keywordtype">bool</span> picc_haltA();</div>
 <div class="line"><a id="l00463" name="l00463"></a><span class="lineno">  463</span> </div>
@@ -345,14 +345,14 @@ $(function(){initNavTree('unit___m_f_r_c522_8hpp_source.html',''); initResizable
 <div class="line"><a id="l00468" name="l00468"></a><span class="lineno">  468</span> </div>
 <div class="line"><a id="l00469" name="l00469"></a><span class="lineno">  469</span>    <span class="comment">// NFC-A</span></div>
 <div class="line"><a id="l00470" name="l00470"></a><span class="lineno">  470</span>    <span class="keywordtype">bool</span> request_wakeup(uint16_t&amp; atqa, <span class="keyword">const</span> <span class="keywordtype">bool</span> <a class="code hl_function" href="classm5_1_1unit_1_1_unit_m_f_r_c522.html#ab0e1e55c2a360e9ea93ef376ba4e1233">request</a>);</div>
-<div class="line"><a id="l00471" name="l00471"></a><span class="lineno">  471</span>    <span class="keywordtype">bool</span> anti_collision(<span class="keyword">const</span> uint8_t cascadeLevel, uint8_t* buf);</div>
+<div class="line"><a id="l00471" name="l00471"></a><span class="lineno">  471</span>    <span class="keywordtype">bool</span> anti_collision(<span class="keyword">const</span> uint8_t lv, uint8_t* buf);</div>
 <div class="line"><a id="l00472" name="l00472"></a><span class="lineno">  472</span> </div>
 <div class="line"><a id="l00473" name="l00473"></a><span class="lineno">  473</span>    <span class="comment">// MIFARE classic</span></div>
 <div class="line"><a id="l00474" name="l00474"></a><span class="lineno">  474</span>    <span class="keywordtype">bool</span> mifare_classic_authenticate(<span class="keyword">const</span> m5::nfc::a::Command cmd, <span class="keyword">const</span> m5::nfc::a::PICC&amp; picc, <span class="keyword">const</span> uint8_t block,</div>
 <div class="line"><a id="l00475" name="l00475"></a><span class="lineno">  475</span>                                     <span class="keyword">const</span> m5::nfc::a::mifare::classic::Key&amp; key);</div>
 <div class="line"><a id="l00476" name="l00476"></a><span class="lineno">  476</span>    <span class="keywordtype">bool</span> mifare_classic_transceive(<span class="keyword">const</span> m5::nfc::a::Command cmd, <span class="keyword">const</span> uint8_t block, <span class="keyword">const</span> uint32_t timeout_ms);</div>
 <div class="line"><a id="l00477" name="l00477"></a><span class="lineno">  477</span>    <span class="keywordtype">bool</span> mifare_classic_transceive(<span class="keyword">const</span> uint8_t* buf, <span class="keyword">const</span> uint8_t len, <span class="keyword">const</span> uint32_t timeout_ms,</div>
-<div class="line"><a id="l00478" name="l00478"></a><span class="lineno">  478</span>                                   <span class="keyword">const</span> <span class="keywordtype">bool</span> usingtimeout = <span class="keyword">false</span>);</div>
+<div class="line"><a id="l00478" name="l00478"></a><span class="lineno">  478</span>                                   <span class="keyword">const</span> <span class="keywordtype">bool</span> timeout_success = <span class="keyword">false</span>);</div>
 <div class="line"><a id="l00479" name="l00479"></a><span class="lineno">  479</span> </div>
 <div class="line"><a id="l00480" name="l00480"></a><span class="lineno">  480</span>    <span class="comment">// crc</span></div>
 <div class="line"><a id="l00481" name="l00481"></a><span class="lineno">  481</span>    <span class="keyword">inline</span> <span class="keywordtype">bool</span> calculate_crc(uint16_t&amp; result, <span class="keyword">const</span> uint8_t* buf, <span class="keyword">const</span> uint8_t len)</div>
@@ -475,7 +475,6 @@ $(function(){initNavTree('unit___m_f_r_c522_8hpp_source.html',''); initResizable
 <div class="ttc" id="aunit___m_f_r_c522_8hpp_html_a4edfd13d8a7d2549d567a17d55503882a69a0b5f11f71eef728f68109dcaa9d41"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882a69a0b5f11f71eef728f68109dcaa9d41">m5::unit::mfrc522::ReceiverGain::dB23</a></div><div class="ttdeci">@ dB23</div><div class="ttdoc">23 decibel</div></div>
 <div class="ttc" id="aunit___m_f_r_c522_8hpp_html_a4edfd13d8a7d2549d567a17d55503882a885f1fa1721c7d9709ef411f7ca3cc60"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882a885f1fa1721c7d9709ef411f7ca3cc60">m5::unit::mfrc522::ReceiverGain::dB38</a></div><div class="ttdeci">@ dB38</div><div class="ttdoc">38 decibel</div></div>
 <div class="ttc" id="aunit___m_f_r_c522_8hpp_html_a4edfd13d8a7d2549d567a17d55503882ab36c7c09c08e98104c4b39f9f319b630"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882ab36c7c09c08e98104c4b39f9f319b630">m5::unit::mfrc522::ReceiverGain::dB43</a></div><div class="ttdeci">@ dB43</div><div class="ttdoc">43 decibel</div></div>
-<div class="ttc" id="aunit___m_f_r_c522_8hpp_html_a4edfd13d8a7d2549d567a17d55503882ad92762048858f04ab5fb33d5a1669ab1"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882ad92762048858f04ab5fb33d5a1669ab1">m5::unit::mfrc522::ReceiverGain::dB18</a></div><div class="ttdeci">@ dB18</div><div class="ttdoc">18 decibel</div></div>
 <div class="ttc" id="aunit___m_f_r_c522_8hpp_html_a4edfd13d8a7d2549d567a17d55503882afbb696134f8da7bfe784ad7cf8b6d269"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#a4edfd13d8a7d2549d567a17d55503882afbb696134f8da7bfe784ad7cf8b6d269">m5::unit::mfrc522::ReceiverGain::dB48</a></div><div class="ttdeci">@ dB48</div><div class="ttdoc">48 decibel</div></div>
 <div class="ttc" id="aunit___m_f_r_c522_8hpp_html_ab9d90d45297fb153bf27b05fe3ce10b5"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5">m5::unit::mfrc522::Error</a></div><div class="ttdeci">Error</div><div class="ttdoc">API error code.</div><div class="ttdef"><b>Definition</b> unit_MFRC522.hpp:66</div></div>
 <div class="ttc" id="aunit___m_f_r_c522_8hpp_html_ab9d90d45297fb153bf27b05fe3ce10b5a070a0fb40f6c308ab544b227660aadff"><div class="ttname"><a href="unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a070a0fb40f6c308ab544b227660aadff">m5::unit::mfrc522::Error::TIMEOUT</a></div><div class="ttdeci">@ TIMEOUT</div><div class="ttdoc">Timeout occurs (0x83)</div></div>

@@ -1,9 +1,8 @@
 var searchData=
 [
-  ['timeout_0',['TIMEOUT',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a070a0fb40f6c308ab544b227660aadff',1,'m5::unit::mfrc522']]],
-  ['transceive_1',['Transceive',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0a980700fc1ba011837d814f0917720c17',1,'m5::unit::mfrc522']]],
-  ['transmit_2',['Transmit',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0a6c2958de5e2295b8cb67bac908244879',1,'m5::unit::mfrc522']]],
-  ['turnoffantenna_3',['turnOffAntenna',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#ac039065b87206b7f8bbc7adb775943b5',1,'m5::unit::UnitMFRC522']]],
-  ['turnonantenna_4',['turnOnAntenna',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a33a4154e199bca3520b06ffc3a088afd',1,'m5::unit::UnitMFRC522']]],
-  ['type_5fb_5freg_5',['TYPE_B_REG',['../pn512__register_8hpp.html#ac26a09fd679ac7badae5ef82eb94b8cf',1,'m5::unit::pn512']]]
+  ['occur_5fcollision_0',['OCCUR_COLLISION',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a70a10eb0e0af045656cc8ce21d834392',1,'m5::unit::mfrc522']]],
+  ['ok_1',['Ok',['../m100__frame_8hpp.html#aa14649b9d5fcf8d6441a1e9d5a87c7cdaa60852f204ed8028c1c58808b746d115',1,'m5::unit::m100']]],
+  ['oldest_2',['oldest',['../classm5_1_1unit_1_1_u_h_f_r_f_i_d_component.html#aa1caa7afc0928f37167f02a187b5ce02',1,'m5::unit::UHFRFIDComponent']]],
+  ['open_3',['Open',['../uhf_8hpp.html#aa64fb199e68e67769b8802278f1fee04ac3bf447eabe632720a3aa1a7ce401274',1,'m5::uhf']]],
+  ['operator_5b_5d_4',['operator[]',['../structm5_1_1uhf_1_1_epc.html#a3446230f2658f7c3cb5e4b84dc4ac163',1,'m5::uhf::Epc::operator[](const size_t i) const'],['../structm5_1_1uhf_1_1_epc.html#a847460f39e2bc2424b4c6dbed5bfda04',1,'m5::uhf::Epc::operator[](const size_t i)'],['../structm5_1_1uhf_1_1_tid.html#a5cf8ddf2f616f0569377e6a014f379f6',1,'m5::uhf::Tid::operator[](const size_t i) const'],['../structm5_1_1uhf_1_1_tid.html#a24e32c784cd58a4392fffb469decf1f3',1,'m5::uhf::Tid::operator[](const size_t i)']]]
 ];

@@ -1,16 +1,19 @@
 var searchData=
 [
-  ['m5_0',['m5',['../namespacem5.html',1,'']]],
-  ['m5unit_20rfid_1',['M5Unit-RFID',['../index.html',1,'']]],
-  ['m5unitunifiedrfid_2ehpp_2',['M5UnitUnifiedRFID.hpp',['../_m5_unit_unified_r_f_i_d_8hpp.html',1,'']]],
-  ['max_5ffifo_5fdepth_3',['MAX_FIFO_DEPTH',['../unit___m_f_r_c522_8hpp.html#abee1dfbe4e3323a1ad78ade7c5a49064',1,'m5::unit::mfrc522']]],
-  ['mem_4',['Mem',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0adba5553473d129a7985fb532dc249ff4',1,'m5::unit::mfrc522']]],
-  ['mfauthent_5',['MFAuthent',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0abc03250648b1ad2b406fe3f4934b98b7',1,'m5::unit::mfrc522']]],
-  ['mifare_5fnack_6',['MIFARE_NACK',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a84285d7fe0894b43e2d179fc85e99538',1,'m5::unit::mfrc522']]],
-  ['mifareclassicauthenticatea_7',['mifareClassicAuthenticateA',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a0887e8b5dc7e429519b5a202170e54aa',1,'m5::unit::UnitMFRC522']]],
-  ['mifareclassicauthenticateb_8',['mifareClassicAuthenticateB',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a7747bc4ef104a32261656c7ce7aab3be',1,'m5::unit::UnitMFRC522']]],
-  ['mifareclassicstopcrypto1_9',['mifareClassicStopCrypto1',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#af34dd4ecbfcb8ebd86ed1cf59e6c3dec',1,'m5::unit::UnitMFRC522']]],
-  ['mifareclassicvalueblock_10',['mifareClassicValueBlock',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#ab83ed747644047b2b4786f324c5563b6',1,'m5::unit::UnitMFRC522']]],
-  ['mode_11',['mode',['../structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html#a93e0a33adfdf22d3c468d5637289ca0d',1,'m5::unit::UnitMFRC522::config_t']]],
-  ['mode_5freg_12',['mode_reg',['../structm5_1_1unit_1_1_unit_m_f_r_c522_1_1config__t.html#a86fc3dd9aad83b1e781b90742782e242',1,'m5::unit::UnitMFRC522::config_t']]]
+  ['identify_0',['identify',['../classm5_1_1uhf_1_1_u_h_f_layer.html#acaedb29317506a7ed810dc9789d15ed1',1,'m5::uhf::UHFLayer']]],
+  ['idle_1',['Idle',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0ae599161956d626eda4cb0a5ffb85271c',1,'m5::unit::mfrc522']]],
+  ['if_5fgain_5fmax_2',['IF_GAIN_MAX',['../m100__frame_8hpp.html#ad37da56ebce374ef242487632016a98e',1,'m5::unit::m100']]],
+  ['ifgain_3',['IFGain',['../m100__frame_8hpp.html#ad1b746c01a6e9b4b08a73427ee4d2f2d',1,'m5::unit::m100']]],
+  ['ifgaindb_4',['ifGainDb',['../m100__frame_8hpp.html#af51b3047e0bcf3c8a783be2cd2093821',1,'m5::unit::m100']]],
+  ['inpolling_5',['inPolling',['../classm5_1_1unit_1_1_u_h_f_r_f_i_d_component.html#ace93fd6dabedcc39ed4ffead55f08030',1,'m5::unit::UHFRFIDComponent']]],
+  ['insufficientpower_6',['InsufficientPower',['../uhf_8hpp.html#accd27228ae076137a2852ab54479c421a7734aaa8b79e906941d3dfd0a6d9de46',1,'m5::uhf']]],
+  ['internal_7',['INTERNAL',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5a182fa1c42a2468f8488e6dcf75a81b81',1,'m5::unit::mfrc522']]],
+  ['invalidparameter_8',['InvalidParameter',['../m100__frame_8hpp.html#a049aa8f77e8b3a8474b3a40027e71cefa627251310d3384b591e4138be21145d5',1,'m5::unit::m100']]],
+  ['inventoryfail_9',['InventoryFail',['../m100__frame_8hpp.html#a049aa8f77e8b3a8474b3a40027e71cefaa459f58675785a51f6978aba1e7281c7',1,'m5::unit::m100']]],
+  ['is_5ferror_5fframe_10',['is_error_frame',['../m100__frame_8hpp.html#a79e2ebfa090f36d98f44cab7357f0bbb',1,'m5::unit::m100']]],
+  ['is_5fno_5ftag_11',['is_no_tag',['../m100__frame_8hpp.html#a6260f555b0d9c941868e9d1726e53ab3',1,'m5::unit::m100']]],
+  ['is_5ftag_5ferror_12',['is_tag_error',['../m100__frame_8hpp.html#ae6f979515e4d50c2e47110988f9a1ab5',1,'m5::unit::m100']]],
+  ['is_5fworth_5fretrying_13',['is_worth_retrying',['../m100__frame_8hpp.html#a5a89bd710ae9978d6b3dab524fa9dcf9',1,'m5::unit::m100']]],
+  ['ispermanent_14',['isPermanent',['../uhf_8hpp.html#a33419227b5ac84df744ed8c065ff2e20',1,'m5::uhf']]],
+  ['isselected_15',['isSelected',['../classm5_1_1uhf_1_1_u_h_f_layer.html#a8f61b085806c14916fd6cb60986a49cf',1,'m5::uhf::UHFLayer']]]
 ];

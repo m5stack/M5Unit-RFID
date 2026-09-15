@@ -1,4 +1,25 @@
 var searchData=
 [
-  ['hlt_0',['hlt',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#ad77b66c90b45bda4e1eb8dc124d8f5fc',1,'m5::unit::UnitMFRC522']]]
+  ['calculatecrc_0',['calculateCRC',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#ab021c4a5363b2e43f9efd97e6058f4c4',1,'m5::unit::UnitMFRC522']]],
+  ['calculatesoftwarecrc_1',['calculateSoftwareCRC',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#aa99b1f653a5d2fb6e6c67beef79d7112',1,'m5::unit::UnitMFRC522']]],
+  ['checksum_2',['checksum',['../m100__frame_8hpp.html#a9b01d09c0bc07301c6abf75b16ac4df5',1,'m5::unit::m100']]],
+  ['chipasstring_3',['chipAsString',['../structm5_1_1uhf_1_1_tag.html#adcdd7701cab7ad3f7f45dcd8514983a4',1,'m5::uhf::Tag']]],
+  ['chipblockpermalocksupport_4',['chipBlockPermalockSupport',['../uhf_8hpp.html#ab756eb0c7bba098da93e607737461194',1,'m5::uhf']]],
+  ['chipepcmaxbits_5',['chipEpcMaxBits',['../uhf_8hpp.html#a11d0029c8d0a83dc6c7d69b5140a1c05',1,'m5::uhf']]],
+  ['chipfromtid_6',['chipFromTid',['../uhf_8hpp.html#a64f5622a13af3de36a89305f79785240',1,'m5::uhf']]],
+  ['chiphasnousermemory_7',['chipHasNoUserMemory',['../uhf_8hpp.html#a99c0e8e56e427cc5de71fa4146d590b6',1,'m5::uhf']]],
+  ['chipnxpcustomcommandsupport_8',['chipNxpCustomCommandSupport',['../uhf_8hpp.html#aa7f192742eea4639d6d33d944cbb8da1',1,'m5::uhf']]],
+  ['chippermalockblockbits_9',['chipPermalockBlockBits',['../uhf_8hpp.html#a6cbaa78cea7f89e3d87a69b64ebfbc39',1,'m5::uhf']]],
+  ['chippermalockblockcount_10',['chipPermalockBlockCount',['../uhf_8hpp.html#afde3e16b5ff7291003dd328a9b46870d',1,'m5::uhf']]],
+  ['chippermalocklastblockbits_11',['chipPermalockLastBlockBits',['../uhf_8hpp.html#ad88028667de31de9194e774233588490',1,'m5::uhf']]],
+  ['chipqtsupport_12',['chipQTSupport',['../uhf_8hpp.html#ac96094c9fe9753934f8bf29822a123d5',1,'m5::uhf']]],
+  ['chipsharedusermemorybits_13',['chipSharedUserMemoryBits',['../uhf_8hpp.html#a03bb044b3dc0f94e29c026985b095f87',1,'m5::uhf']]],
+  ['chiptidwords_14',['chipTidWords',['../uhf_8hpp.html#a709b0453075505abfc540259a5b43802',1,'m5::uhf']]],
+  ['chipusermemorybits_15',['chipUserMemoryBits',['../uhf_8hpp.html#ae6183ade3e87eb36ae23e71fd73ef5d3',1,'m5::uhf']]],
+  ['classify_16',['classify',['../classm5_1_1unit_1_1_unit_j_r_d4035.html#ac5aa0c006ef6f9e7dc949fbbeaceb7aa',1,'m5::unit::UnitJRD4035::classify()'],['../classm5_1_1unit_1_1_u_h_f_r_f_i_d_component.html#af9277a8e29cfa406c35f266a96a95525',1,'m5::unit::UHFRFIDComponent::classify(const uint8_t error_code) const =0']]],
+  ['cleardropped_17',['clearDropped',['../classm5_1_1unit_1_1_u_h_f_r_f_i_d_component.html#a8186851622088ed5a26d35479fc9e6ec',1,'m5::unit::UHFRFIDComponent']]],
+  ['config_18',['config',['../classm5_1_1unit_1_1_unit_j_r_d4035.html#a56125895690533eb0b49960a31f7ffbb',1,'m5::unit::UnitJRD4035::config() const'],['../classm5_1_1unit_1_1_unit_j_r_d4035.html#a8315e71f30db8526ead5d2e95075749a',1,'m5::unit::UnitJRD4035::config(const config_t &amp;cfg)'],['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a04c1c8723653c10dce21375921a91016',1,'m5::unit::UnitMFRC522::config()'],['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a7969f2ea583daa2a3a55211c5b2d94b1',1,'m5::unit::UnitMFRC522::config(const config_t &amp;cfg)'],['../classm5_1_1unit_1_1_u_h_f_r_f_i_d_component.html#ac25c5c958af63c4dc7704176d8e56790',1,'m5::unit::UHFRFIDComponent::config() const'],['../classm5_1_1unit_1_1_u_h_f_r_f_i_d_component.html#ab9ea29de7d23c8e88c9f61fd75ed4824',1,'m5::unit::UHFRFIDComponent::config(const config_t &amp;cfg)'],['../classm5_1_1unit_1_1_unit_w_s1850_s.html#a79c760024a7f420cf3203f55c94936b9',1,'m5::unit::UnitWS1850S::config() const'],['../classm5_1_1unit_1_1_unit_w_s1850_s.html#a8fde6b9a53a1b977bc68ed057b330807',1,'m5::unit::UnitWS1850S::config(const config_t &amp;cfg)']]],
+  ['configure_5fnfca_19',['configure_nfca',['../classm5_1_1unit_1_1_unit_w_s1850_s.html#a0820484582811ba161bf75013491c7d3',1,'m5::unit::UnitWS1850S']]],
+  ['configure_5fnfcb_20',['configure_nfcb',['../classm5_1_1unit_1_1_unit_w_s1850_s.html#adca283c96ae9d458ac3c6f073abb1fed',1,'m5::unit::UnitWS1850S']]],
+  ['configurenfcmode_21',['configureNFCMode',['../classm5_1_1unit_1_1_unit_m_f_r_c522.html#a434a10f345d99ca2609bb54ba06a6634',1,'m5::unit::UnitMFRC522::configureNFCMode()'],['../classm5_1_1unit_1_1_unit_w_s1850_s.html#ad4125ddd121ec87541aab7ec4935972c',1,'m5::unit::UnitWS1850S::configureNFCMode()']]]
 ];

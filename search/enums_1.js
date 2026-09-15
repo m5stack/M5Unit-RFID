@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['error_0',['Error',['../unit___m_f_r_c522_8hpp.html#ab9d90d45297fb153bf27b05fe3ce10b5',1,'m5::unit::mfrc522']]]
+  ['chip_0',['Chip',['../uhf_8hpp.html#abd3af0b13eabb2643a312d46b1b49054',1,'m5::uhf']]],
+  ['command_1',['Command',['../unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0',1,'m5::unit::mfrc522']]]
 ];

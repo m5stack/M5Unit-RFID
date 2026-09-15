@@ -27,7 +27,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">M5Unit-RFID<span id="projectnumber">&#160;0.1.0 git rev:06ade4b</span>
+   <div id="projectname">M5Unit-RFID<span id="projectnumber">&#160;0.2.0 git rev:79c1939</span>
    </div>
   </td>
  </tr>
@@ -287,12 +287,12 @@ bool&#160;</td><td class="memItemRight" valign="bottom"><b>wait_comm_irq</b> (co
 <tr class="memitem:af1cce2facafa8e70a4c13d13bf345385" id="r_af1cce2facafa8e70a4c13d13bf345385"><td class="memItemLeft" align="right" valign="top"><a id="af1cce2facafa8e70a4c13d13bf345385" name="af1cce2facafa8e70a4c13d13bf345385"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>wait_div_irq</b> (const uint8_t irq, const uint32_t duration)</td></tr>
 <tr class="separator:af1cce2facafa8e70a4c13d13bf345385"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a520732f26dc5569a01a92d2a690e76dc" id="r_a520732f26dc5569a01a92d2a690e76dc"><td class="memItemLeft" align="right" valign="top"><a id="a520732f26dc5569a01a92d2a690e76dc" name="a520732f26dc5569a01a92d2a690e76dc"></a>
-bool&#160;</td><td class="memItemRight" valign="bottom"><b>transmit_command</b> (const <a class="el" href="unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0">mfrc522::Command</a> cmd, const uint8_t *buf, const uint8_t len, const uint8_t txLast=0, const uint8_t rxAlign=0)</td></tr>
-<tr class="separator:a520732f26dc5569a01a92d2a690e76dc"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ab2deb6beacc182b1a20ebfd51fee3be8" id="r_ab2deb6beacc182b1a20ebfd51fee3be8"><td class="memItemLeft" align="right" valign="top"><a id="ab2deb6beacc182b1a20ebfd51fee3be8" name="ab2deb6beacc182b1a20ebfd51fee3be8"></a>
-bool&#160;</td><td class="memItemRight" valign="bottom"><b>transceive</b> (uint8_t *rbuf, uint16_t &amp;rlen, const uint8_t *buf, const uint16_t len, const uint32_t timeout_ms, uint8_t &amp;validBits, const uint8_t rxAlign=0, const bool crc=false, uint8_t *err=nullptr)</td></tr>
-<tr class="separator:ab2deb6beacc182b1a20ebfd51fee3be8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a78d4911cac224fe08b8fbde5f26bbde3" id="r_a78d4911cac224fe08b8fbde5f26bbde3"><td class="memItemLeft" align="right" valign="top"><a id="a78d4911cac224fe08b8fbde5f26bbde3" name="a78d4911cac224fe08b8fbde5f26bbde3"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>transmit_command</b> (const <a class="el" href="unit___m_f_r_c522_8hpp.html#ae1915490700debf86e8d22c38811f7f0">mfrc522::Command</a> cmd, const uint8_t *buf, const uint8_t len, const uint8_t tx_last=0, const uint8_t rx_align=0)</td></tr>
+<tr class="separator:a78d4911cac224fe08b8fbde5f26bbde3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0fd2b049553f6049bf77bc280c494554" id="r_a0fd2b049553f6049bf77bc280c494554"><td class="memItemLeft" align="right" valign="top"><a id="a0fd2b049553f6049bf77bc280c494554" name="a0fd2b049553f6049bf77bc280c494554"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>transceive</b> (uint8_t *rbuf, uint16_t &amp;rx_len, const uint8_t *buf, const uint16_t len, const uint32_t timeout_ms, uint8_t &amp;valid_bits, const uint8_t rx_align=0, const bool crc=false, uint8_t *error=nullptr)</td></tr>
+<tr class="separator:a0fd2b049553f6049bf77bc280c494554"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af18cb9dfcae0135e9b301c2256319973" id="r_af18cb9dfcae0135e9b301c2256319973"><td class="memItemLeft" align="right" valign="top"><a id="af18cb9dfcae0135e9b301c2256319973" name="af18cb9dfcae0135e9b301c2256319973"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>picc_haltA</b> ()</td></tr>
 <tr class="separator:af18cb9dfcae0135e9b301c2256319973"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -308,18 +308,18 @@ bool&#160;</td><td class="memItemRight" valign="bottom"><b>write_page</b> (const
 <tr class="memitem:a68a97d596a74fe941b3c2bebe2e82750" id="r_a68a97d596a74fe941b3c2bebe2e82750"><td class="memItemLeft" align="right" valign="top"><a id="a68a97d596a74fe941b3c2bebe2e82750" name="a68a97d596a74fe941b3c2bebe2e82750"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>request_wakeup</b> (uint16_t &amp;atqa, const bool <a class="el" href="#ab0e1e55c2a360e9ea93ef376ba4e1233">request</a>)</td></tr>
 <tr class="separator:a68a97d596a74fe941b3c2bebe2e82750"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aa9e9d74a6c8451f6e6a2edd030752a5a" id="r_aa9e9d74a6c8451f6e6a2edd030752a5a"><td class="memItemLeft" align="right" valign="top"><a id="aa9e9d74a6c8451f6e6a2edd030752a5a" name="aa9e9d74a6c8451f6e6a2edd030752a5a"></a>
-bool&#160;</td><td class="memItemRight" valign="bottom"><b>anti_collision</b> (const uint8_t cascadeLevel, uint8_t *buf)</td></tr>
-<tr class="separator:aa9e9d74a6c8451f6e6a2edd030752a5a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab1ffb6a94791ca2cde2f7bdc918941ce" id="r_ab1ffb6a94791ca2cde2f7bdc918941ce"><td class="memItemLeft" align="right" valign="top"><a id="ab1ffb6a94791ca2cde2f7bdc918941ce" name="ab1ffb6a94791ca2cde2f7bdc918941ce"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>anti_collision</b> (const uint8_t lv, uint8_t *buf)</td></tr>
+<tr class="separator:ab1ffb6a94791ca2cde2f7bdc918941ce"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5453b39707a98cb40f26c691c117d29c" id="r_a5453b39707a98cb40f26c691c117d29c"><td class="memItemLeft" align="right" valign="top"><a id="a5453b39707a98cb40f26c691c117d29c" name="a5453b39707a98cb40f26c691c117d29c"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>mifare_classic_authenticate</b> (const m5::nfc::a::Command cmd, const m5::nfc::a::PICC &amp;picc, const uint8_t block, const m5::nfc::a::mifare::classic::Key &amp;key)</td></tr>
 <tr class="separator:a5453b39707a98cb40f26c691c117d29c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a133f7b05854888084c0442477dfc1cee" id="r_a133f7b05854888084c0442477dfc1cee"><td class="memItemLeft" align="right" valign="top"><a id="a133f7b05854888084c0442477dfc1cee" name="a133f7b05854888084c0442477dfc1cee"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>mifare_classic_transceive</b> (const m5::nfc::a::Command cmd, const uint8_t block, const uint32_t timeout_ms)</td></tr>
 <tr class="separator:a133f7b05854888084c0442477dfc1cee"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:acc934882ea87db168c18cae5238de280" id="r_acc934882ea87db168c18cae5238de280"><td class="memItemLeft" align="right" valign="top"><a id="acc934882ea87db168c18cae5238de280" name="acc934882ea87db168c18cae5238de280"></a>
-bool&#160;</td><td class="memItemRight" valign="bottom"><b>mifare_classic_transceive</b> (const uint8_t *buf, const uint8_t len, const uint32_t timeout_ms, const bool usingtimeout=false)</td></tr>
-<tr class="separator:acc934882ea87db168c18cae5238de280"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a779a38d84fac7b4a4d20697ff2b06b7f" id="r_a779a38d84fac7b4a4d20697ff2b06b7f"><td class="memItemLeft" align="right" valign="top"><a id="a779a38d84fac7b4a4d20697ff2b06b7f" name="a779a38d84fac7b4a4d20697ff2b06b7f"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>mifare_classic_transceive</b> (const uint8_t *buf, const uint8_t len, const uint32_t timeout_ms, const bool timeout_success=false)</td></tr>
+<tr class="separator:a779a38d84fac7b4a4d20697ff2b06b7f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a8757d2ca9311e079a1011284019e8593" id="r_a8757d2ca9311e079a1011284019e8593"><td class="memItemLeft" align="right" valign="top"><a id="a8757d2ca9311e079a1011284019e8593" name="a8757d2ca9311e079a1011284019e8593"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>calculate_crc</b> (uint16_t &amp;result, const uint8_t *buf, const uint8_t len)</td></tr>
 <tr class="separator:a8757d2ca9311e079a1011284019e8593"><td class="memSeparator" colspan="2">&#160;</td></tr>

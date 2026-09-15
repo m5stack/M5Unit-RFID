@@ -1,0 +1,20 @@
+var searchData=
+[
+  ['name_0',['name',['../structm5_1_1uhf_1_1detail_1_1_vendor_entry.html#ad190c10d6d7e2858bb28c584f1a9e02e',1,'m5::uhf::detail::VendorEntry']]],
+  ['nfcb_5fask_5fdepth_1',['nfcb_ask_depth',['../structm5_1_1unit_1_1_unit_w_s1850_s_1_1config__t.html#ad2217e05f52f18cac13704ec80e3825f',1,'m5::unit::UnitWS1850S::config_t']]],
+  ['not_5fselected_2',['NOT_SELECTED',['../unit___u_h_f_r_f_i_d_8hpp.html#abeec485ce8783b8dfaac81051ce9a532',1,'m5::unit']]],
+  ['nxp_5fconfig_5fconditional_5frange_3',['NXP_CONFIG_CONDITIONAL_RANGE',['../uhf_8hpp.html#af4832250c6a4c820899ae8b8707f8e28',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fconditional_5fshort_4',['NXP_CONFIG_CONDITIONAL_SHORT',['../uhf_8hpp.html#a00a800770e5efe46957ad19a16d9deda',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fdigital_5foutput_5',['NXP_CONFIG_DIGITAL_OUTPUT',['../uhf_8hpp.html#a274c8eb2ebc90789a12a46b0c1ecd2a0',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fexternal_5fsupply_6',['NXP_CONFIG_EXTERNAL_SUPPLY',['../uhf_8hpp.html#a3d0c729188c8a871046ea800df1c696f',1,'m5::uhf']]],
+  ['nxp_5fconfig_5finvert_5foutput_7',['NXP_CONFIG_INVERT_OUTPUT',['../uhf_8hpp.html#a91246f7b651edfa68afe3835c5d16a34',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fmax_5fbackscatter_8',['NXP_CONFIG_MAX_BACKSCATTER',['../uhf_8hpp.html#ae3cbfb15c4a1ff368e760f3b772d6071',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fprotect_5fepc_9',['NXP_CONFIG_PROTECT_EPC',['../uhf_8hpp.html#ae537d4fa8317bc8f025f1f82f2809296',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fprotect_5ftid_10',['NXP_CONFIG_PROTECT_TID',['../uhf_8hpp.html#a54946c914f8908ca2cc02564efcae3d3',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fprotect_5fuser_11',['NXP_CONFIG_PROTECT_USER',['../uhf_8hpp.html#aeb18aa98084bed5d5b26b4496e384bcb',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fpsf_5falarm_12',['NXP_CONFIG_PSF_ALARM',['../uhf_8hpp.html#ade5dfc044ca7fe92cb9dc56ad045936c',1,'m5::uhf']]],
+  ['nxp_5fconfig_5frange_5freduction_13',['NXP_CONFIG_RANGE_REDUCTION',['../uhf_8hpp.html#aefd97b79ebfed6b42f6d1f33e8bdee2d',1,'m5::uhf']]],
+  ['nxp_5fconfig_5fraw_5fdata_5fmode_14',['NXP_CONFIG_RAW_DATA_MODE',['../uhf_8hpp.html#a20a38733436ca78c8a1f4c1abe474800',1,'m5::uhf']]],
+  ['nxp_5fconfig_5ftamper_5falarm_15',['NXP_CONFIG_TAMPER_ALARM',['../uhf_8hpp.html#ace086e77a10b6024e463f065a6530751',1,'m5::uhf']]],
+  ['nxp_5fconfig_5ftransparent_5fmode_16',['NXP_CONFIG_TRANSPARENT_MODE',['../uhf_8hpp.html#aa702c0ad810aff45231fc8fa76f784f3',1,'m5::uhf']]]
+];
