@@ -274,3 +274,33 @@ TEST_F(TestUnitJRD4035, BeginAppliesConfig)
     EXPECT_EQ(applied.mixer_gain, cfg.demodulator.mixer_gain);
     EXPECT_EQ(applied.if_gain, cfg.demodulator.if_gain);
 }
+
+TEST_F(TestUnitJRD4035, SettingsAgreeWithWhatTheModuleDid)
+{
+    SCOPED_TRACE(ustr);
+
+    uint8_t before{};
+    EXPECT_TRUE(unit->readChannel(before));
+
+    // An index the module is unlikely to have a channel for. Whether it refuses is its own
+    // business; what has to hold either way is that the answer the caller gets agrees with what
+    // the module actually did. Reporting success for a setting the module threw away is the
+    // failure this guards against
+    const bool accepted = unit->writeChannel(0xFF);
+    M5_LIB_LOGI("writeChannel(0xFF) %s", accepted ? "was accepted" : "was refused");
+
+    uint8_t after{};
+    EXPECT_TRUE(unit->readChannel(after));
+    if (accepted) {
+        EXPECT_NE(after, before);
+        // Put back what the test moved, whatever the module made of it
+        EXPECT_TRUE(unit->writeChannel(before));
+    } else {
+        EXPECT_EQ(after, before);
+    }
+
+    // A refused setting must not leave the link out of step: the next exchange still answers
+    int16_t dbm100{};
+    EXPECT_TRUE(unit->readTransmitPower(dbm100));
+    EXPECT_GT(dbm100, 0);
+}
