@@ -227,14 +227,14 @@ bool UnitMFRC522::softReset(const bool blocking)
         m5::utility::delay(38);  // about 37.5 ms (datasheet 8.8.2)
 
         // Wait the power down flag has been cleared
-        auto timeout_at = m5::utility::millis() + 250;
+        const auto started_at = m5::utility::millis();
         do {
             uint8_t v{};
             if (readRegister8(COMMAND_REG, v, 0) && !(v & 0x10)) {
                 return true;
             }
             m5::utility::delay(1);
-        } while (m5::utility::millis() <= timeout_at);
+        } while (!m5::utility::hasElapsed(started_at, 250));
     }
     return false;
 }
@@ -942,7 +942,7 @@ bool UnitMFRC522::wait_comm_irq(const uint8_t irq, const uint32_t timeout_ms)
         return false;
     }
 
-    auto timeout_at = m5::utility::millis() + timeout_ms;
+    const auto started_at = m5::utility::millis();
     do {
         if (readRegister8(COM_IRQ_REG, v, 0)) {
             if (v & irq) {
@@ -953,20 +953,20 @@ bool UnitMFRC522::wait_comm_irq(const uint8_t irq, const uint32_t timeout_ms)
             }
         }
         std::this_thread::yield();
-    } while (m5::utility::millis() <= timeout_at);
+    } while (!m5::utility::hasElapsed(started_at, timeout_ms));
     return false;
 }
 
 bool UnitMFRC522::wait_div_irq(const uint8_t irq, const uint32_t timeout_ms)
 {
     uint8_t v{};
-    auto timeout_at = m5::utility::millis() + timeout_ms;
+    const auto started_at = m5::utility::millis();
     do {
         if (readRegister8(DIV_IRQ_REG, v, 0) && (v & irq)) {
             return true;
         }
         std::this_thread::yield();
-    } while (m5::utility::millis() <= timeout_at);
+    } while (!m5::utility::hasElapsed(started_at, timeout_ms));
     return false;
 }
 
