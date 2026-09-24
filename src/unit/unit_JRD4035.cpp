@@ -270,6 +270,8 @@ bool UnitJRD4035::begin()
     // confirm that the module responds
     bool detected{};
     const uint8_t kind[]{0x00};
+    // Whether the module liked the question does not matter here, so succeeded() is not asked:
+    // an answer of any kind is what says something is on the other end of the wire
     auto probe_once = [this, &kind]() {
         Frame res{};
         return send_and_wait(res, CMD_MODULE_INFORMATION, kind, sizeof(kind), BEGIN_PROBE_TIMEOUT_MS) &&
@@ -536,7 +538,7 @@ bool UnitJRD4035::read_module_information_kind(std::string& out, const uint8_t k
 {
     Frame res{};
     const uint8_t param[] = {kind};
-    if (!send_and_wait(res, CMD_MODULE_INFORMATION, param, sizeof(param))) {
+    if (!send_and_wait(res, CMD_MODULE_INFORMATION, param, sizeof(param)) || !succeeded(res, "readModuleInformation")) {
         return false;
     }
     if (res.parameter.size() < 2) {
@@ -945,6 +947,8 @@ bool UnitJRD4035::wake()
     }
     m5::utility::delay(WAKE_DELAY_MS);
     flush_rx();
+    // As above, succeeded() is not asked: the command is spent to be thrown away, and an error
+    // answer proves the module is awake just as well as a good one
     for (int i = 0; i < WAKE_QUESTIONS; ++i) {
         Frame res{};
         if (send_and_wait(res, CMD_GET_TX_POWER, nullptr, 0)) {
