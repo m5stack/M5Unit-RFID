@@ -80,6 +80,11 @@ bool UnitWS1850S::configure_nfca()
 {
     if (!turnOffAntenna()) return false;
 
+    // An authentication that was never closed leaves MFCrypto1On set, and the CIU encrypts
+    // everything it sends while that bit stands. Nothing here clears it, so the frames of the
+    // mode being configured would go out encrypted to a tag that knows nothing of the session
+    if (!mifareClassicStopCrypto1()) return false;
+
     // ModeReg: full write of _cfg_ws1850s.mode_reg (default 0x3D includes CRCPreset[1:0]=01 for CRC_A).
     // Full write ensures NFC-A state regardless of any prior register modifications.
     if (!writeRegister8(MODE_REG, _cfg_ws1850s.mode_reg)) return false;
@@ -112,6 +117,9 @@ bool UnitWS1850S::configure_nfcb()
 {
     // Antenna OFF before reconfiguring
     if (!turnOffAntenna()) return false;
+
+    // As in configure_nfca(): a session left open would have the CIU encrypt the NFC-B frames
+    if (!mifareClassicStopCrypto1()) return false;
 
     // ModeReg: full write of _cfg_ws1850s.mode_reg with CRCPreset[1:0] forced to 0b11 (CRC_B 0xFFFF
     // preset). Full write ensures NFC-B state regardless of any prior register modifications.

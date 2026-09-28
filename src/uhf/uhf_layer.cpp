@@ -52,8 +52,8 @@ bool UHFLayer::detect(std::vector<Tag>& tags, const uint32_t timeout_ms)
     // Discard notifications that arrived before this call
     _u.flush();
 
-    const unsigned long expire_at = m5::utility::millis() + timeout_ms;
-    while (m5::utility::millis() < expire_at) {
+    const auto started_at = m5::utility::millis();
+    while (!m5::utility::hasElapsed(started_at, timeout_ms)) {
         _u.update();
         while (_u.available()) {
             append_unique(tags, _u.oldest());
@@ -113,8 +113,8 @@ bool UHFLayer::detect(Tag& tag, const uint32_t timeout_ms)
     // Discard notifications that arrived before this call
     _u.flush();
 
-    const unsigned long expire_at = m5::utility::millis() + timeout_ms;
-    while (m5::utility::millis() < expire_at && !tag.valid()) {
+    const auto started_at = m5::utility::millis();
+    while (!m5::utility::hasElapsed(started_at, timeout_ms) && !tag.valid()) {
         _u.update();
         if (_u.available()) {
             tag = _u.oldest();

@@ -270,6 +270,8 @@ bool UnitJRD4035::begin()
     // confirm that the module responds
     bool detected{};
     const uint8_t kind[]{0x00};
+    // Whether the module liked the question does not matter here, so succeeded() is not asked:
+    // an answer of any kind is what says something is on the other end of the wire
     auto probe_once = [this, &kind]() {
         Frame res{};
         return send_and_wait(res, CMD_MODULE_INFORMATION, kind, sizeof(kind), BEGIN_PROBE_TIMEOUT_MS) &&
@@ -277,10 +279,9 @@ bool UnitJRD4035::begin()
     };
 
     // Probe until the module answers or the window closes
-    const unsigned long probe_started_at = m5::utility::millis();
-    const unsigned long probe_expire_at  = probe_started_at + BEGIN_PROBE_WINDOW_MS;
+    const auto probe_started_at = m5::utility::millis();
     int attempts{};
-    while (m5::utility::millis() < probe_expire_at) {
+    while (!m5::utility::hasElapsed(probe_started_at, BEGIN_PROBE_WINDOW_MS)) {
         ++attempts;
         if (probe_once()) {
             detected = true;
@@ -290,7 +291,7 @@ bool UnitJRD4035::begin()
         m5::utility::delay(BEGIN_RETRY_INTERVAL_MS);
         flush_rx();
     }
-    const unsigned long probe_elapsed = m5::utility::millis() - probe_started_at;
+    const auto probe_elapsed = m5::utility::elapsedSince(probe_started_at);
     if (!detected) {
         M5_LIB_LOGE(
             "UnitJRD4035 did not answer in %lums (%d probes). Check the cable and the connectors, "
@@ -459,9 +460,9 @@ void UnitJRD4035::resynchronize()
 {
     // Nothing is pending, so route_frame queues tag notifications as usual and drops answers.
     // Reading on until the link falls silent is what keeps a late answer out of the next exchange
-    const unsigned long give_up_at = m5::utility::millis() + RESYNC_LIMIT_MS;
+    const auto started_at = m5::utility::millis();
     Frame f{};
-    while (m5::utility::millis() < give_up_at) {
+    while (!m5::utility::hasElapsed(started_at, RESYNC_LIMIT_MS)) {
         if (!read_frame(f, RESYNC_QUIET_MS)) {
             return;
         }
@@ -499,9 +500,9 @@ bool UnitJRD4035::send_and_wait(Frame& response, const uint8_t command, const ui
     }
 
     // Keep pumping so that tag notifications arriving while we wait are queued, not dropped
-    const uint32_t wait_ms        = timeout_ms != 0 ? timeout_ms : _cfg_jrd4035.command_timeout_ms;
-    const unsigned long expire_at = m5::utility::millis() + wait_ms;
-    while (m5::utility::millis() < expire_at) {
+    const uint32_t wait_ms = timeout_ms != 0 ? timeout_ms : _cfg_jrd4035.command_timeout_ms;
+    const auto started_at  = m5::utility::millis();
+    while (!m5::utility::hasElapsed(started_at, wait_ms)) {
         Frame f{};
         if (read_frame(f, 1)) {
             route_frame(f);
@@ -537,7 +538,7 @@ bool UnitJRD4035::read_module_information_kind(std::string& out, const uint8_t k
 {
     Frame res{};
     const uint8_t param[] = {kind};
-    if (!send_and_wait(res, CMD_MODULE_INFORMATION, param, sizeof(param))) {
+    if (!send_and_wait(res, CMD_MODULE_INFORMATION, param, sizeof(param)) || !succeeded(res, "readModuleInformation")) {
         return false;
     }
     if (res.parameter.size() < 2) {
@@ -946,6 +947,8 @@ bool UnitJRD4035::wake()
     }
     m5::utility::delay(WAKE_DELAY_MS);
     flush_rx();
+    // As above, succeeded() is not asked: the command is spent to be thrown away, and an error
+    // answer proves the module is awake just as well as a good one
     for (int i = 0; i < WAKE_QUESTIONS; ++i) {
         Frame res{};
         if (send_and_wait(res, CMD_GET_TX_POWER, nullptr, 0)) {

@@ -1,4 +1,12 @@
 #!/bin/bash
+#
+# Pull examples/UnitUnified/{NFCA,NFCB,common} from M5Unit-NFC.
+#
+# Run this before merging develop into main whenever the upstream examples have moved.
+# Compare the directories to find out - the SHAs in the "Squashed ... from A..B" commits are
+# synthetic ones made by subtree split and are not in M5Unit-NFC's history, so a
+# "git log A..origin/develop" range is empty even when there are changes.
+#
 
 REMOTE_NAME="nfc_examples"
 REMOTE_URL="git@github.com:m5stack/M5Unit-NFC.git"
